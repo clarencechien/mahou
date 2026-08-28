@@ -144,6 +144,13 @@
     if (joined) doJoin(); // 重連自動重新加入
   });
   sock.ws.addEventListener('close', () => { $('#connDot').className = 'light bad'; });
+  // 房間被結束（host 按鈕或閒置逾時）：停掉所有背景流量，讓 DO 能被回收
+  sock.onEnded(() => {
+    clock.stopBackground();
+    document.body.innerHTML =
+      '<div style="padding:40px 24px;text-align:center"><div style="font-size:2rem;font-weight:800">房間已結束</div>' +
+      '<p style="color:#9ca3af;margin-top:12px">這個分頁可以關掉了</p></div>';
+  });
 
   // ---- 步驟 1：加入 ----
   function doJoin() {

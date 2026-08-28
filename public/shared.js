@@ -12,6 +12,7 @@
       this.role = role;
       this.handlers = {}; // type -> fn(msg)
       this.openHandlers = [];
+      this.endedHandlers = [];
       this.closed = false;
       this.retry = 0;
       this.connect();
@@ -32,13 +33,21 @@
         const fn = this.handlers[msg.type];
         if (fn) fn(msg);
       };
-      this.ws.onclose = () => {
+      this.ws.onclose = (e) => {
         if (this.closed) return;
+        // 4000/4001 = 伺服器主動關房（host 結束或閒置逾時）：不再重連，
+        // 否則忘記關的分頁會自動重連＋重新加入，把房間永遠養著（計費防呆）
+        if (e.code >= 4000) {
+          this.closed = true;
+          this.endedHandlers.forEach((fn) => fn(e.reason || 'ended'));
+          return;
+        }
         const delay = Math.min(500 * 2 ** this.retry++, 8000);
         setTimeout(() => this.connect(), delay);
       };
     }
     on(type, fn) { this.handlers[type] = fn; return this; }
+    onEnded(fn) { this.endedHandlers.push(fn); return this; }
     onOpen(fn) { this.openHandlers.push(fn); if (this.ws.readyState === 1) fn(); return this; }
     send(obj) {
       if (this.ws.readyState === 1) { this.ws.send(JSON.stringify(obj)); return true; }
@@ -118,6 +127,7 @@
       if (this._bg) return;
       this._bg = setInterval(() => this.sync(10, 40), intervalMs);
     }
+    stopBackground() { clearInterval(this._bg); this._bg = null; }
     serverNow() {
       return this.offset === null ? null : performance.now() + this.offset;
     }

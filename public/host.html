@@ -17,6 +17,7 @@
   button { font-size: 1rem; padding: 10px 18px; border-radius: 10px; border: none; background: #1e293b; color: #f1f5f9; cursor: pointer; font-weight: 600; }
   button.active { background: #2563eb; }
   button.export { background: #059669; margin-left: auto; }
+  button:disabled { opacity: .35; cursor: default; }
   table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
   th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #1e293b; font-variant-numeric: tabular-nums; }
   th { color: #64748b; font-size: .8rem; font-weight: 600; }
@@ -49,6 +50,7 @@
   <button data-stage="tap-spam">③ 狂點 3 秒</button>
   <button data-stage="shake">④ 搖動計數</button>
   <button class="export" id="exportBtn">匯出 JSON</button>
+  <button id="endBtn" style="background:#7f1d1d">結束房間</button>
 </div>
 
 <table>
@@ -140,7 +142,7 @@
   }
 
   // ---- 匯出：POC 唯一真正的交付物 ----
-  $('#exportBtn').addEventListener('click', async () => {
+  async function doExport() {
     const res = await fetch(`/export/${roomId}`);
     const blob = await res.blob();
     const a = document.createElement('a');
@@ -148,6 +150,18 @@
     a.download = `mahou-${roomId}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
+  }
+  $('#exportBtn').addEventListener('click', doExport);
+
+  // ---- 結束房間（計費防呆）：先自動匯出一次，再踢掉所有連線讓 DO 休眠 ----
+  $('#endBtn').addEventListener('click', async () => {
+    if (!confirm('結束房間？會先自動匯出 JSON，然後踢掉所有人。')) return;
+    await doExport();
+    sock.send({ type: 'endRoom' });
+  });
+  sock.onEnded((reason) => {
+    $('#connState').textContent = `⏹ 房間已結束（${reason}）`;
+    document.querySelectorAll('button[data-stage], #endBtn').forEach((b) => (b.disabled = true));
   });
 
   // ---- 畫面 ----
