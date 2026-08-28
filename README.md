@@ -72,10 +72,13 @@ wrangler.toml
 
 ## DO 落點診斷（RTT 地板偏高先看這個）
 
-第一輪實測（台灣家用網路）量到 RTT 地板 ~140ms——這不是 wifi 的鍋，是 **Durable Object 被建立在離台灣很遠的機房**（沒有 hint 時 APAC 使用者的 DO 常落在美西）。已做兩件事：
+實測結論（台灣，2026-08）：**RTT 地板由「Cloudflare 入網點」決定，不是家用 wifi**。
 
-- 開房時帶 `locationHint: 'apac'`（只對**新建**的房間生效，舊房號換掉重開）
-- `GET /whereami/<房號>` 回 `{doColo, edgeColo}`；主控台右上角也會顯示 `DO@XXX·邊緣@YYY`。`doColo` 離現場越遠 RTT 地板越高，報告裡要記這個值
+- HiNet 家用寬頻對這個 zone 在 **SJC（美西）入網**（免費方案的常見路由）→ DO 放美西 RTT ~150ms；DO 放香港反而要美西↔亞洲繞一圈，~360ms
+- 同一支手機改用**行動網路**，到香港 DO 只要 ~155ms → 電信商入網點比 HiNet 近，家宴當天「手機用行動網路」是可行的降延遲手段
+- 治本方向：zone 升 Pro（付費方案 HiNet 通常會進 TPE）後，再把 DO 區域切回 apac
+
+因此 `locationHint` 預設 **wnam（跟著入網點）**，主控台有「DO 區域」選單可切 wnam/apac/weur 做 A/B——hint 只在房間**第一次建立**時生效，換區域會自動開新房。診斷工具：`GET /whereami/<房號>` 回 `{doColo, edgeColo}`，主控台右上角顯示 `DO@XXX·邊緣@YYY`，兩個值都要寫進報告。
 
 ## 假 client 壓力測試（探針 D）
 

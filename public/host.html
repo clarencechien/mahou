@@ -49,6 +49,11 @@
   <button data-stage="tap-single">③ 單點×10</button>
   <button data-stage="tap-spam">③ 狂點 3 秒</button>
   <button data-stage="shake">④ 搖動計數</button>
+  <select id="hintSel" title="DO 區域（換區域會開新房）" style="font-size:1rem;padding:10px;border-radius:10px;background:#1e293b;color:#f1f5f9;border:none">
+    <option value="wnam">DO區域：美西 wnam</option>
+    <option value="apac">DO區域：亞太 apac</option>
+    <option value="weur">DO區域：西歐 weur</option>
+  </select>
   <button class="export" id="exportBtn">匯出 JSON</button>
   <button id="endBtn" style="background:#7f1d1d">結束房間</button>
 </div>
@@ -88,11 +93,18 @@
 
   Mahou.keepAwake();
 
-  const sock = new Mahou.Sock(roomId, 'host');
+  // DO 區域 A/B：hint 只在房間第一次建立時生效，換區域一律開新房
+  const hint = new URLSearchParams(location.search).get('hint') || 'wnam';
+  $('#hintSel').value = ['wnam', 'apac', 'weur'].includes(hint) ? hint : 'wnam';
+  $('#hintSel').addEventListener('change', (e) => {
+    location.href = `${location.pathname}?hint=${e.target.value}#${Mahou.randomRoom()}`;
+  });
+
+  const sock = new Mahou.Sock(roomId, 'host', `&hint=${encodeURIComponent(hint)}`);
   sock.onOpen(() => { $('#connState').textContent = '🟢' + ($('#connState').dataset.colo || ''); });
   sock.ws.addEventListener('close', () => { $('#connState').textContent = '🔴'; });
   // DO 落點診斷：doColo 離現場越遠，RTT 地板越高
-  fetch(`/whereami/${roomId}`).then((r) => r.json()).then((w) => {
+  fetch(`/whereami/${roomId}?hint=${encodeURIComponent(hint)}`).then((r) => r.json()).then((w) => {
     $('#connState').dataset.colo = ` DO@${w.doColo}·邊緣@${w.edgeColo}`;
     $('#connState').textContent += $('#connState').dataset.colo;
   }).catch(() => {});

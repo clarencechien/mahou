@@ -7,9 +7,10 @@
 
   // ---------- WS 封裝：自動重連 + JSON + 訊息分發 ----------
   Mahou.Sock = class {
-    constructor(roomId, role) {
+    constructor(roomId, role, extraQuery = '') {
       this.roomId = roomId;
       this.role = role;
+      this.extraQuery = extraQuery;
       this.handlers = {}; // type -> fn(msg)
       this.openHandlers = [];
       this.endedHandlers = [];
@@ -19,7 +20,7 @@
     }
     url() {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      return `${proto}://${location.host}/ws/${this.roomId}?role=${this.role}`;
+      return `${proto}://${location.host}/ws/${this.roomId}?role=${this.role}${this.extraQuery}`;
     }
     connect() {
       this.ws = new WebSocket(this.url());
