@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>主控台 — 家宴 POC</title>
+<link rel="icon" href="data:,">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: system-ui, sans-serif; background: #0b1120; color: #f1f5f9; padding: 20px; }
+  h1 { font-size: 1.3rem; margin-bottom: 12px; color: #94a3b8; }
+  .top { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 16px; }
+  .roomcode { font-size: 4rem; font-weight: 900; letter-spacing: .15em; }
+  #qr { background: #fff; padding: 12px; border-radius: 12px; }
+  .url { color: #64748b; font-size: .85rem; word-break: break-all; max-width: 300px; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  button { font-size: 1rem; padding: 10px 18px; border-radius: 10px; border: none; background: #1e293b; color: #f1f5f9; cursor: pointer; font-weight: 600; }
+  button.active { background: #2563eb; }
+  button.export { background: #059669; margin-left: auto; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #1e293b; font-variant-numeric: tabular-nums; }
+  th { color: #64748b; font-size: .8rem; font-weight: 600; }
+  td.good { color: #4ade80; } td.warn { color: #facc15; } td.bad { color: #f87171; }
+  tr.flash td { background: #14532d; transition: background .05s; }
+  tr td { transition: background .6s; }
+  .offline { opacity: .35; }
+  .panel { background: #111a2e; border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+  .panel h2 { font-size: .9rem; color: #64748b; margin-bottom: 8px; }
+  #feed { font-size: .8rem; color: #94a3b8; max-height: 180px; overflow-y: auto; font-family: ui-monospace, monospace; line-height: 1.6; }
+  #summary { font-size: .9rem; line-height: 1.9; }
+  #summary b { color: #7dd3fc; }
+</style>
+</head>
+<body>
+<h1>家宴多人互動 POC — 主控台 <span id="connState"></span></h1>
+
+<div class="top">
+  <div>
+    <div class="roomcode" id="roomCode">····</div>
+    <div class="url" id="clientUrl"></div>
+  </div>
+  <div id="qr"></div>
+</div>
+
+<div class="controls">
+  <button data-stage="lobby" class="active">大廳</button>
+  <button data-stage="ping">② Ping 測試</button>
+  <button data-stage="tap-single">③ 單點×10</button>
+  <button data-stage="tap-spam">③ 狂點 3 秒</button>
+  <button data-stage="shake">④ 搖動計數</button>
+  <button class="export" id="exportBtn">匯出 JSON</button>
+</div>
+
+<table>
+  <thead><tr>
+    <th>暱稱</th><th>裝置</th><th>motion Hz</th><th>RTT min/p50/p95</th><th>對時掉包</th><th>漂移</th>
+    <th>單點上行 p50/p95</th><th>狂點掉包</th><th>搖動</th>
+  </tr></thead>
+  <tbody id="roster"></tbody>
+</table>
+
+<div class="panel"><h2>即席摘要（正式數據以匯出 JSON 為準）</h2><div id="summary">還沒有數據。</div></div>
+<div class="panel"><h2>事件流</h2><div id="feed"></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="/shared.js"></script>
+<script>
+(function () {
+  const { $ } = Mahou;
+
+  // 房號放在 hash：重新整理房間不變，也可手動指定 /host.html#ABCD
+  let roomId = (location.hash.slice(1) || '').toUpperCase();
+  if (!/^[A-Z0-9]{4,8}$/.test(roomId)) {
+    roomId = Mahou.randomRoom();
+    location.hash = roomId;
+  }
+  $('#roomCode').textContent = roomId;
+  const clientUrl = `${location.origin}/client#${roomId}`;
+  $('#clientUrl').textContent = clientUrl;
+  try {
+    // CDN 掛掉不能讓主控台跟著死：降級成純文字網址（上面已顯示）
+    new QRCode(document.getElementById('qr'), { text: clientUrl, width: 200, height: 200 });
+  } catch (e) {
+    document.getElementById('qr').textContent = 'QR 產生失敗，請手動輸入上方網址';
+  }
+
+  Mahou.keepAwake();
+
+  const sock = new Mahou.Sock(roomId, 'host');
+  sock.onOpen(() => { $('#connState').textContent = '🟢'; });
+  sock.ws.addEventListener('close', () => { $('#connState').textContent = '🔴'; });
+
+  // ---- per-client 即席統計（host 端自己累積，正式數據看匯出檔） ----
+  const stats = new Map(); // clientId -> {uplinks:[], spam:{}, shake:0, shakeUplink:null}
+  const stat = (id) => {
+    if (!stats.has(id)) stats.set(id, { uplinks: [], spam: null, shake: 0, shakeUplink: null });
+    return stats.get(id);
+  };
+
+  let roster = [];
+  sock.on('roster', (m) => { roster = m.clients; renderRoster(); });
+  sock.on('syncUpdate', (m) => {
+    const c = roster.find((x) => x.clientId === m.clientId);
+    if (c) c.sync = { offset: m.offset, rtt: m.rtt, drift: m.drift };
+    renderRoster();
+  });
+  sock.on('tapEvent', (m) => {
+    if (m.uplinkMs != null && m.mode === 'single') stat(m.clientId).uplinks.push(m.uplinkMs);
+    feed(`${m.name} 點擊 #${m.seq} (${m.mode}) 上行 ${m.uplinkMs?.toFixed(1) ?? '?'}ms`);
+    flashRow(m.clientId);
+    renderRoster(); renderSummary();
+  });
+  sock.on('spamSummary', (m) => {
+    stat(m.clientId).spam = m;
+    feed(`${m.name} 狂點結束：送 ${m.sent} 收 ${m.received} 斷號 ${m.gaps} 掉包 ${m.lossPct}%`);
+    renderRoster(); renderSummary();
+  });
+  sock.on('shakeEvent', (m) => {
+    const s = stat(m.clientId);
+    s.shake = m.count; s.shakeUplink = m.uplinkMs; s.shakeParams = m.params;
+    renderRoster();
+  });
+  sock.on('stage', (m) => setActiveBtn(m.stage));
+
+  // ---- 關卡控制 ----
+  document.querySelectorAll('button[data-stage]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      sock.send({ type: 'stage', stage: btn.dataset.stage });
+      setActiveBtn(btn.dataset.stage);
+    });
+  });
+  function setActiveBtn(stage) {
+    document.querySelectorAll('button[data-stage]').forEach((b) =>
+      b.classList.toggle('active', b.dataset.stage === stage));
+  }
+
+  // ---- 匯出：POC 唯一真正的交付物 ----
+  $('#exportBtn').addEventListener('click', async () => {
+    const res = await fetch(`/export/${roomId}`);
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `mahou-${roomId}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  // ---- 畫面 ----
+  const fmt = (v, d = 1) => (v == null ? '–' : (+v).toFixed(d));
+  function renderRoster() {
+    const tb = $('#roster');
+    tb.innerHTML = '';
+    for (const c of roster) {
+      const s = stat(c.clientId);
+      const ups = [...s.uplinks].sort((a, b) => a - b);
+      const rtt = c.sync?.rtt;
+      const dev = c.device ? `${(c.device.platform || '?')} ${c.device.screen?.w}×${c.device.screen?.h}` : '–';
+      const tr = document.createElement('tr');
+      tr.id = 'row-' + c.clientId;
+      if (!c.connected) tr.className = 'offline';
+      tr.innerHTML =
+        `<td><b>${esc(c.name)}</b></td>` +
+        `<td title="${esc(c.device?.ua || '')}">${esc(dev)}</td>` +
+        `<td>${c.device?.motionEventRateHz ?? '–'}</td>` +
+        `<td class="${Mahou.rttClass(rtt?.p50)}">${rtt ? `${fmt(rtt.min)} / ${fmt(rtt.p50)} / ${fmt(rtt.p95)}` : '–'}</td>` +
+        `<td class="${(rtt?.lost ?? 0) > 0 ? 'warn' : ''}">${rtt ? `${rtt.lost}/${rtt.samples + rtt.lost}` : '–'}</td>` +
+        `<td class="${Math.abs(c.sync?.drift ?? 0) > 20 ? 'bad' : ''}">${fmt(c.sync?.drift)}</td>` +
+        `<td>${ups.length ? `${Mahou.pct(ups, 50)} / ${Mahou.pct(ups, 95)}` : '–'}</td>` +
+        `<td class="${s.spam && s.spam.lossPct > 1 ? 'bad' : ''}">${s.spam ? s.spam.lossPct + '%' : '–'}</td>` +
+        `<td>${s.shake || '–'}</td>`;
+      tb.appendChild(tr);
+    }
+  }
+  function flashRow(clientId) {
+    const tr = document.getElementById('row-' + clientId);
+    if (!tr) return;
+    tr.classList.add('flash');
+    setTimeout(() => tr.classList.remove('flash'), 150);
+  }
+  function renderSummary() {
+    // §12 表格能自動算的先自動算
+    const allUps = [...stats.values()].flatMap((s) => s.uplinks).sort((a, b) => a - b);
+    const worstDrift = Math.max(0, ...roster.map((c) => Math.abs(c.sync?.drift ?? 0)));
+    const worstLoss = Math.max(0, ...[...stats.values()].map((s) => s.spam?.lossPct ?? 0));
+    $('#summary').innerHTML =
+      `單點上行延遲（全體）：p50 <b>${Mahou.pct(allUps, 50) ?? '–'}</b> / p95 <b>${Mahou.pct(allUps, 95) ?? '–'}</b> ms（n=${allUps.length}）<br>` +
+      `最大 clock 漂移：<b>${worstDrift.toFixed(1)}</b> ms（門檻 20ms）<br>` +
+      `最差狂點掉包率：<b>${worstLoss}%</b>（門檻 1%）<br>` +
+      `搖動計數：${roster.map((c) => `${esc(c.name)} ${stat(c.clientId).shake}`).join('、') || '–'}（同一人換裝置比差異 %）`;
+  }
+  const feedEl = $('#feed');
+  function feed(text) {
+    const line = document.createElement('div');
+    line.textContent = `${new Date().toLocaleTimeString()} ${text}`;
+    feedEl.prepend(line);
+    while (feedEl.childNodes.length > 100) feedEl.lastChild.remove();
+  }
+  function esc(s) { const d = document.createElement('span'); d.textContent = s ?? ''; return d.innerHTML; }
+})();
+</script>
+</body>
+</html>

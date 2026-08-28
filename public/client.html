@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>手把 — 家宴 POC</title>
+<link rel="icon" href="data:,">
+<style>
+  * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: system-ui, sans-serif; background: #111827; color: #f9fafb;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+    display: flex; flex-direction: column; padding: 16px; gap: 12px;
+  }
+  h1 { font-size: 1.1rem; color: #9ca3af; }
+  .stage { display: none; flex: 1; flex-direction: column; gap: 14px; }
+  .stage.active { display: flex; }
+  .big { font-size: 3.2rem; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+  .hint { color: #9ca3af; text-align: center; font-size: .95rem; }
+  button, input {
+    font-size: 1.15rem; padding: 14px; border-radius: 12px; border: none; width: 100%;
+  }
+  input { background: #1f2937; color: #f9fafb; text-align: center; }
+  button { background: #2563eb; color: #fff; font-weight: 700; }
+  button:disabled { opacity: .4; }
+  .light { width: 20px; height: 20px; border-radius: 50%; display: inline-block; background: #4b5563; vertical-align: middle; }
+  .good { background: #22c55e !important; color: #052e16; }
+  .warn { background: #eab308 !important; color: #422006; }
+  .bad  { background: #ef4444 !important; color: #fff; }
+  .light.good { background: #22c55e !important; } .light.warn { background: #eab308 !important; } .light.bad { background: #ef4444 !important; }
+  #tapBtn {
+    flex: 1; font-size: 2rem; border-radius: 24px; background: #374151; transition: none;
+  }
+  #tapBtn.flash { background: #22c55e; color: #052e16; }
+  .row { display: flex; gap: 10px; align-items: center; justify-content: center; }
+  .slider { display: grid; grid-template-columns: 7.5em 1fr 3.5em; gap: 8px; align-items: center; font-size: .85rem; color: #d1d5db; }
+  .slider input[type=range] { padding: 0; }
+  .card { background: #1f2937; border-radius: 12px; padding: 12px; }
+  .stat { font-size: .9rem; color: #d1d5db; line-height: 1.7; }
+  #gate { position: fixed; inset: 0; background: #111827; z-index: 10; display: none; flex-direction: column; gap: 16px; padding: 24px; justify-content: center; }
+</style>
+</head>
+<body>
+<h1>家宴 POC 手把 <span id="roomLabel"></span> <span id="connDot" class="light"></span></h1>
+
+<!-- in-app browser 阻擋（LINE / FB 掃碼會進內建瀏覽器，感測器權限拿不到） -->
+<div id="gate">
+  <div class="big" style="font-size:1.6rem">請用外部瀏覽器開啟</div>
+  <p class="hint" id="gateWhy"></p>
+  <p class="hint">點右上角選單 →「以瀏覽器開啟」，或複製連結貼到 Chrome：</p>
+  <button id="copyLink">複製連結</button>
+</div>
+
+<!-- 步驟 1：加入 -->
+<section id="st-join" class="stage active">
+  <p class="hint">輸入暱稱（兩個字以內）</p>
+  <input id="nick" maxlength="2" placeholder="暱稱" autocomplete="off">
+  <button id="joinBtn">加入房間</button>
+  <p class="hint" id="joinMsg"></p>
+</section>
+
+<!-- 大廳：等 host 切關卡 -->
+<section id="st-lobby" class="stage">
+  <div class="big" style="font-size:1.6rem" id="lobbyName"></div>
+  <p class="hint">已加入，等主持人開始測試…</p>
+  <div class="card stat" id="lobbyStat"></div>
+</section>
+
+<!-- 步驟 2：Ping 測試 -->
+<section id="st-ping" class="stage">
+  <p class="hint">RTT（來回延遲）</p>
+  <div class="big"><span id="rttNow">–</span><span style="font-size:1.2rem"> ms</span></div>
+  <div class="row"><span id="rttLight" class="light"></span></div>
+  <div class="card stat" id="pingStat"></div>
+</section>
+
+<!-- 步驟 3：點擊測試 -->
+<section id="st-tap" class="stage">
+  <p class="hint" id="tapHint"></p>
+  <div class="big" style="font-size:1.8rem" id="tapCount">0</div>
+  <button id="tapBtn">點我</button>
+  <button id="spamStartBtn" style="display:none">開始狂點（3 秒）</button>
+  <div class="card stat" id="tapStat"></div>
+</section>
+
+<!-- 步驟 4：搖動計數 -->
+<section id="st-shake" class="stage">
+  <button id="motionBtn">啟用感測器</button>
+  <div id="shakeUI" style="display:none; flex-direction:column; gap:12px; flex:1">
+    <p class="hint">搖 10 下！</p>
+    <div class="big" id="shakeCount">0</div>
+    <button id="shakeReset" style="background:#374151">歸零</button>
+    <div class="card">
+      <div class="slider"><span>觸發門檻 <b id="vHi">3.5</b></span><input type="range" id="pHi" min="1" max="10" step="0.1" value="3.5"><span></span></div>
+      <div class="slider"><span>解除門檻 <b id="vLo">1.5</b></span><input type="range" id="pLo" min="0.2" max="5" step="0.1" value="1.5"><span></span></div>
+      <div class="slider"><span>不應期 <b id="vRef">120</b>ms</span><input type="range" id="pRef" min="40" max="400" step="10" value="120"><span></span></div>
+    </div>
+    <div class="card stat" id="shakeStat"></div>
+  </div>
+</section>
+
+<script src="/shared.js"></script>
+<script>
+(function () {
+  const { $, Sock, ClockSync, Telemetry } = Mahou;
+
+  // ---- 房號來自 QR：/client.html#ROOM ----
+  const roomId = (location.hash.slice(1) || '').toUpperCase();
+  if (!/^[A-Z0-9]{4,8}$/.test(roomId)) {
+    document.body.innerHTML = '<p style="padding:24px">網址少了房號，請重新掃 QR code。</p>';
+    return;
+  }
+  $('#roomLabel').textContent = '房 ' + roomId;
+
+  // ---- in-app browser 阻擋 ----
+  const iab = Mahou.inAppBrowser();
+  if (iab) {
+    $('#gate').style.display = 'flex';
+    $('#gateWhy').textContent = `偵測到 ${iab} 內建瀏覽器，感測器權限會拿不到。`;
+    $('#copyLink').addEventListener('pointerdown', async () => {
+      try { await navigator.clipboard.writeText(location.href); $('#copyLink').textContent = '已複製 ✓'; }
+      catch { prompt('手動複製這段網址：', location.href); }
+    });
+    return;
+  }
+
+  Mahou.keepAwake();
+
+  // clientId 存 sessionStorage，斷線重整後身分不變
+  const idKey = 'mahou-cid-' + roomId;
+  const clientId = sessionStorage.getItem(idKey) || crypto.randomUUID();
+  sessionStorage.setItem(idKey, clientId);
+
+  const sock = new Sock(roomId, 'client');
+  const clock = new ClockSync(sock);
+  const telemetry = new Telemetry(sock);
+  const device = Mahou.deviceFingerprint();
+  let joined = false;
+  let stage = 'lobby';
+
+  sock.onOpen(() => {
+    $('#connDot').className = 'light good';
+    if (joined) doJoin(); // 重連自動重新加入
+  });
+  sock.ws.addEventListener('close', () => { $('#connDot').className = 'light bad'; });
+
+  // ---- 步驟 1：加入 ----
+  function doJoin() {
+    sock.send({ type: 'join', clientId, name: $('#nick').value.trim() || '客', device });
+  }
+  $('#joinBtn').addEventListener('pointerdown', () => {
+    if (!$('#nick').value.trim()) { $('#joinMsg').textContent = '先填暱稱'; return; }
+    $('#joinMsg').textContent = '加入中…';
+    doJoin();
+  });
+  sock.on('joined', async (m) => {
+    joined = true;
+    $('#lobbyName').textContent = $('#nick').value.trim() || '客';
+    setStage(m.stage || 'lobby');
+    // 進場自動對時（N=10 取最小 RTT），之後每 10 秒背景重測記漂移
+    await clock.sync(10);
+    clock.startBackground(10000);
+    updateLobbyStat();
+  });
+  function updateLobbyStat() {
+    if (!clock.rtt) return;
+    $('#lobbyStat').innerHTML =
+      `對時完成 ✓（每 10 秒背景重測）<br>` +
+      `RTT min ${clock.rtt.min.toFixed(1)} / p50 ${clock.rtt.p50} / p95 ${clock.rtt.p95} ms`;
+  }
+
+  // ---- 關卡切換（host 廣播驅動） ----
+  const stageMap = { lobby: 'st-lobby', ping: 'st-ping', 'tap-single': 'st-tap', 'tap-spam': 'st-tap', shake: 'st-shake' };
+  sock.on('stage', (m) => setStage(m.stage));
+  function setStage(s) {
+    stage = s;
+    document.querySelectorAll('.stage').forEach((el) => el.classList.remove('active'));
+    const id = joined ? (stageMap[s] || 'st-lobby') : 'st-join';
+    document.getElementById(id).classList.add('active');
+    if (s === 'ping') startPingView(); else stopPingView();
+    if (s === 'tap-single') setupTap('single');
+    if (s === 'tap-spam') setupTap('spam');
+  }
+
+  // ---- 步驟 2：Ping 畫面（1Hz 即時顯示） ----
+  let pingTimer = null;
+  function startPingView() {
+    if (pingTimer) return;
+    const tick = async () => {
+      const s = await clock.pingOnce();
+      if (stage !== 'ping') return;
+      if (s) {
+        $('#rttNow').textContent = s.rtt.toFixed(0);
+        $('#rttLight').className = 'light ' + Mahou.rttClass(s.rtt);
+      } else {
+        $('#rttNow').textContent = '掉包';
+        $('#rttLight').className = 'light bad';
+      }
+      if (clock.rtt) {
+        const h = clock.history[clock.history.length - 1];
+        $('#pingStat').innerHTML =
+          `對時 RTT：min ${clock.rtt.min.toFixed(1)} / p50 ${clock.rtt.p50} / p95 ${clock.rtt.p95} / max ${clock.rtt.max.toFixed(1)} ms<br>` +
+          `offset 漂移 ${h ? h.drift.toFixed(1) : 0}ms（經過 ${h ? Math.round(h.elapsedMs / 1000) : 0}s）<br>` +
+          `重測次數 ${clock.history.length}`;
+      }
+    };
+    tick();
+    pingTimer = setInterval(tick, 1000);
+  }
+  function stopPingView() { clearInterval(pingTimer); pingTimer = null; }
+
+  // ---- 步驟 3：點擊測試 ----
+  let tapMode = 'single', tapSeq = 0, spamActive = false, spamEndsAt = 0;
+  const tapLog = []; // {rtt, uplink, downlink}
+  function setupTap(mode) {
+    tapMode = mode; tapSeq = 0; tapLog.length = 0;
+    $('#tapCount').textContent = '0';
+    $('#tapStat').textContent = '';
+    if (mode === 'single') {
+      $('#tapHint').textContent = '單點模式：點 10 次，看延遲分布';
+      $('#tapBtn').style.display = '';
+      $('#spamStartBtn').style.display = 'none';
+    } else {
+      $('#tapHint').textContent = '狂點模式：按開始後 3 秒內盡量點';
+      $('#tapBtn').style.display = 'none';
+      $('#spamStartBtn').style.display = '';
+      spamActive = false;
+    }
+  }
+  $('#spamStartBtn').addEventListener('pointerdown', () => {
+    tapSeq = 0; spamActive = true;
+    spamEndsAt = performance.now() + 3000;
+    sock.send({ type: 'spamStart' });
+    $('#spamStartBtn').style.display = 'none';
+    $('#tapBtn').style.display = '';
+    setTimeout(() => {
+      spamActive = false;
+      $('#tapBtn').style.display = 'none';
+      $('#spamStartBtn').style.display = '';
+      $('#spamStartBtn').textContent = '再來一輪';
+      sock.send({ type: 'spamDone', sent: tapSeq });
+    }, 3000);
+  });
+  // 用 pointerdown（不是 click），本機立刻變色＝零延遲對照組
+  $('#tapBtn').addEventListener('pointerdown', () => {
+    if (tapMode === 'spam' && !spamActive) return;
+    if (tapMode === 'single' && tapSeq >= 10) return;
+    tapSeq++;
+    $('#tapCount').textContent = tapSeq + (tapMode === 'single' ? ' / 10' : '');
+    const btn = $('#tapBtn');
+    btn.classList.add('flash');
+    setTimeout(() => btn.classList.remove('flash'), 90);
+    sock.send({ type: 'tap', seq: tapSeq, mode: tapMode, tClientSend: clock.serverNow() });
+  });
+  sock.on('tapAck', (m) => {
+    const now = clock.serverNow();
+    if (now == null || typeof m.tClientSend !== 'number') return;
+    const uplink = m.tServerRecv - m.tClientSend;
+    const downlink = now - m.tServerSend;
+    tapLog.push({ uplink, downlink });
+    telemetry.add({ kind: 'tapRtt', seq: m.seq, mode: m.mode, uplinkMs: uplink, downlinkMs: downlink, rttMs: uplink + downlink });
+    if (tapMode === 'single') {
+      const ups = tapLog.map((x) => x.uplink).sort((a, b) => a - b);
+      const downs = tapLog.map((x) => x.downlink).sort((a, b) => a - b);
+      $('#tapStat').innerHTML =
+        `上行 p50 ${Mahou.pct(ups, 50)}ms / p95 ${Mahou.pct(ups, 95)}ms<br>` +
+        `下行 p50 ${Mahou.pct(downs, 50)}ms / p95 ${Mahou.pct(downs, 95)}ms`;
+    }
+  });
+  sock.on('spamSummary', (m) => {
+    $('#tapStat').innerHTML = `送出 ${m.sent}／伺服器收到 ${m.received}<br>斷號 ${m.gaps}，掉包率 <b>${m.lossPct}%</b>`;
+  });
+
+  // ---- 步驟 4：搖動計數 ----
+  // 演算法照 handoff §4：accelerationIncludingGravity → 低通估重力 → 門檻+遲滯+不應期
+  const P = { hi: 3.5, lo: 1.5, ref: 120 };
+  ['Hi', 'Lo', 'Ref'].forEach((k) => {
+    $('#p' + k).addEventListener('input', (e) => {
+      P[k.toLowerCase()] = parseFloat(e.target.value);
+      $('#v' + k).textContent = e.target.value;
+    });
+  });
+  let shakeCount = 0, gravity = 9.8, armed = false, lastCount = 0, motionOn = false;
+  $('#motionBtn').addEventListener('pointerdown', async () => {
+    // iOS 的 requestPermission 必須在使用者手勢裡呼叫（§9）
+    const perm = await Mahou.requestMotionPermission();
+    device.motionPermission = perm;
+    if (perm !== 'granted') { $('#motionBtn').textContent = '權限被拒，再試一次'; sock.send({ type: 'deviceUpdate', device: { motionPermission: perm } }); return; }
+    $('#motionBtn').style.display = 'none';
+    $('#shakeUI').style.display = 'flex';
+    startMotion();
+    // 實測 3 秒 devicemotion 事件率 → 裝置指紋（Pixel vs 平板取樣率差異是重點）
+    const hz = await Mahou.measureMotionRate(3000);
+    device.motionEventRateHz = hz;
+    sock.send({ type: 'deviceUpdate', device: { motionPermission: perm, motionEventRateHz: hz } });
+    $('#shakeStat').innerHTML = `devicemotion 事件率：<b>${hz} Hz</b>`;
+  });
+  function startMotion() {
+    if (motionOn) return;
+    motionOn = true;
+    window.addEventListener('devicemotion', (e) => {
+      // 部分 Android 的 acceleration 回 null → 一律用 accelerationIncludingGravity
+      const a = e.accelerationIncludingGravity;
+      if (!a || a.x == null) return;
+      const mag = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+      gravity = gravity * 0.9 + mag * 0.1;
+      const linear = mag - gravity;
+      const now = performance.now();
+      if (!armed && linear > P.hi) armed = true;
+      if (armed && linear < P.lo && now - lastCount > P.ref) {
+        shakeCount++; lastCount = now; armed = false;
+        $('#shakeCount').textContent = shakeCount;
+      }
+    });
+    // 每 300ms 上報累計數（§4 步驟 4）
+    setInterval(() => {
+      if (stage !== 'shake' || !joined) return;
+      sock.send({ type: 'shake', count: shakeCount, params: { ...P }, tClientSend: clock.serverNow() });
+    }, 300);
+  }
+  $('#shakeReset').addEventListener('pointerdown', () => {
+    shakeCount = 0; $('#shakeCount').textContent = '0';
+  });
+})();
+</script>
+</body>
+</html>
