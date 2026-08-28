@@ -12,7 +12,8 @@ const MAX_MSG_BYTES = 16 * 1024;
 // 關房 = 踢掉所有 WS（code 4000/4001，client 看到就不再重連）→ DO 閒置後被回收，停止計費。
 const IDLE_LIMIT_MS = 30 * 60 * 1000;
 const MAX_AGE_MS = 6 * 60 * 60 * 1000;
-const MEANINGFUL = new Set(['join', 'deviceUpdate', 'tap', 'spamStart', 'spamDone', 'shake', 'batch', 'stage']);
+const MEANINGFUL = new Set(['join', 'deviceUpdate', 'tap', 'spamStart', 'spamDone', 'shake', 'batch', 'stage',
+  'colorRound', 'colorPick', 'colorEnd', 'skiStart', 'skiRun', 'skiDone']);
 
 export class RoomDO {
   constructor(state, env) {
@@ -22,6 +23,7 @@ export class RoomDO {
     this.hosts = new Set(); // Set<WebSocket>
     this.clients = new Map(); // clientId -> {ws, name, device, sync, spam, joinedAt, connected}
     this.stage = 'lobby';
+    this.colorRound = null; // {round, deltaE, targetIdx, tShow, picks:Set, correctN}
     this.events = [];
     this.createdAt = Date.now();
     this.lastActivity = Date.now();
@@ -220,6 +222,70 @@ export class RoomDO {
         for (const r of msg.records.slice(0, 200)) {
           this.log({ type: 'clientRecord', clientId: ws._clientId, ...r });
         }
+        return;
+      }
+
+      // ---- 遊戲一：顏色反應 ----
+      case 'colorRound': {
+        // host 出題：DO 記下正解與 tShow（伺服器時鐘），廣播給 client 時「不含」正解
+        if (ws._role !== 'host') return;
+        this.colorRound = { round: msg.round | 0, deltaE: msg.deltaE, targetIdx: msg.targetIdx | 0, tShow: now, picks: new Set(), correctN: 0 };
+        this.log({ type: 'colorRound', round: this.colorRound.round, deltaE: msg.deltaE, targetIdx: this.colorRound.targetIdx, colors: msg.colors, tShow: now });
+        const s = JSON.stringify({ type: 'colorRound', round: this.colorRound.round, deltaE: msg.deltaE, colors: msg.colors });
+        for (const c of this.clients.values()) if (c.connected) { try { c.ws.send(s); } catch (e) {} }
+        return;
+      }
+
+      case 'colorPick': {
+        const c = this.clients.get(ws._clientId);
+        const g = this.colorRound;
+        if (!c || !g || (msg.round | 0) !== g.round) return;
+        if (g.picks.has(ws._clientId)) return; // 一人一答
+        g.picks.add(ws._clientId);
+        const correct = (msg.idx | 0) === g.targetIdx;
+        const rank = correct ? ++g.correctN : null;
+        // reactionMs 用 client 的點擊時間戳（已換算伺服器時間軸）→ 不含上行；沒對時就退回收到時間
+        const reactionMs = typeof msg.tTap === 'number' ? msg.tTap - g.tShow : now - g.tShow;
+        const uplinkMs = typeof msg.tClientSend === 'number' ? now - msg.tClientSend : null;
+        this.log({ type: 'colorPick', clientId: ws._clientId, round: g.round, deltaE: g.deltaE, idx: msg.idx | 0, correct, rank, tShow: g.tShow, tTap: msg.tTap, reactionMs, uplinkMs });
+        this.send(ws, { type: 'colorResult', round: g.round, correct, reactionMs, rank });
+        this.toHosts({ type: 'colorPick', clientId: ws._clientId, name: c.name, round: g.round, correct, reactionMs, rank, answered: g.picks.size });
+        return;
+      }
+
+      case 'colorEnd': {
+        if (ws._role !== 'host') return;
+        this.colorRound = null;
+        this.log({ type: 'colorEnd', scores: msg.scores });
+        this.broadcastAll({ type: 'colorEnd', scores: msg.scores });
+        return;
+      }
+
+      // ---- 遊戲二：滑雪下坡 ----
+      case 'skiStart': {
+        if (ws._role !== 'host') return;
+        const startAt = now + 3500; // 各端用伺服器時鐘對齊倒數
+        const duration = Math.min(msg.duration | 0 || 30000, 120000);
+        this.log({ type: 'skiStart', startAt, duration });
+        this.broadcastAll({ type: 'skiStart', startAt, duration });
+        return;
+      }
+
+      case 'skiRun': {
+        const c = this.clients.get(ws._clientId);
+        if (!c) return;
+        const uplinkMs = typeof msg.tClientSend === 'number' ? now - msg.tClientSend : null;
+        // 距離由 client 積分、伺服器只轉發（handoff §6：先測「完全信任 client」版本）
+        this.log({ type: 'skiRun', clientId: ws._clientId, speed: msg.speed, distance: msg.distance, shakeRate: msg.shakeRate, tClientSend: msg.tClientSend, tServerRecv: now, uplinkMs });
+        this.toHosts({ type: 'skiRun', clientId: ws._clientId, name: c.name, speed: msg.speed, distance: msg.distance, uplinkMs });
+        return;
+      }
+
+      case 'skiDone': {
+        const c = this.clients.get(ws._clientId);
+        if (!c) return;
+        this.log({ type: 'skiDone', clientId: ws._clientId, distance: msg.distance });
+        this.toHosts({ type: 'skiDone', clientId: ws._clientId, name: c.name, distance: msg.distance });
         return;
       }
 

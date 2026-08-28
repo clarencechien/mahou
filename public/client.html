@@ -39,6 +39,11 @@
   .card { background: #1f2937; border-radius: 12px; padding: 12px; }
   .stat { font-size: .9rem; color: #d1d5db; line-height: 1.7; }
   #gate { position: fixed; inset: 0; background: #111827; z-index: 10; display: none; flex-direction: column; gap: 16px; padding: 24px; justify-content: center; }
+  #colorGrid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; }
+  .colorBlock { border: none; border-radius: 18px; padding: 0; }
+  .colorBlock.picked { outline: 5px solid #fff; outline-offset: -5px; }
+  #speedTrack { height: 20px; background: #1f2937; border-radius: 10px; overflow: hidden; }
+  #skiSpeedBar { height: 100%; width: 0%; background: #38bdf8; border-radius: 10px; }
 </style>
 </head>
 <body>
@@ -97,6 +102,25 @@
       <div class="slider"><span>不應期 <b id="vRef">120</b>ms</span><input type="range" id="pRef" min="40" max="400" step="10" value="120"><span></span></div>
     </div>
     <div class="card stat" id="shakeStat"></div>
+  </div>
+</section>
+
+<!-- 遊戲一：顏色反應 -->
+<section id="st-color" class="stage">
+  <p class="hint" id="colorMsg">看大螢幕，等出題…</p>
+  <div id="colorGrid"></div>
+  <div class="card stat" id="colorStat"></div>
+</section>
+
+<!-- 遊戲二：滑雪下坡 -->
+<section id="st-ski" class="stage">
+  <button id="skiPermBtn">啟用感測器</button>
+  <div id="skiUI" style="display:none; flex-direction:column; gap:14px; flex:1">
+    <p class="hint" id="skiMsg">等主持人開始…</p>
+    <div class="big"><span id="skiDist">0</span><span style="font-size:1.2rem"> m</span></div>
+    <div id="speedTrack"><div id="skiSpeedBar"></div></div>
+    <p class="hint">上下用力搖！搖越快滑越快 ⛷️</p>
+    <div class="card stat" id="skiStat"></div>
   </div>
 </section>
 
@@ -178,7 +202,7 @@
   }
 
   // ---- 關卡切換（host 廣播驅動） ----
-  const stageMap = { lobby: 'st-lobby', ping: 'st-ping', 'tap-single': 'st-tap', 'tap-spam': 'st-tap', shake: 'st-shake' };
+  const stageMap = { lobby: 'st-lobby', ping: 'st-ping', 'tap-single': 'st-tap', 'tap-spam': 'st-tap', shake: 'st-shake', color: 'st-color', ski: 'st-ski' };
   sock.on('stage', (m) => setStage(m.stage));
   function setStage(s) {
     stage = s;
@@ -188,6 +212,7 @@
     if (s === 'ping') startPingView(); else stopPingView();
     if (s === 'tap-single') setupTap('single');
     if (s === 'tap-spam') setupTap('spam');
+    if (s === 'ski') setupSkiStage();
   }
 
   // ---- 步驟 2：Ping 畫面（1Hz 即時顯示） ----
@@ -289,19 +314,28 @@
     });
   });
   let shakeCount = 0, gravity = 9.8, armed = false, lastCount = 0, motionOn = false;
-  $('#motionBtn').addEventListener('pointerdown', async () => {
-    // iOS 的 requestPermission 必須在使用者手勢裡呼叫（§9）
+  const shakeTimes = []; // 每次搖動的 performance.now()，滑雪用它算頻率
+  // 感測器啟用共用流程：Stage 0 的搖動關卡和滑雪都要用（iOS 權限必須手勢觸發，§9）
+  async function ensureMotion() {
+    if (motionOn) return true;
     const perm = await Mahou.requestMotionPermission();
     device.motionPermission = perm;
-    if (perm !== 'granted') { $('#motionBtn').textContent = '權限被拒，再試一次'; sock.send({ type: 'deviceUpdate', device: { motionPermission: perm } }); return; }
+    if (perm !== 'granted') { sock.send({ type: 'deviceUpdate', device: { motionPermission: perm } }); return false; }
+    startMotion();
+    if (device.motionEventRateHz == null) {
+      // 實測 3 秒 devicemotion 事件率 → 裝置指紋（Pixel vs 平板取樣率差異是重點）
+      Mahou.measureMotionRate(3000).then((hz) => {
+        device.motionEventRateHz = hz;
+        sock.send({ type: 'deviceUpdate', device: { motionPermission: 'granted', motionEventRateHz: hz } });
+        $('#shakeStat').innerHTML = `devicemotion 事件率：<b>${hz} Hz</b>`;
+      });
+    }
+    return true;
+  }
+  $('#motionBtn').addEventListener('pointerdown', async () => {
+    if (!(await ensureMotion())) { $('#motionBtn').textContent = '權限被拒，再試一次'; return; }
     $('#motionBtn').style.display = 'none';
     $('#shakeUI').style.display = 'flex';
-    startMotion();
-    // 實測 3 秒 devicemotion 事件率 → 裝置指紋（Pixel vs 平板取樣率差異是重點）
-    const hz = await Mahou.measureMotionRate(3000);
-    device.motionEventRateHz = hz;
-    sock.send({ type: 'deviceUpdate', device: { motionPermission: perm, motionEventRateHz: hz } });
-    $('#shakeStat').innerHTML = `devicemotion 事件率：<b>${hz} Hz</b>`;
   });
   function startMotion() {
     if (motionOn) return;
@@ -317,6 +351,8 @@
       if (!armed && linear > P.hi) armed = true;
       if (armed && linear < P.lo && now - lastCount > P.ref) {
         shakeCount++; lastCount = now; armed = false;
+        shakeTimes.push(now);
+        if (shakeTimes.length > 200) shakeTimes.splice(0, 100);
         $('#shakeCount').textContent = shakeCount;
       }
     });
@@ -329,6 +365,95 @@
   $('#shakeReset').addEventListener('pointerdown', () => {
     shakeCount = 0; $('#shakeCount').textContent = '0';
   });
+
+  // ---- 遊戲一：顏色反應 ----
+  // 大螢幕出題 → 手機四色塊（位置每局隨機打亂，防記位置）→ 點擊上報，DO 判定
+  let colorCur = null;
+  sock.on('colorRound', (m) => {
+    colorCur = { round: m.round, answered: false };
+    $('#colorMsg').textContent = `第 ${m.round} 局 — 點大螢幕上的顏色！`;
+    $('#colorStat').textContent = '';
+    const grid = $('#colorGrid');
+    grid.innerHTML = '';
+    const order = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+    for (const idx of order) {
+      const b = document.createElement('button');
+      b.className = 'colorBlock';
+      b.style.background = m.colors[idx];
+      b.addEventListener('pointerdown', () => {
+        if (!colorCur || colorCur.answered) return;
+        colorCur.answered = true;
+        b.classList.add('picked');
+        const t = clock.serverNow();
+        sock.send({ type: 'colorPick', round: colorCur.round, idx, tTap: t, tClientSend: t });
+      });
+      grid.appendChild(b);
+    }
+  });
+  sock.on('colorResult', (m) => {
+    $('#colorStat').innerHTML = m.correct
+      ? `✓ 答對！第 <b>${m.rank}</b> 快 · 反應 ${Math.round(m.reactionMs)}ms`
+      : '✗ 點錯了';
+  });
+  sock.on('colorEnd', (m) => {
+    $('#colorMsg').textContent = '遊戲結束！';
+    $('#colorGrid').innerHTML = '';
+    if (Array.isArray(m.scores)) {
+      $('#colorStat').innerHTML = '總分：<br>' + m.scores.map((s, i) => `${i + 1}. ${s.name} — ${s.score} 分`).join('<br>');
+    }
+  });
+
+  // ---- 遊戲二：滑雪下坡 ----
+  // 搖動頻率(EMA α=0.3) → 速度，距離由 client 積分，每 200ms 上報（§6）
+  let ski = null, skiTimer = null;
+  function setupSkiStage() {
+    if (motionOn) { $('#skiPermBtn').style.display = 'none'; $('#skiUI').style.display = 'flex'; }
+    else { $('#skiPermBtn').style.display = ''; $('#skiUI').style.display = 'none'; }
+  }
+  $('#skiPermBtn').addEventListener('pointerdown', async () => {
+    if (!(await ensureMotion())) { $('#skiPermBtn').textContent = '權限被拒，再試一次'; return; }
+    setupSkiStage();
+  });
+  sock.on('skiStart', (m) => {
+    ski = { startAt: m.startAt, duration: m.duration, dist: 0, ema: 0, done: false, tick: 0, lastShakes: 0 };
+    $('#skiDist').textContent = '0';
+    $('#skiStat').textContent = '';
+    clearInterval(skiTimer);
+    skiTimer = setInterval(skiTick, 100);
+  });
+  function skiTick() {
+    if (!ski) return;
+    const now = clock.serverNow() ?? Date.now();
+    if (now < ski.startAt) {
+      $('#skiMsg').textContent = `準備… ${Math.ceil((ski.startAt - now) / 1000)}`;
+      return;
+    }
+    const remain = ski.startAt + ski.duration - now;
+    if (remain <= 0) {
+      if (!ski.done) {
+        ski.done = true;
+        sock.send({ type: 'skiDone', distance: Math.round(ski.dist * 10) / 10 });
+        $('#skiMsg').textContent = '結束！';
+        $('#skiStat').innerHTML = `你滑了 <b>${ski.dist.toFixed(1)} m</b>`;
+        $('#skiSpeedBar').style.width = '0%';
+        clearInterval(skiTimer);
+      }
+      return;
+    }
+    $('#skiMsg').textContent = `剩 ${Math.ceil(remain / 1000)} 秒`;
+    // 最近 1 秒的搖動次數 → EMA
+    const t = performance.now();
+    let n = 0;
+    for (let i = shakeTimes.length - 1; i >= 0 && shakeTimes[i] > t - 1000; i--) n++;
+    ski.ema = 0.3 * n + 0.7 * ski.ema;
+    const speed = Math.min(ski.ema * 1.6, 10); // m/s，搖 6 下/秒左右封頂
+    ski.dist += speed * 0.1;
+    $('#skiDist').textContent = ski.dist.toFixed(0);
+    $('#skiSpeedBar').style.width = (speed / 10) * 100 + '%';
+    if (++ski.tick % 2 === 0) {
+      sock.send({ type: 'skiRun', speed: Math.round(speed * 100) / 100, distance: Math.round(ski.dist * 10) / 10, shakeRate: Math.round(ski.ema * 10) / 10, tClientSend: clock.serverNow() });
+    }
+  }
 })();
 </script>
 </body>

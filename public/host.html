@@ -49,6 +49,8 @@
   <button data-stage="tap-single">③ 單點×10</button>
   <button data-stage="tap-spam">③ 狂點 3 秒</button>
   <button data-stage="shake">④ 搖動計數</button>
+  <button data-stage="color">🎨 顏色反應</button>
+  <button data-stage="ski">⛷️ 滑雪下坡</button>
   <select id="hintSel" title="DO 區域（換區域會開新房）" style="font-size:1rem;padding:10px;border-radius:10px;background:#1e293b;color:#f1f5f9;border:none">
     <option value="wnam">DO區域：美西 wnam</option>
     <option value="apac">DO區域：亞太 apac</option>
@@ -65,6 +67,27 @@
   </tr></thead>
   <tbody id="roster"></tbody>
 </table>
+
+<div class="panel" id="colorPanel" style="display:none">
+  <h2>遊戲一：顏色反應 — 20 局，ΔE 100 → 40 → 15 → 7</h2>
+  <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start">
+    <div>
+      <div id="targetSwatch" style="width:320px; height:220px; border-radius:14px; background:#1e293b; display:flex; align-items:center; justify-content:center; color:#64748b; font-size:1.4rem">按「開始」</div>
+      <div id="colorRoundInfo" style="margin-top:10px; font-size:.9rem; color:#94a3b8"></div>
+      <button id="colorStartBtn" style="background:#2563eb; margin-top:10px">開始 20 局</button>
+    </div>
+    <div style="flex:1; min-width:280px">
+      <table style="margin:0"><thead><tr><th>玩家</th><th>本局</th><th>反應</th><th>總分</th></tr></thead><tbody id="colorBoard"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="skiPanel" style="display:none">
+  <h2>遊戲二：滑雪下坡 — 30 秒 <span id="skiTimerLbl" style="color:#7dd3fc"></span></h2>
+  <button id="skiStartBtn" style="background:#2563eb; margin-bottom:10px">開始</button>
+  <canvas id="skiCanvas" width="960" height="430" style="width:100%; border-radius:10px; background:#eaf3fb"></canvas>
+  <div id="skiResults" style="margin-top:8px; font-size:.95rem"></div>
+</div>
 
 <div class="panel"><h2>即席摘要（正式數據以匯出 JSON 為準）</h2><div id="summary">還沒有數據。</div></div>
 <div class="panel"><h2>事件流</h2><div id="feed"></div></div>
@@ -151,6 +174,206 @@
   function setActiveBtn(stage) {
     document.querySelectorAll('button[data-stage]').forEach((b) =>
       b.classList.toggle('active', b.dataset.stage === stage));
+    $('#colorPanel').style.display = stage === 'color' ? '' : 'none';
+    $('#skiPanel').style.display = stage === 'ski' ? '' : 'none';
+  }
+
+  // host 也需要伺服器時鐘（滑雪倒數對齊用）
+  const hostClock = new Mahou.ClockSync(sock);
+  sock.onOpen(() => hostClock.sync(6));
+
+  // ================= 遊戲一：顏色反應 =================
+  // CIELAB(D65) → sRGB，ΔE 用 CIE76（Lab 空間歐氏距離），POC 足夠
+  function lab2rgb(L, a, b) {
+    const fy = (L + 16) / 116, fx = fy + a / 500, fz = fy - b / 200;
+    const f3 = (t) => (t ** 3 > 0.008856 ? t ** 3 : (t - 16 / 116) / 7.787);
+    const X = 0.95047 * f3(fx), Y = 1.0 * f3(fy), Z = 1.08883 * f3(fz);
+    let r = X * 3.2406 - Y * 1.5372 - Z * 0.4986;
+    let g = -X * 0.9689 + Y * 1.8758 + Z * 0.0415;
+    let bl = X * 0.0557 - Y * 0.204 + Z * 1.057;
+    const gam = (c) => (c > 0.0031308 ? 1.055 * c ** (1 / 2.4) - 0.055 : 12.92 * c);
+    r = gam(r); g = gam(g); bl = gam(bl);
+    if (r < 0 || r > 1 || g < 0 || g > 1 || bl < 0 || bl > 1) return null; // 出色域
+    const h = (c) => Math.round(c * 255).toString(16).padStart(2, '0');
+    return '#' + h(r) + h(g) + h(bl);
+  }
+  // 產一局：基準色 + 三個距離 ≈ ΔE 的干擾色（干擾色彼此也要拉開）
+  function genColorRound(dE) {
+    for (let t = 0; t < 200; t++) {
+      const base = { L: 45 + Math.random() * 30, a: -45 + Math.random() * 90, b: -45 + Math.random() * 90 };
+      if (!lab2rgb(base.L, base.a, base.b)) continue;
+      const labs = [base];
+      let ok = true;
+      for (let k = 0; k < 3 && ok; k++) {
+        let placed = false;
+        for (let u = 0; u < 60; u++) {
+          // 隨機方向（L 分量壓小，主要在色度平面移動）
+          let dx = Math.random() - 0.5, dy = Math.random() - 0.5, dz = (Math.random() - 0.5) * 0.4;
+          const n = Math.hypot(dx, dy, dz) || 1;
+          const cand = { L: base.L + (dz / n) * dE, a: base.a + (dx / n) * dE, b: base.b + (dy / n) * dE };
+          if (!lab2rgb(cand.L, cand.a, cand.b)) continue;
+          const minSep = labs.slice(1).every((o) => Math.hypot(cand.L - o.L, cand.a - o.a, cand.b - o.b) >= dE * 0.6);
+          if (!minSep) continue;
+          labs.push(cand); placed = true; break;
+        }
+        if (!placed) ok = false;
+      }
+      if (!ok) continue;
+      const colors = labs.map((l) => lab2rgb(l.L, l.a, l.b));
+      // 目標色隨機放在 0-3 其中一格（廣播給 client 的順序含目標，client 端再自行打亂位置）
+      const targetIdx = Math.floor(Math.random() * 4);
+      const arranged = colors.slice(1);
+      arranged.splice(targetIdx, 0, colors[0]);
+      return { colors: arranged, targetIdx };
+    }
+    return null;
+  }
+  const TIERS = (r) => (r <= 5 ? 100 : r <= 10 ? 40 : r <= 15 ? 15 : 7);
+  let cg = null; // {round, scores:Map, roundDone, advTimer}
+  $('#colorStartBtn').addEventListener('click', () => {
+    sock.send({ type: 'stage', stage: 'color' });
+    setActiveBtn('color');
+    cg = { round: 0, scores: new Map(), advTimer: null };
+    $('#colorBoard').innerHTML = '';
+    nextColorRound();
+  });
+  function nextColorRound() {
+    if (!cg) return;
+    clearTimeout(cg.advTimer);
+    cg.round++;
+    if (cg.round > 20) return finishColor();
+    const dE = TIERS(cg.round);
+    const spec = genColorRound(dE);
+    if (!spec) { cg.round--; cg.advTimer = setTimeout(nextColorRound, 100); return; }
+    cg.answers = new Map();
+    // 準備 1.2 秒（灰畫面）→ 出題
+    const sw = $('#targetSwatch');
+    sw.style.background = '#1e293b';
+    sw.textContent = `第 ${cg.round} 局`;
+    $('#colorRoundInfo').textContent = `ΔE ≈ ${dE}（第 ${cg.round}/20 局）`;
+    setTimeout(() => {
+      if (!cg || cg.round > 20) return;
+      sock.send({ type: 'colorRound', round: cg.round, deltaE: dE, colors: spec.colors, targetIdx: spec.targetIdx });
+      sw.style.background = spec.colors[spec.targetIdx];
+      sw.textContent = '';
+      // 兜底：6 秒沒人答完也進下一局
+      cg.advTimer = setTimeout(nextColorRound, 6000);
+    }, 1200);
+  }
+  sock.on('colorPick', (m) => {
+    if (!cg) return;
+    feed(`${m.name} 第${m.round}局 ${m.correct ? `✓ ${Math.round(m.reactionMs)}ms 第${m.rank}快` : '✗'}`);
+    if (m.correct) {
+      const pts = Math.max(1, 6 - m.rank); // 第1快+5、第2快+4…
+      cg.scores.set(m.clientId, { name: m.name, score: (cg.scores.get(m.clientId)?.score || 0) + pts });
+    } else if (!cg.scores.has(m.clientId)) {
+      cg.scores.set(m.clientId, { name: m.name, score: 0 });
+    }
+    cg.answers.set(m.clientId, m);
+    renderColorBoard(m.round);
+    const online = roster.filter((c) => c.connected).length;
+    if (cg.answers.size >= online && online > 0) {
+      clearTimeout(cg.advTimer);
+      cg.advTimer = setTimeout(nextColorRound, 1600);
+    }
+  });
+  function renderColorBoard(round) {
+    const rows = [...cg.scores.entries()].sort((a, b) => b[1].score - a[1].score);
+    $('#colorBoard').innerHTML = rows.map(([id, s]) => {
+      const a = cg.answers.get(id);
+      return `<tr><td><b>${esc(s.name)}</b></td>` +
+        `<td>${a && a.round === round ? (a.correct ? '✓' : '✗') : '…'}</td>` +
+        `<td>${a && a.round === round && a.correct ? Math.round(a.reactionMs) + 'ms' : '–'}</td>` +
+        `<td><b>${s.score}</b></td></tr>`;
+    }).join('');
+  }
+  function finishColor() {
+    const scores = [...cg.scores.values()].sort((a, b) => b.score - a.score);
+    sock.send({ type: 'colorEnd', scores });
+    const sw = $('#targetSwatch');
+    sw.style.background = '#1e293b';
+    sw.textContent = scores.length ? `🏆 ${scores[0].name}` : '結束';
+    $('#colorRoundInfo').textContent = '20 局結束 — 記得匯出 JSON';
+    cg = null;
+  }
+
+  // ================= 遊戲二：滑雪下坡 =================
+  // 10Hz 上報 → 60fps 插值（外插 + 追趕），鏡頭跟著領先者
+  const skiPlayers = new Map(); // clientId -> {name, dist, speed, atMs(perf), disp, final}
+  let skiRace = null; // {startAt, duration}
+  $('#skiStartBtn').addEventListener('click', () => {
+    sock.send({ type: 'stage', stage: 'ski' });
+    setActiveBtn('ski');
+    skiPlayers.clear();
+    $('#skiResults').textContent = '';
+    sock.send({ type: 'skiStart', duration: 30000 });
+  });
+  sock.on('skiStart', (m) => {
+    skiRace = { startAt: m.startAt, duration: m.duration };
+    requestAnimationFrame(skiDraw);
+  });
+  sock.on('skiRun', (m) => {
+    const p = skiPlayers.get(m.clientId) || { name: m.name, dist: 0, speed: 0, disp: 0, final: null };
+    p.name = m.name; p.dist = m.distance; p.speed = m.speed; p.atMs = performance.now();
+    skiPlayers.set(m.clientId, p);
+  });
+  sock.on('skiDone', (m) => {
+    const p = skiPlayers.get(m.clientId);
+    if (p) { p.final = m.distance; p.dist = m.distance; p.speed = 0; }
+    const done = [...skiPlayers.values()].filter((x) => x.final != null);
+    if (done.length === skiPlayers.size) {
+      const rank = done.sort((a, b) => b.final - a.final);
+      $('#skiResults').innerHTML = '🏁 ' + rank.map((p, i) => `${i + 1}. <b>${esc(p.name)}</b> ${p.final.toFixed(1)}m`).join(' · ');
+    }
+  });
+  function skiDraw() {
+    const cv = $('#skiCanvas'), ctx = cv.getContext('2d');
+    const W = cv.width, H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+    const now = hostClock.serverNow() ?? Date.now();
+    if (!skiRace) return;
+    const elapsed = now - skiRace.startAt;
+    $('#skiTimerLbl').textContent = elapsed < 0 ? `倒數 ${Math.ceil(-elapsed / 1000)}` :
+      elapsed < skiRace.duration ? `剩 ${Math.ceil((skiRace.duration - elapsed) / 1000)} 秒` : '結束';
+    const ids = [...skiPlayers.keys()];
+    const laneW = W / Math.max(ids.length, 1);
+    // 插值：目標 = 最後上報距離 + 速度外插，顯示值朝目標追趕
+    let lead = 0;
+    for (const p of skiPlayers.values()) {
+      const ext = p.final != null ? p.final : p.dist + (p.speed || 0) * Math.min((performance.now() - (p.atMs || 0)) / 1000, 1);
+      p.disp += (ext - p.disp) * 0.12;
+      lead = Math.max(lead, p.disp);
+    }
+    const SPAN = 90; // 畫面涵蓋 90m
+    const cam = Math.max(0, lead - SPAN * 0.75); // 領先者在 75% 高度
+    const y = (d) => ((d - cam) / SPAN) * H;
+    // 雪道背景：淡藍雪地 + 樹
+    ctx.fillStyle = '#f4f9fe'; ctx.fillRect(0, 0, W, H);
+    ctx.font = '16px serif';
+    for (let d = Math.floor(cam / 15) * 15; d < cam + SPAN + 15; d += 15) {
+      const ty = y(d);
+      ctx.fillStyle = '#9fc3e0';
+      for (let i = 0; i <= ids.length; i++) {
+        ctx.fillText('🌲', i * laneW - 8 + (d % 30 ? 6 : -6), ty);
+      }
+      ctx.fillStyle = '#c5d9ea';
+      ctx.fillText(d + 'm', 6, ty - 4);
+    }
+    // 分道線 + 玩家
+    ids.forEach((id, i) => {
+      const p = skiPlayers.get(id);
+      ctx.strokeStyle = '#dde9f3';
+      ctx.beginPath(); ctx.moveTo(i * laneW, 0); ctx.lineTo(i * laneW, H); ctx.stroke();
+      const cx = i * laneW + laneW / 2;
+      const sy = Math.min(y(p.disp), H - 24);
+      const sway = Math.sin(performance.now() / 180 + i) * Math.min(p.speed || 0, 6) * 1.2;
+      ctx.font = '30px serif';
+      ctx.fillText('⛷️', cx - 15 + sway, sy);
+      ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#1b2733'; ctx.textAlign = 'center';
+      ctx.fillText(`${p.name} ${p.disp.toFixed(0)}m`, cx, 22);
+      ctx.textAlign = 'start';
+    });
+    if (elapsed < skiRace.duration + 3000) requestAnimationFrame(skiDraw);
   }
 
   // ---- 匯出：POC 唯一真正的交付物 ----
