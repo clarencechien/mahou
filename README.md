@@ -8,11 +8,13 @@ Phase 0 的交付物是一份 **JSON 測試數據**，不是玩法。遊戲一�
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/clarencechien/mahou)
 
-按下去 → 登入 Cloudflare → 它會 fork/連結這個 repo 並自動部署，之後 push 到 GitHub 就自動重新部署（Workers Builds CI 連動）。**Free plan 可用**（Durable Object 已設定成 SQLite-backed）。
+按下去 → 登入 Cloudflare → 自動部署。**Free plan 可用**（Durable Object 已設定成 SQLite-backed）。
+
+> ⚠️ **按鈕的陷阱**：Deploy to Cloudflare 會把這個 repo 當模板**複製一份新 repo** 到你的 GitHub 帳號，CI 接在那份複製品上——之後 push 到本 repo 的 main **不會**觸發部署。要持續開發請改用下面的 Import a repository 連本尊，或在 Worker → Settings → Build 把 Git 連動改指回本 repo（自訂網域綁在 worker 上，不受影響）。注意：切完連動要再 push 一次才會觸發第一個新 build。
 
 其他兩種部署方式：
 
-- **Cloudflare Dashboard 連動**：Dashboard → Workers & Pages → Create → Import a repository → 選這個 repo。它會讀 `wrangler.toml` 自動設好 DO binding 與靜態資源，之後 push 即部署。
+- **Cloudflare Dashboard 連動**（自己開發用這個）：Dashboard → Workers & Pages → Create → Import a repository → 選這個 repo。它會讀 `wrangler.toml` 自動設好 DO binding 與靜態資源，之後 push 即部署。
 - **CLI**：`npm install && npx wrangler deploy`（本機開發用 `npx wrangler dev`，但感測器 API 需要 HTTPS，手機實測請直接用部署出來的 `*.workers.dev` 網址）。
 
 ## 怎麼跑一輪測試（約 10 分鐘）
