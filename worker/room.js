@@ -5,6 +5,15 @@
 const MAX_EVENTS = 50000;
 const MAX_MSG_BYTES = 16 * 1024;
 
+// 計費防呆：非 hibernation 的 WS 會把 DO 釘在記憶體裡持續計費。
+// 忘記關的分頁（含自動重連＋背景對時）會讓 DO 永遠睡不著，所以：
+// - 30 分鐘沒有「有意義的」訊息（ping/對時不算）→ 自動關房
+// - 房間開了 6 小時 → 無條件關房
+// 關房 = 踢掉所有 WS（code 4000/4001，client 看到就不再重連）→ DO 閒置後被回收，停止計費。
+const IDLE_LIMIT_MS = 30 * 60 * 1000;
+const MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const MEANINGFUL = new Set(['join', 'deviceUpdate', 'tap', 'spamStart', 'spamDone', 'shake', 'batch', 'stage']);
+
 export class RoomDO {
   constructor(state, env) {
     this.state = state;
@@ -15,6 +24,9 @@ export class RoomDO {
     this.stage = 'lobby';
     this.events = [];
     this.createdAt = Date.now();
+    this.lastActivity = Date.now();
+    this.ended = false;
+    this._reaper = null;
   }
 
   log(evt) {
@@ -24,11 +36,12 @@ export class RoomDO {
 
   async fetch(req) {
     const url = new URL(req.url);
-    const m = url.pathname.match(/^\/(ws|export)\/([A-Za-z0-9]{4,8})$/);
+    const m = url.pathname.match(/^\/(ws|export|whereami)\/([A-Za-z0-9]{4,8})$/);
     if (!m) return new Response('Bad request', { status: 400 });
     this.roomId = m[2].toUpperCase();
 
     if (m[1] === 'export') return this.export();
+    if (m[1] === 'whereami') return this.whereami(req.headers.get('x-edge-colo'));
 
     if (req.headers.get('Upgrade') !== 'websocket') {
       return new Response('Expected websocket', { status: 426 });
@@ -44,6 +57,9 @@ export class RoomDO {
   setup(ws, role) {
     ws._role = role;
     ws._clientId = null;
+    if (this.ended) { ws.close(4000, 'room ended'); return; }
+    // 有連線才需要看門狗；全空時要清掉，否則 timer 本身會擋住 DO 回收
+    if (!this._reaper) this._reaper = setInterval(() => this.checkIdle(), 60 * 1000);
     if (role === 'host') {
       this.hosts.add(ws);
       this.send(ws, { type: 'hello', role, roomId: this.roomId, stage: this.stage });
@@ -67,18 +83,44 @@ export class RoomDO {
   onClose(ws) {
     if (ws._role === 'host') {
       this.hosts.delete(ws);
-      return;
+    } else {
+      const c = ws._clientId && this.clients.get(ws._clientId);
+      if (c && c.ws === ws) {
+        c.connected = false;
+        this.log({ type: 'leave', clientId: ws._clientId });
+        this.broadcastRoster();
+      }
     }
-    const c = ws._clientId && this.clients.get(ws._clientId);
-    if (c && c.ws === ws) {
-      c.connected = false;
-      this.log({ type: 'leave', clientId: ws._clientId });
-      this.broadcastRoster();
+    if (this.hosts.size === 0 && ![...this.clients.values()].some((c) => c.connected)) {
+      clearInterval(this._reaper);
+      this._reaper = null;
     }
+  }
+
+  checkIdle() {
+    const now = Date.now();
+    if (now - this.lastActivity > IDLE_LIMIT_MS) this.endRoom('idle', 4001);
+    else if (now - this.createdAt > MAX_AGE_MS) this.endRoom('max-age', 4001);
+  }
+
+  endRoom(reason, code = 4000) {
+    if (this.ended) return;
+    this.ended = true;
+    this.log({ type: 'roomEnded', reason });
+    this.broadcastAll({ type: 'roomEnded', reason });
+    for (const ws of this.hosts) { try { ws.close(code, reason); } catch (e) {} }
+    for (const c of this.clients.values()) { try { c.ws.close(code, reason); } catch (e) {} }
+    this.hosts.clear();
+    for (const c of this.clients.values()) c.connected = false;
+    clearInterval(this._reaper);
+    this._reaper = null;
+    // events 留著：DO 被回收前 host 還來得及打 /export 撈最後一次
   }
 
   onMessage(ws, msg) {
     const now = Date.now(); // tServerRecv：Workers 的時間在每次事件送達時更新
+    // ping / syncResult 不算活動——忘記關的分頁會自動發這兩種，不能讓它們養住房間
+    if (MEANINGFUL.has(msg.type)) this.lastActivity = now;
     switch (msg.type) {
       // ---- 對時：收到立刻回，不做任何多餘工作 ----
       case 'ping':
@@ -182,6 +224,12 @@ export class RoomDO {
       }
 
       // ---- host 控制 ----
+      case 'endRoom': {
+        if (ws._role !== 'host') return;
+        this.endRoom('host');
+        return;
+      }
+
       case 'stage': {
         if (ws._role !== 'host') return;
         this.stage = String(msg.stage || 'lobby').slice(0, 20);
@@ -225,6 +273,20 @@ export class RoomDO {
 
   sendRoster(ws) { this.send(ws, this.rosterPayload()); }
   broadcastRoster() { this.toHosts(this.rosterPayload()); }
+
+  // DO 到底住在哪個機房？從 DO 內打一個 trace，回的 colo 就是 DO 所在地。
+  // 台灣的 client 若量到 100ms+ 的 RTT 地板，先看這裡是不是 DO 落到美洲去了。
+  async whereami(edgeColo) {
+    if (!this._colo) {
+      try {
+        const txt = await (await fetch('https://1.1.1.1/cdn-cgi/trace')).text();
+        this._colo = /colo=([A-Z]+)/.exec(txt)?.[1] || '?';
+      } catch (e) { this._colo = '?'; }
+    }
+    return new Response(JSON.stringify({ doColo: this._colo, edgeColo: edgeColo || '?' }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   export() {
     const body = JSON.stringify({

@@ -68,6 +68,31 @@ wrangler.toml
 
 無框架、無 build step，前端全部原生 DOM。
 
+## DO 落點診斷（RTT 地板偏高先看這個）
+
+第一輪實測（台灣家用網路）量到 RTT 地板 ~140ms——這不是 wifi 的鍋，是 **Durable Object 被建立在離台灣很遠的機房**（沒有 hint 時 APAC 使用者的 DO 常落在美西）。已做兩件事：
+
+- 開房時帶 `locationHint: 'apac'`（只對**新建**的房間生效，舊房號換掉重開）
+- `GET /whereami/<房號>` 回 `{doColo, edgeColo}`；主控台右上角也會顯示 `DO@XXX·邊緣@YYY`。`doColo` 離現場越遠 RTT 地板越高，報告裡要記這個值
+
+## 假 client 壓力測試（探針 D）
+
+```bash
+node tools/fakeclients.mjs wss://<你的網域>/ws <房號> 8 30
+```
+
+8 個假 client 各以 300ms/shake + 100ms/tap 上報 30 秒，同時量負載下 RTT。兩台實機同場開著，看實機延遲在 8 人負載下的增幅（§12 表）。
+
+## 計費防呆（DO 不會被忘記關的分頁養著）
+
+這個 POC 用非 hibernation 的 WebSocket，**只要還有分頁連著，DO 就一直佔記憶體計費**；client 又有自動重連＋每 10 秒背景對時，忘記關的分頁會永遠戳著 DO。防呆有三層：
+
+- **閒置自動關房**：30 分鐘沒有真實互動（ping／背景對時不算）→ DO 踢掉所有連線後休眠。中場休息太久被關到的話，重掃新房號即可。
+- **最長壽命 6 小時**：無條件關房。
+- **主控台「結束房間」鈕**：先自動匯出 JSON，再踢掉所有人。**每輪測完建議按這顆。**
+
+被關房的 client 會看到「房間已結束」且不再重連（WS close code 4000/4001）。房間沒有寫任何持久化儲存，所以連線清空後成本歸零。
+
 ## 已知限制（要寫進報告）
 
 - **iOS 未驗證**：測試機隊全是 Chromium（Chromebook + 兩台 Android）。`DeviceMotionEvent.requestPermission()` 的 iOS 路徑已寫好但沒實機跑過；正式場合前要借一支 iPhone 驗證「權限跳得出來、不會白畫面」。
