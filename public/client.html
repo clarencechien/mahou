@@ -94,6 +94,7 @@
 <!-- 步驟 4：搖動計數 -->
 <section id="st-shake" class="stage">
   <button id="motionBtn">啟用感測器</button>
+  <p class="hint" id="shakeHint"></p>
   <div id="shakeUI" style="display:none; flex-direction:column; gap:12px; flex:1">
     <p class="hint">搖 10 下！</p>
     <div class="big" id="shakeCount">0</div>
@@ -145,7 +146,8 @@
   if (iab) {
     $('#gate').style.display = 'flex';
     $('#gateWhy').textContent = `偵測到 ${iab} 內建瀏覽器，感測器權限會拿不到。`;
-    $('#copyLink').addEventListener('pointerdown', async () => {
+    // clipboard 也需要 transient activation，iOS 同樣認 click 不認 pointerdown
+    $('#copyLink').addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(location.href); $('#copyLink').textContent = '已複製 ✓'; }
       catch { prompt('手動複製這段網址：', location.href); }
     });
@@ -335,8 +337,15 @@
     }
     return true;
   }
-  $('#motionBtn').addEventListener('pointerdown', async () => {
-    if (!(await ensureMotion())) { $('#motionBtn').textContent = '權限被拒，再試一次'; return; }
+  // 權限按鈕一律用 click：iOS 的使用者手勢在 touchend/click 才成立，
+  // 從 pointerdown 呼叫 requestPermission 會不跳窗直接回 denied（且本頁面載入內不再詢問）
+  const deniedHint = 'iOS 被拒後同一頁不會再問：請「完全關閉分頁重開」再按一次；仍失敗就檢查 設定 → Safari → 動作與方向的取用';
+  $('#motionBtn').addEventListener('click', async () => {
+    if (!(await ensureMotion())) {
+      $('#motionBtn').textContent = '權限被拒 — 關閉分頁重開再試';
+      $('#shakeHint').textContent = deniedHint;
+      return;
+    }
     $('#motionBtn').style.display = 'none';
     $('#shakeUI').style.display = 'flex';
   });
@@ -418,8 +427,13 @@
     if (motionOn) { $('#skiPermBtn').style.display = 'none'; $('#skiUI').style.display = 'flex'; }
     else { $('#skiPermBtn').style.display = ''; $('#skiUI').style.display = 'none'; }
   }
-  $('#skiPermBtn').addEventListener('pointerdown', async () => {
-    if (!(await ensureMotion())) { $('#skiPermBtn').textContent = '權限被拒，再試一次'; return; }
+  $('#skiPermBtn').addEventListener('click', async () => {
+    if (!(await ensureMotion())) {
+      $('#skiPermBtn').textContent = '權限被拒 — 關閉分頁重開再試';
+      $('#skiMsg').textContent = deniedHint;
+      $('#skiUI').style.display = 'flex';
+      return;
+    }
     setupSkiStage();
   });
   sock.on('skiStart', (m) => {
