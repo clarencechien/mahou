@@ -75,8 +75,8 @@ wrangler.toml
 實測結論（台灣，2026-08）：**RTT 地板由「Cloudflare 入網點」決定，不是家用 wifi**。
 
 - HiNet 家用寬頻對這個 zone 在 **SJC（美西）入網**（免費方案的常見路由）→ DO 放美西 RTT ~150ms；DO 放香港反而要美西↔亞洲繞一圈，~360ms
-- 同一支手機改用**行動網路**，到香港 DO 只要 ~155ms → 電信商入網點比 HiNet 近，家宴當天「手機用行動網路」是可行的降延遲手段
-- 治本方向：zone 升 Pro（付費方案 HiNet 通常會進 TPE）後，再把 DO 區域切回 apac
+- **中華 5G 在 SIN（新加坡）入網**（`/cdn-cgi/trace` 實測 `loc=TW colo=SIN`）→ 到 HKG DO ~155ms；「全員行動網路 + apac 房」理論上可壓到 ~100ms，是免費方案下的最佳組合（開房請求要從行動網路發，DO 才會落 SIN）
+- 免費方案不進 TPE（HiNet 頻寬成本），治本方向：zone 升 Pro/Business 再把 DO 區域切回 apac
 
 因此 `locationHint` 預設 **wnam（跟著入網點）**，主控台有「DO 區域」選單可切 wnam/apac/weur 做 A/B——hint 只在房間**第一次建立**時生效，換區域會自動開新房。診斷工具：`GET /whereami/<房號>` 回 `{doColo, edgeColo}`，主控台右上角顯示 `DO@XXX·邊緣@YYY`，兩個值都要寫進報告。
 
