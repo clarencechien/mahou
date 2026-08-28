@@ -24,11 +24,12 @@ export class RoomDO {
 
   async fetch(req) {
     const url = new URL(req.url);
-    const m = url.pathname.match(/^\/(ws|export)\/([A-Za-z0-9]{4,8})$/);
+    const m = url.pathname.match(/^\/(ws|export|whereami)\/([A-Za-z0-9]{4,8})$/);
     if (!m) return new Response('Bad request', { status: 400 });
     this.roomId = m[2].toUpperCase();
 
     if (m[1] === 'export') return this.export();
+    if (m[1] === 'whereami') return this.whereami(req.headers.get('x-edge-colo'));
 
     if (req.headers.get('Upgrade') !== 'websocket') {
       return new Response('Expected websocket', { status: 426 });
@@ -225,6 +226,20 @@ export class RoomDO {
 
   sendRoster(ws) { this.send(ws, this.rosterPayload()); }
   broadcastRoster() { this.toHosts(this.rosterPayload()); }
+
+  // DO 到底住在哪個機房？從 DO 內打一個 trace，回的 colo 就是 DO 所在地。
+  // 台灣的 client 若量到 100ms+ 的 RTT 地板，先看這裡是不是 DO 落到美洲去了。
+  async whereami(edgeColo) {
+    if (!this._colo) {
+      try {
+        const txt = await (await fetch('https://1.1.1.1/cdn-cgi/trace')).text();
+        this._colo = /colo=([A-Z]+)/.exec(txt)?.[1] || '?';
+      } catch (e) { this._colo = '?'; }
+    }
+    return new Response(JSON.stringify({ doColo: this._colo, edgeColo: edgeColo || '?' }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   export() {
     const body = JSON.stringify({

@@ -87,8 +87,13 @@
   Mahou.keepAwake();
 
   const sock = new Mahou.Sock(roomId, 'host');
-  sock.onOpen(() => { $('#connState').textContent = '🟢'; });
+  sock.onOpen(() => { $('#connState').textContent = '🟢' + ($('#connState').dataset.colo || ''); });
   sock.ws.addEventListener('close', () => { $('#connState').textContent = '🔴'; });
+  // DO 落點診斷：doColo 離現場越遠，RTT 地板越高
+  fetch(`/whereami/${roomId}`).then((r) => r.json()).then((w) => {
+    $('#connState').dataset.colo = ` DO@${w.doColo}·邊緣@${w.edgeColo}`;
+    $('#connState').textContent += $('#connState').dataset.colo;
+  }).catch(() => {});
 
   // ---- per-client 即席統計（host 端自己累積，正式數據看匯出檔） ----
   const stats = new Map(); // clientId -> {uplinks:[], spam:{}, shake:0, shakeUplink:null}
