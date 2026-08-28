@@ -42,6 +42,8 @@
   #colorGrid { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; }
   .colorBlock { border: none; border-radius: 18px; padding: 0; }
   .colorBlock.picked { outline: 5px solid #fff; outline-offset: -5px; }
+  .colorBlock.isTarget { outline: 6px solid #22c55e; outline-offset: -6px; }
+  .colorBlock.picked.wrong { outline-color: #ef4444; }
   #speedTrack { height: 20px; background: #1f2937; border-radius: 10px; overflow: hidden; }
   #skiSpeedBar { height: 100%; width: 0%; background: #38bdf8; border-radius: 10px; }
 </style>
@@ -117,7 +119,8 @@
   <button id="skiPermBtn">啟用感測器</button>
   <div id="skiUI" style="display:none; flex-direction:column; gap:14px; flex:1">
     <p class="hint" id="skiMsg">等主持人開始…</p>
-    <div class="big"><span id="skiDist">0</span><span style="font-size:1.2rem"> m</span></div>
+    <div class="big" style="font-size:2.2rem"><span id="skiDist">0</span><span style="font-size:1.1rem"> m</span></div>
+    <canvas id="skiView" style="flex:1; width:100%; border-radius:14px; background:#eaf3fb; min-height:180px"></canvas>
     <div id="speedTrack"><div id="skiSpeedBar"></div></div>
     <p class="hint">上下用力搖！搖越快滑越快 ⛷️</p>
     <div class="card stat" id="skiStat"></div>
@@ -368,9 +371,10 @@
 
   // ---- 遊戲一：顏色反應 ----
   // 大螢幕出題 → 手機四色塊（位置每局隨機打亂，防記位置）→ 點擊上報，DO 判定
-  let colorCur = null;
+  let colorCur = null, colorBlocks = [];
   sock.on('colorRound', (m) => {
     colorCur = { round: m.round, answered: false };
+    colorBlocks = [];
     $('#colorMsg').textContent = `第 ${m.round} 局 — 點大螢幕上的顏色！`;
     $('#colorStat').textContent = '';
     const grid = $('#colorGrid');
@@ -388,12 +392,16 @@
         sock.send({ type: 'colorPick', round: colorCur.round, idx, tTap: t, tClientSend: t });
       });
       grid.appendChild(b);
+      colorBlocks[idx] = b;
     }
   });
   sock.on('colorResult', (m) => {
+    // 揭曉正解：綠框＝正確答案；點錯的話自己那塊變紅框（跨螢幕校色差異一目瞭然）
+    if (colorBlocks[m.targetIdx]) colorBlocks[m.targetIdx].classList.add('isTarget');
+    if (!m.correct) document.querySelector('.colorBlock.picked')?.classList.add('wrong');
     $('#colorStat').innerHTML = m.correct
       ? `✓ 答對！第 <b>${m.rank}</b> 快 · 反應 ${Math.round(m.reactionMs)}ms`
-      : '✗ 點錯了';
+      : '✗ 點錯了，綠框才是';
   });
   sock.on('colorEnd', (m) => {
     $('#colorMsg').textContent = '遊戲結束！';
@@ -415,12 +423,57 @@
     setupSkiStage();
   });
   sock.on('skiStart', (m) => {
-    ski = { startAt: m.startAt, duration: m.duration, dist: 0, ema: 0, done: false, tick: 0, lastShakes: 0 };
+    ski = { startAt: m.startAt, duration: m.duration, dist: 0, ema: 0, speedNow: 0, done: false, tick: 0 };
     $('#skiDist').textContent = '0';
     $('#skiStat').textContent = '';
     clearInterval(skiTimer);
     skiTimer = setInterval(skiTick, 100);
+    startSkiView();
   });
+
+  // 手機端第一人稱視覺：滑雪者固定在下方，樹迎面刷過，速度感由捲動速率與速度線呈現
+  let skiWorld = 0, skiViewOn = false;
+  function startSkiView() {
+    if (skiViewOn) return;
+    skiViewOn = true;
+    const cv = $('#skiView');
+    const loop = () => {
+      if (!ski || (ski.done && skiViewOn)) { skiViewOn = false; return; }
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      const W = cv.clientWidth * dpr, H = cv.clientHeight * dpr;
+      if (cv.width !== W) { cv.width = W; cv.height = H; }
+      const ctx = cv.getContext('2d');
+      const sp = ski.speedNow || 0;
+      skiWorld += sp * dpr * 1.1; // 速度→捲動
+      ctx.fillStyle = '#eaf3fb'; ctx.fillRect(0, 0, W, H);
+      // 速度線（快的時候才出現）
+      if (sp > 4) {
+        ctx.strokeStyle = 'rgba(120,160,200,' + Math.min((sp - 4) / 10, 0.5) + ')';
+        ctx.lineWidth = 2 * dpr;
+        for (let i = 0; i < 6; i++) {
+          const x = ((i * 173 + 37) % W);
+          const y = (skiWorld * 2.2 + i * 331) % (H + 60) - 30;
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 22 * dpr); ctx.stroke();
+        }
+      }
+      // 樹：固定世界間距，回收時換 x 位置
+      ctx.font = 30 * dpr + 'px serif';
+      const gap = 90 * dpr, span = H + gap * 2;
+      for (let i = 0; i < Math.ceil(span / gap); i++) {
+        const wy = i * gap;
+        const cycle = Math.floor((skiWorld + wy) / span);
+        const sy = (skiWorld + wy) % span - gap;
+        const r = Math.abs(Math.sin(i * 7919 + cycle * 104729));
+        ctx.fillText('🌲', 10 + r * (W - 50), sy);
+      }
+      // 滑雪者固定下方，隨速度左右擺
+      const sway = Math.sin(performance.now() / 160) * Math.min(sp, 8) * 2 * dpr;
+      ctx.font = 40 * dpr + 'px serif';
+      ctx.fillText('⛷️', W / 2 - 20 * dpr + sway, H - 14 * dpr);
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }
   function skiTick() {
     if (!ski) return;
     const now = clock.serverNow() ?? Date.now();
@@ -446,10 +499,12 @@
     let n = 0;
     for (let i = shakeTimes.length - 1; i >= 0 && shakeTimes[i] > t - 1000; i--) n++;
     ski.ema = 0.3 * n + 0.7 * ski.ema;
-    const speed = Math.min(ski.ema * 1.6, 10); // m/s，搖 6 下/秒左右封頂
+    // 封頂 12：第一輪實測 10 太容易貼頂（27/30 秒滿速），抹平了玩家差距
+    const speed = Math.min(ski.ema * 1.6, 12);
+    ski.speedNow = speed;
     ski.dist += speed * 0.1;
     $('#skiDist').textContent = ski.dist.toFixed(0);
-    $('#skiSpeedBar').style.width = (speed / 10) * 100 + '%';
+    $('#skiSpeedBar').style.width = (speed / 12) * 100 + '%';
     if (++ski.tick % 2 === 0) {
       sock.send({ type: 'skiRun', speed: Math.round(speed * 100) / 100, distance: Math.round(ski.dist * 10) / 10, shakeRate: Math.round(ski.ema * 10) / 10, tClientSend: clock.serverNow() });
     }

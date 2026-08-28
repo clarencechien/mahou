@@ -248,7 +248,8 @@ export class RoomDO {
         const reactionMs = typeof msg.tTap === 'number' ? msg.tTap - g.tShow : now - g.tShow;
         const uplinkMs = typeof msg.tClientSend === 'number' ? now - msg.tClientSend : null;
         this.log({ type: 'colorPick', clientId: ws._clientId, round: g.round, deltaE: g.deltaE, idx: msg.idx | 0, correct, rank, tShow: g.tShow, tTap: msg.tTap, reactionMs, uplinkMs });
-        this.send(ws, { type: 'colorResult', round: g.round, correct, reactionMs, rank });
+        // 答完才揭曉正解位置，client 拿來高亮「其實是這塊」
+        this.send(ws, { type: 'colorResult', round: g.round, correct, reactionMs, rank, targetIdx: g.targetIdx });
         this.toHosts({ type: 'colorPick', clientId: ws._clientId, name: c.name, round: g.round, correct, reactionMs, rank, answered: g.picks.size });
         return;
       }
