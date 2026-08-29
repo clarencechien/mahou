@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>分割畫面渲染壓測 — mahou</title>
+<link rel="icon" href="data:,">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: system-ui, sans-serif; background: #0b1120; color: #e2e8f0; padding: 16px; }
+  h1 { font-size: 1.1rem; color: #94a3b8; margin-bottom: 10px; }
+  .ctl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  button, select { font-size: .95rem; padding: 8px 14px; border-radius: 8px; border: none; background: #1e293b; color: #e2e8f0; cursor: pointer; }
+  button.on { background: #2563eb; }
+  #stage { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 10px; overflow: hidden; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #fps { font-family: ui-monospace, monospace; font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+  #log { font-family: ui-monospace, monospace; font-size: .8rem; color: #94a3b8; white-space: pre; margin-top: 10px; line-height: 1.7; }
+  .hint { color: #64748b; font-size: .85rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1>分割畫面渲染壓測 — Mode 7 假 3D（8 人同畫面跑不跑得動？）</h1>
+<div class="ctl">
+  <span>分割：</span>
+  <button data-n="1">1</button><button data-n="2">2</button><button data-n="4">4</button>
+  <button data-n="6">6</button><button data-n="8" class="on">8</button><button data-n="12">12</button>
+  <span style="margin-left:12px">模式：</span>
+  <button data-mode="webgl" class="on">WebGL</button>
+  <button data-mode="canvas2d">Canvas2D 掃描線</button>
+  <button id="autoBtn" style="margin-left:auto; background:#059669">自動全跑一輪</button>
+</div>
+<div id="stage"></div>
+<div style="margin-top:10px"><span id="fps">–</span> <span style="color:#64748b">fps</span> <span id="meta" style="color:#64748b"></span></div>
+<div id="log"></div>
+<p class="hint">每格 = 一位玩家的第一人稱畫面（地面用透視射線在 fragment shader / 掃描線縮放算出，加上精靈與 HUD）。在實際要用的主機上跑（Chromebook 接電視就接著跑），數字才算數。</p>
+
+<script>
+(function () {
+  const stage = document.getElementById('stage');
+  let N = 8, MODE = 'webgl', raf = null, cv = null;
+
+  // ---------- WebGL：單一 canvas + gl.viewport 切 N 格 ----------
+  const VS = `attribute vec2 p; varying vec2 uv; void main(){ uv = p; gl_Position = vec4(p,0.,1.); }`;
+  const FS = `precision mediump float; varying vec2 uv;
+    uniform float t; uniform vec3 tint;
+    void main(){
+      // 地平線以下：射線與 y=0 平面交點 → 世界座標 → 棋盤格（Mode 7 的等價做法）
+      float horizon = 0.15;
+      if (uv.y > horizon) {
+        // 天空漸層 + 遠山
+        float k = (uv.y - horizon) / (1.0 - horizon);
+        vec3 sky = mix(vec3(0.75,0.87,0.96), vec3(0.32,0.55,0.85), k);
+        float m = sin(uv.x*6.0 + 1.7)*0.04 + sin(uv.x*13.0)*0.02;
+        if (uv.y < horizon + 0.10 + m) sky = mix(sky, vec3(0.55,0.62,0.72), 0.7);
+        gl_FragColor = vec4(sky, 1.0);
+        return;
+      }
+      float d = (horizon - uv.y);
+      float z = 1.0 / (d * 6.0 + 0.02);          // 深度
+      float wx = uv.x * z * 1.6;                  // 世界 x
+      float wz = z - t * 14.0;                    // 世界 z（往前捲動）
+      vec2 g = floor(vec2(wx, wz) * 0.9);
+      float chk = mod(g.x + g.y, 2.0);
+      vec3 col = mix(vec3(0.93,0.96,1.0), vec3(0.72,0.83,0.93), chk);
+      // 賽道／雪道邊界
+      if (abs(wx) > 3.2 && abs(wx) < 3.6) col = vec3(0.90,0.35,0.30);
+      col = mix(col, tint, 0.12);
+      col *= clamp(1.25 - z * 0.02, 0.35, 1.0);   // 遠處霧化
+      gl_FragColor = vec4(col, 1.0);
+    }`;
+  const SPR_VS = `attribute vec2 p; uniform vec4 rect; void main(){ gl_Position = vec4(rect.xy + p*rect.zw, 0., 1.); }`;
+  const SPR_FS = `precision mediump float; uniform vec3 c; void main(){ gl_FragColor = vec4(c,1.); }`;
+
+  function setupWebGL() {
+    cv = document.createElement('canvas');
+    stage.appendChild(cv);
+    const gl = cv.getContext('webgl', { antialias: false, alpha: false });
+    if (!gl) { document.getElementById('log').textContent = 'WebGL 不可用'; return null; }
+    const mk = (vs, fs) => {
+      const p = gl.createProgram();
+      for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+        const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+        gl.attachShader(p, s);
+      }
+      gl.linkProgram(p); return p;
+    };
+    const quad = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+    const prog = mk(VS, FS), sprProg = mk(SPR_VS, SPR_FS);
+    return { gl, quad, prog, sprProg };
+  }
+
+  function setupCanvas2D() {
+    cv = document.createElement('canvas');
+    stage.appendChild(cv);
+    // 棋盤格材質（掃描線縮放的來源）
+    const tex = document.createElement('canvas'); tex.width = 256; tex.height = 256;
+    const tc = tex.getContext('2d');
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+      tc.fillStyle = (x + y) % 2 ? '#b8cde3' : '#eef5fd';
+      tc.fillRect(x * 32, y * 32, 32, 32);
+    }
+    return { ctx: cv.getContext('2d', { alpha: false }), tex };
+  }
+
+  let ctxObj = null;
+  function build() {
+    if (raf) cancelAnimationFrame(raf);
+    // 每次重建都要主動釋放舊的 WebGL context：瀏覽器對同時存在的 context 數有上限，
+    // 超過會靜默丟掉最舊的（context lost），畫面沒東西但也不報錯，量測會變成假數字
+    if (ctxObj && ctxObj.gl) {
+      const ext = ctxObj.gl.getExtension('WEBGL_lose_context');
+      if (ext) ext.loseContext();
+    }
+    ctxObj = null;
+    stage.innerHTML = '';
+    ctxObj = MODE === 'webgl' ? setupWebGL() : setupCanvas2D();
+    resize();
+    loop();
+  }
+  function resize() {
+    if (!cv) return;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    cv.width = Math.round(stage.clientWidth * dpr);
+    cv.height = Math.round(stage.clientHeight * dpr);
+  }
+  addEventListener('resize', resize);
+
+  function grid(n) { // 回傳 cols, rows
+    if (n <= 1) return [1, 1];
+    if (n === 2) return [2, 1];
+    if (n <= 4) return [2, 2];
+    if (n <= 6) return [3, 2];
+    if (n <= 8) return [4, 2];
+    return [4, 3];
+  }
+
+  let frames = 0, t0 = performance.now(), fpsVal = 0;
+  let costs = [];          // 每幀「純繪製」耗時(ms)，量測用
+  function loop() {
+    const tDraw0 = performance.now();
+    const t = performance.now() / 1000;
+    const [cols, rows] = grid(N);
+    const W = cv.width, H = cv.height;
+    const vw = Math.floor(W / cols), vh = Math.floor(H / rows);
+
+    if (MODE === 'webgl' && ctxObj) {
+      const { gl, quad, prog, sprProg } = ctxObj;
+      gl.enable(gl.SCISSOR_TEST);
+      for (let i = 0; i < N; i++) {
+        const cx = i % cols, cy = Math.floor(i / cols);
+        const x = cx * vw, y = H - (cy + 1) * vh;
+        gl.viewport(x, y, vw, vh); gl.scissor(x, y, vw, vh);
+        gl.useProgram(prog);
+        gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+        const a = gl.getAttribLocation(prog, 'p');
+        gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+        gl.uniform1f(gl.getUniformLocation(prog, 't'), t + i * 3.1);
+        gl.uniform3f(gl.getUniformLocation(prog, 'tint'), (i % 3) / 3, ((i + 1) % 3) / 3, 0.6);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        // 精靈：每格 12 個（障礙物／對手）
+        gl.useProgram(sprProg);
+        const sa = gl.getAttribLocation(sprProg, 'p');
+        gl.enableVertexAttribArray(sa); gl.vertexAttribPointer(sa, 2, gl.FLOAT, false, 0, 0);
+        for (let s = 0; s < 12; s++) {
+          const zz = ((t * 0.6 + s * 0.17 + i * 0.05) % 1);
+          const sc = 0.03 + zz * zz * 0.22;
+          gl.uniform4f(gl.getUniformLocation(sprProg, 'rect'),
+            Math.sin(s * 2.4 + i) * 0.7 * zz, -0.15 + zz * zz * 0.6 - 0.4, sc, sc * 1.4);
+          gl.uniform3f(gl.getUniformLocation(sprProg, 'c'), 0.15 + (s % 3) * 0.2, 0.45, 0.25);
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        }
+      }
+      gl.disable(gl.SCISSOR_TEST);
+      // WebGL 指令是非同步送出的：量測時必須 finish() 等 GPU 真的畫完，否則只量到 submit
+      if (window.__benchSync) gl.finish();
+    } else if (ctxObj) {
+      const { ctx, tex } = ctxObj;
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      for (let i = 0; i < N; i++) {
+        const cx = (i % cols) * vw, cy = Math.floor(i / cols) * vh;
+        ctx.save(); ctx.beginPath(); ctx.rect(cx, cy, vw, vh); ctx.clip();
+        const horiz = cy + vh * 0.35;
+        // 天空
+        ctx.fillStyle = '#6f9fd8'; ctx.fillRect(cx, cy, vw, horiz - cy);
+        // 地面：逐掃描線縮放（經典 Mode 7 做法）
+        const step = 2;
+        for (let y = horiz; y < cy + vh; y += step) {
+          const p = (y - horiz) / (cy + vh - horiz);
+          const z = 1 / (p * 0.9 + 0.06);
+          const w = vw * z * 0.5;
+          const sy = ((z * 8 - t * 90) % 256 + 256) % 256;
+          ctx.drawImage(tex, 0, sy, 256, 1, cx + vw / 2 - w / 2, y, w, step);
+        }
+        // 精靈
+        for (let s = 0; s < 12; s++) {
+          const zz = ((t * 0.6 + s * 0.17 + i * 0.05) % 1);
+          const sc = zz * zz * vh * 0.28 + 4;
+          ctx.fillStyle = ['#2f8f4e', '#a8452f', '#3b6fa8'][s % 3];
+          ctx.fillRect(cx + vw / 2 + Math.sin(s * 2.4 + i) * vw * 0.35 * zz - sc / 2,
+                       horiz + zz * zz * vh * 0.6 - sc, sc, sc * 1.3);
+        }
+        ctx.restore();
+        // HUD
+        ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(vh * 0.09)}px sans-serif`;
+        ctx.fillText('P' + (i + 1), cx + 8, cy + vh * 0.12);
+      }
+    }
+
+    costs.push(performance.now() - tDraw0);
+    if (costs.length > 600) costs.shift();
+    frames++;
+    const now = performance.now();
+    if (now - t0 >= 500) {
+      fpsVal = Math.round((frames * 1000) / (now - t0));
+      document.getElementById('fps').textContent = fpsVal;
+      const cs = [...costs].sort((a,b)=>a-b);
+      const med = cs[Math.floor(cs.length/2)] || 0;
+      document.getElementById('meta').textContent =
+        `· ${N} 分割 · ${MODE} · ${cv.width}×${cv.height} · 繪製 ${med.toFixed(1)}ms/幀`;
+      frames = 0; t0 = now;
+    }
+    raf = requestAnimationFrame(loop);
+  }
+
+  document.querySelectorAll('button[data-n]').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('button[data-n]').forEach((x) => x.classList.toggle('on', x === b));
+    N = +b.dataset.n; build();
+  }));
+  document.querySelectorAll('button[data-mode]').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('button[data-mode]').forEach((x) => x.classList.toggle('on', x === b));
+    MODE = b.dataset.mode; build();
+  }));
+
+  // 自動全跑：每組合量 3 秒
+  window.runSweep = async function (secs) {
+    secs = secs || 3;
+    const out = [];
+    for (const mode of ['webgl', 'canvas2d']) {
+      for (const n of [1, 2, 4, 6, 8, 12]) {
+        MODE = mode; N = n; build();
+        await new Promise((r) => setTimeout(r, 800));   // 暖機
+        costs = []; frames = 0; t0 = performance.now(); // 清空量測窗
+        await new Promise((r) => setTimeout(r, secs * 1000));
+        const elapsed = performance.now() - t0;
+        const cs = [...costs].sort((a, b) => a - b);
+        const med = cs[Math.floor(cs.length / 2)] || 0;
+        const p95 = cs[Math.floor(cs.length * 0.95)] || 0;
+        const realFps = Math.round((frames * 1000) / elapsed);
+        out.push({ mode, n, drawMs: +med.toFixed(2), p95Ms: +p95.toFixed(2), fps: realFps,
+                   px: cv.width * cv.height });
+        document.getElementById('log').textContent = out.map((o) =>
+          `${o.mode.padEnd(9)} ${String(o.n).padStart(2)}分割  繪製 ${String(o.drawMs).padStart(6)}ms (p95 ${String(o.p95Ms).padStart(6)}) → ${String(o.fps).padStart(4)} fps`).join('\n');
+      }
+    }
+    return out;
+  };
+  document.getElementById('autoBtn').addEventListener('click', () => window.runSweep(3));
+
+  build();
+})();
+</script>
+</body>
+</html>
