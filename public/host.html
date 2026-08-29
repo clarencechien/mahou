@@ -193,6 +193,24 @@
   #brief #briefGo { background: #16a34a; font-weight: 700; }
   #brief #briefSay { background: #334155; }
   #brief #briefCancel { background: transparent; color: #64748b; }
+
+  /* ---- 手感調校：定案速度前的即時旋鈕，比賽中也能開 ---- */
+  #tune {
+    position: absolute; right: 20px; bottom: 20px; width: 300px; display: none;
+    background: rgba(8,12,22,.93); border: 1px solid #2b4066; border-radius: 14px;
+    padding: 14px 16px; z-index: 8; pointer-events: auto; backdrop-filter: blur(5px);
+  }
+  #tune.on { display: block; }
+  #tune h3 { margin: 0 0 4px; font-size: 1rem; }
+  #tune .note { color: #64748b; font-size: .74rem; line-height: 1.5; margin-bottom: 12px; }
+  #tune .k { margin-bottom: 12px; }
+  #tune .k .lab { display: flex; justify-content: space-between; font-size: .84rem; margin-bottom: 5px; }
+  #tune .k .lab b { font-family: ui-monospace, monospace; color: #7dd3fc; font-weight: 600; }
+  #tune .k .d { color: #64748b; font-size: .72rem; margin-top: 3px; line-height: 1.45; }
+  #tune input[type=range] { width: 100%; accent-color: #38bdf8; }
+  #tune .btns { display: flex; gap: 8px; margin-top: 4px; }
+  #tune .btns button { flex: 1; padding: 8px 0; font-size: .84rem; background: #1e293b; }
+  #tuneBtn.on { background: #334d7a; }
 </style>
 </head>
 <body>
@@ -210,6 +228,7 @@
   </div>
   <div class="right">
     <span class="dot" id="connState"></span>
+    <button id="tuneBtn">⚙︎ 手感</button>
     <button id="fsBtn">⛶ 全螢幕</button>
   </div>
 </div>
@@ -241,6 +260,29 @@
       <div class="x">點任一處關閉</div>
     </div>
     <div id="playerStrip" class="ovl"></div>
+    <div id="tune">
+      <h3>滑雪手感調校</h3>
+      <div class="note">速度倍率下一場生效，其餘立刻生效。數字會記在這台電腦上。</div>
+      <div class="k">
+        <div class="lab"><span>速度倍率</span><b id="tvSpeed">1.8×</b></div>
+        <input type="range" id="tSpeed" min="0.6" max="3.2" step="0.1" value="1.8">
+        <div class="d">前進速度與障礙物間距一起放大 → 每秒遇到的障礙物一樣多，但掃過去更快。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>地面密度</span><b id="tvTex">1.6×</b></div>
+        <input type="range" id="tTex" min="0.6" max="3.5" step="0.1" value="1.6">
+        <div class="d">只讓雪地花紋變細，難度完全不變的純視覺速度感。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>廣角</span><b id="tvFov">1.0×</b></div>
+        <input type="range" id="tFov" min="0.6" max="1.6" step="0.05" value="1">
+        <div class="d">越廣角，兩側掃得越兇；太廣會像魚眼。</div>
+      </div>
+      <div class="btns">
+        <button id="tReset">回預設</button>
+        <button id="tCopy">複製設定</button>
+      </div>
+    </div>
     <div id="brief">
       <div class="box">
         <h1 id="briefTitle">遊戲說明</h1>
@@ -1035,6 +1077,33 @@
   // ================= 遊戲二：滑雪下坡（分割畫面） =================
   // 每格一個獨立視野，全部寫進同一張 ImageData 再一次 putImageData。
   // 實測：1 格與 8 格同樣 4.3ms —— 分割數不是成本，總像素才是。
+  // ---- 手感旋鈕：定案速度前先讓人現場調 ----
+  const TUNE_DEF = { speed: 1.8, tex: 1.6, fov: 1.0 };
+  const TUNE = Object.assign({}, TUNE_DEF, (() => {
+    try { return JSON.parse(localStorage.getItem('mahou-tune') || '{}'); } catch (e) { return {}; }
+  })());
+  function saveTune() { try { localStorage.setItem('mahou-tune', JSON.stringify(TUNE)); } catch (e) {} }
+  function renderTune() {
+    $('#tSpeed').value = TUNE.speed; $('#tvSpeed').textContent = (+TUNE.speed).toFixed(1) + '×';
+    $('#tTex').value = TUNE.tex;     $('#tvTex').textContent = (+TUNE.tex).toFixed(1) + '×';
+    $('#tFov').value = TUNE.fov;     $('#tvFov').textContent = (+TUNE.fov).toFixed(2) + '×';
+  }
+  [['tSpeed', 'speed'], ['tTex', 'tex'], ['tFov', 'fov']].forEach(([id, key]) => {
+    $('#' + id).addEventListener('input', (e) => { TUNE[key] = +e.target.value; saveTune(); renderTune(); });
+  });
+  $('#tReset').addEventListener('click', () => { Object.assign(TUNE, TUNE_DEF); saveTune(); renderTune(); });
+  $('#tCopy').addEventListener('click', async () => {
+    const txt = `速度 ${(+TUNE.speed).toFixed(1)}× / 地面 ${(+TUNE.tex).toFixed(1)}× / 廣角 ${(+TUNE.fov).toFixed(2)}×`;
+    try { await navigator.clipboard.writeText(txt); $('#tCopy').textContent = '已複製 ✓'; }
+    catch (e) { prompt('把這行貼給我：', txt); }
+    setTimeout(() => { $('#tCopy').textContent = '複製設定'; }, 1600);
+  });
+  $('#tuneBtn').addEventListener('click', () => {
+    const on = $('#tune').classList.toggle('on');
+    $('#tuneBtn').classList.toggle('on', on);
+  });
+  renderTune();
+
   const SKI_DUR = 30000;
   const WPM = () => COURSE.WORLD_PER_M;   // 單一來源在 course.js，兩端不能各寫一份
   const SKI = { race: null, obs: [], players: new Map(), img: null, rankText: '' };
@@ -1044,11 +1113,12 @@
     sock.send({ type: 'stage', stage: 'ski' });
     setActiveBtn('ski');
     SKI.players.clear(); SKI.rankText = ''; $('#skiResults').textContent = '';
-    sock.send({ type: 'skiStart', duration: SKI_DUR });
+    sock.send({ type: 'skiStart', duration: SKI_DUR, speedMul: +TUNE.speed });
   });
   sock.on('skiStart', (m) => {
-    SKI.race = { startAt: m.startAt, duration: m.duration, seed: m.seed };
-    SKI.obs = COURSE.build(m.seed);
+    SKI.race = { startAt: m.startAt, duration: m.duration, seed: m.seed, speedMul: m.speedMul || 1 };
+    SKI.obs = COURSE.build(m.seed, m.speedMul || 1);   // 倍率跟種子一樣由 DO 發，兩端才長出同一條賽道
+    idleObs = null;
     SKI.players.clear();
   });
   sock.on('skiRun', (m) => {
@@ -1096,6 +1166,25 @@
   }
   let layoutT = 1, layoutFrom = skiLayout(1), layoutTo = skiLayout(1);
 
+  // 路邊標竿：間距固定不隨速度倍率放大，所以速度越快掠過越兇。
+  // 速度感其實來自「每秒有多少東西刷過去」，而不是玩家自己跑多快。
+  function drawProps(vp) {
+    const base = vp.scroll + COURSE.START_Y;
+    // 只畫近處：遠處的標竿全擠在地平線上，是雜訊不是速度感
+    const list = COURSE.props(base - COURSE.PROP_GAP, base + 1100 * COURSE.SPEED_MUL);
+    for (const o of list) {
+      const pr = MODE7.project(vp, o.wx, o.wy - COURSE.START_Y);
+      if (!pr || pr.sy < vp.y + vp.horizon + 2 || pr.sy > vp.y + vp.h + 30) continue;
+      const sc = pr.k * 46;
+      if (sc < 3.2) continue;                          // 遠處只會變成地平線上的雜訊
+      const w = Math.max(1, sc * .1), h = sc * .8;
+      fctx.fillStyle = '#e2e8f0';
+      fctx.fillRect(pr.sx - w / 2, pr.sy - h, w, h);
+      fctx.fillStyle = o.red ? '#e8604c' : '#38bdf8';
+      fctx.fillRect(pr.sx - w / 2, pr.sy - h, w, Math.max(1, h * .38));
+    }
+  }
+
   // 賽道物件的畫法（大廳待機與比賽共用同一份）
   function drawCourseItem(o, pr, sc) {
     if (sc > 3) {                          // 落地陰影，不然全部像浮在雪上
@@ -1137,18 +1226,19 @@
   }
 
   // 大廳待機：一格全螢幕的雪坡自己往前捲，看起來像遊戲在等你，不是當掉了
-  let idleObs = null;
+  let idleObs = null, idleMul = null;
   function skiIdle() {
-    if (!idleObs) idleObs = COURSE.build(20260829);
+    if (!idleObs || idleMul !== TUNE.speed) { idleMul = TUNE.speed; idleObs = COURSE.build(20260829, idleMul); }
     if (!SKI.img || SKI.img.width !== FW) SKI.img = fctx.createImageData(FW, FH);
     const img = SKI.img, d0 = img.data;
     for (let i = 0; i < d0.length; i += 4) { d0[i] = 6; d0[i + 1] = 9; d0[i + 2] = 15; d0[i + 3] = 255; }
-    const wy = COURSE.START_Y + (performance.now() / 1000) * 7 * COURSE.WORLD_PER_M;
+    const wy = COURSE.START_Y + (performance.now() / 1000) * 9 * COURSE.WORLD_PER_M;
     const camX = Math.sin(performance.now() / 3400) * 90;
     const vp = { x: 0, y: 0, w: FW, h: FH, horizon: Math.round(FH * 0.34),
-                 scroll: wy - COURSE.START_Y, camX, f: 90 };
+                 scroll: wy - COURSE.START_Y, camX, f: 90 / TUNE.fov, tex: TUNE.tex };
     MODE7.renderInto(img, FW, SKI.world, vp);
     fctx.putImageData(img, 0, 0);
+    drawProps(vp);
     const from = COURSE.advance(idleObs, 0, wy);
     for (let i = from; i < idleObs.length && idleObs[i].wy < wy + 2600; i++) {
       const o = idleObs[i];
@@ -1197,7 +1287,7 @@
       const sp01 = Math.max(0, Math.min(1, speed / 20));
       const vp = { x: Math.round(v.x), y: Math.round(v.y), w: vw, h: vh,
                    horizon: Math.round(vh * 0.34), scroll: wy - COURSE.START_Y, camX: x,
-                   f: 94 - sp01 * 16,
+                   f: (94 - sp01 * 16) / TUNE.fov, tex: TUNE.tex,
                    c, p, speed, air, rot, sp01, idx: i };
       MODE7.renderInto(img, FW, SKI.world, vp);
       vps.push(vp);
@@ -1208,6 +1298,7 @@
     for (const vp of vps) {
       fctx.save();
       fctx.beginPath(); fctx.rect(vp.x, vp.y, vp.w, vp.h); fctx.clip();
+      drawProps(vp);
       // 由遠到近畫障礙物
       const near = [];
       for (const o of SKI.obs) {

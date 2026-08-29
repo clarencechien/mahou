@@ -774,7 +774,7 @@
     $('#skiCal').style.display = 'none';
     $('#skiPlay').style.display = 'flex';
     ski = {
-      startAt: m.startAt, duration: m.duration, obs: COURSE.build(m.seed), scan: 0,
+      startAt: m.startAt, duration: m.duration, obs: COURSE.build(m.seed, m.speedMul || 1), scan: 0,
       x: 0, wy: COURSE.START_Y, vx: 0, speed: SKI.DRIFT, boost: 0, surge: 0,
       air: 0, airMax: 0, rot: 0, stun: 0, arm: 0, armScored: false,
       jumps: 0, misses: 0, hits: 0,
@@ -891,7 +891,7 @@
 
     // 畫面回饋
     // 跳台預警：用當前速度換算，固定給 0.9 秒的抬手機反應時間
-    const r = COURSE.nextRamp(ski.obs, ski.scan, ski.x, ski.wy, ski.speed * WPM() * 0.55 + 110);
+    const r = COURSE.nextRamp(ski.obs, ski.scan, ski.x, ski.wy, ski.speed * WPM() * 0.55 + 110 * COURSE.SPEED_MUL);
     const near = !!r;
     if (ski.stun <= 0 && ski.air <= 0 && ski.arm <= 0) {
       $('#skiPadTitle').textContent = near ? '抬起手機！' : '連點加速';

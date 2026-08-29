@@ -360,9 +360,11 @@ export class RoomDO {
         const startAt = now + 4200;                        // 倒數 ＋ 校準時間
         const duration = Math.min(msg.duration | 0 || 30000, 120000);
         const seed = (Math.random() * 0x7fffffff) | 0;
-        this.ski = { startAt, duration, seed, results: new Map() };
-        this.log({ type: 'skiStart', startAt, duration, seed });
-        this.broadcastAll({ type: 'skiStart', startAt, duration, seed });
+        // 速度倍率跟種子一樣要由 DO 發，不然手機與大螢幕會長出不同的賽道
+        const speedMul = Math.max(0.4, Math.min(4, +msg.speedMul || 1));
+        this.ski = { startAt, duration, seed, speedMul, results: new Map() };
+        this.log({ type: 'skiStart', startAt, duration, seed, speedMul });
+        this.broadcastAll({ type: 'skiStart', startAt, duration, seed, speedMul });
         return;
       }
 

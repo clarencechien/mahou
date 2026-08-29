@@ -78,9 +78,12 @@
   // 分割畫面用：把一格視野畫進共用 ImageData 的子矩形。
   // 一次 putImageData 就能上完所有格子——分割數不是成本，總像素才是。
   // vp: {x,y,w,h,horizon,scroll,camX,f=90}
+  // vp.tex：地面紋理密度倍率。只縮放取樣座標，不動幾何——
+  // 每秒掃過的格子變多＝速度感變強，但碰撞、距離、難度完全沒變。
   M7.renderInto = function (img, fullW, world, vp) {
     const d = img.data, kind = world.kind;
     const f = vp.f || 90, hz = vp.horizon, camX = vp.camX || 0, scroll = vp.scroll || 0;
+    const tex = vp.tex || 1;
     const sky = SKY[kind], far = FAR[kind];
     for (let ly = 0; ly < vp.h; ly++) {
       let o = ((vp.y + ly) * fullW + vp.x) * 4;
@@ -93,7 +96,7 @@
       const dy = ly - hz, z = f / dy, wy = z * 165 + scroll;
       for (let lx = 0; lx < vp.w; lx++) {
         const wx = (lx - vp.w / 2) * z / f * 112 + camX;
-        const rgb = z > 22 ? far : sample(world, kind, wx, wy);
+        const rgb = z > 22 ? far : sample(world, kind, wx * tex, wy * tex);
         d[o++] = rgb[0]; d[o++] = rgb[1]; d[o++] = rgb[2]; d[o++] = 255;
       }
     }
