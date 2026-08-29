@@ -2,17 +2,22 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>手把 — 家宴 POC</title>
 <link rel="icon" href="data:,">
 <style>
   * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
-  html, body { height: 100%; }
+  html, body { height: 100%; overscroll-behavior: none; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
     font-family: system-ui, sans-serif; background: #111827; color: #f9fafb;
     touch-action: none; user-select: none; -webkit-user-select: none;
+    -webkit-touch-callout: none;
     display: flex; flex-direction: column; padding: 16px; gap: 12px;
   }
+  /* 連點區：touch-action 要用 none。manipulation 在 iOS Safari 上擋不住雙擊縮放，
+     真正有效的是下面那段 touchend 守門員，這裡只是第一道防線。 */
+  .tappad, #fzArea, #fzArea button { touch-action: none; -webkit-touch-callout: none; }
   h1 { font-size: 1.1rem; color: #9ca3af; }
   .stage { display: none; flex: 1; flex-direction: column; gap: 14px; }
   .stage.active { display: flex; }
@@ -129,7 +134,7 @@
     </div>
     <div id="fzCalTap" style="min-height:90px; border-radius:18px; background:#1f2937;
          display:flex; flex-direction:column; align-items:center; justify-content:center;
-         user-select:none; -webkit-user-select:none; touch-action:manipulation">
+         user-select:none; -webkit-user-select:none;" class="tappad">
       <div style="font-size:1.3rem; font-weight:800">點一下這裡</div>
       <div id="fzCalTapN" style="color:#94a3b8; font-size:.9rem">0 下</div>
     </div>
@@ -168,7 +173,7 @@
         <p class="hint" style="margin:0">試試看三個動作：</p>
         <div id="calTap" style="flex:1; min-height:86px; border-radius:18px; background:#1f2937;
              display:flex; flex-direction:column; align-items:center; justify-content:center;
-             user-select:none; -webkit-user-select:none; touch-action:manipulation">
+             user-select:none; -webkit-user-select:none;" class="tappad">
           <div style="font-size:1.3rem; font-weight:800">① 連點這裡</div>
           <div id="calTapN" style="color:#94a3b8; font-size:.9rem">0 下</div>
         </div>
@@ -191,7 +196,7 @@
       <!-- 整片就是加速墊：連點愈快愈快。跳躍靠「把手機往上抬」，不佔畫面 -->
       <div id="skiPad" style="flex:1; min-height:150px; border-radius:24px; background:#1f2937;
            display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
-           user-select:none; -webkit-user-select:none; touch-action:manipulation">
+           user-select:none; -webkit-user-select:none;" class="tappad">
         <div id="skiPadTitle" style="font-size:1.9rem; font-weight:800">連點加速</div>
         <div id="skiPadSub" style="font-size:.95rem; color:#94a3b8">看到跳台就把手機往上抬</div>
       </div>
@@ -226,6 +231,26 @@
       catch { prompt('手動複製這段網址：', location.href); }
     });
     return;
+  }
+
+  // ---- iOS 連點會觸發雙擊縮放 ----
+  // user-scalable=no 從 iOS 10 起 Safari 就不理了，touch-action 也擋不乾淨。
+  // 真正有效的是：兩次 touchend 間隔太短就 preventDefault，Safari 就不會判定成雙擊。
+  // 只掛在連點區上——掛整頁的話，剛點完連點區再按「我準備好了」那一下會被吃掉。
+  function noDoubleTapZoom(el) {
+    if (!el) return;
+    let last = 0;
+    el.addEventListener('touchend', (e) => {
+      const now = e.timeStamp || Date.now();
+      if (now - last <= 400) e.preventDefault();   // 計數走 pointerdown，擋掉這裡不影響輸入
+      last = now;
+    }, { passive: false });
+    el.addEventListener('dblclick', (e) => e.preventDefault());
+  }
+  ['#skiPad', '#calTap', '#fzCalTap', '#fzArea'].forEach((sel) => noDoubleTapZoom($(sel)));
+  // 雙指縮放：Safari 專有事件，擋掉才不會整頁被放大後回不去
+  for (const t of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
   }
 
   Mahou.keepAwake();
