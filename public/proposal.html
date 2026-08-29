@@ -1,0 +1,705 @@
+<title>六款派對遊戲提案</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --bg: #F4F4FA; --surface: #FFFFFF; --raise: #FAFAFE;
+    --ink: #22243A; --ink-2: #565A78; --ink-3: #8A8FAC; --line: #E1E1EE;
+    --accent: #4B44A8; --accent-soft: #E9E7F9;
+    --gold: #8A6100; --gold-soft: #F8EFD9;
+    --go: #14663D; --go-soft: #E1F0E8;
+    --mid: #8A5300; --mid-soft: #F9EEDC;
+    --stop: #A32B2B; --stop-soft: #F9E4E4;
+    --chip: #EEEEF6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14162A; --surface: #1C1F38; --raise: #232645;
+      --ink: #E9E9F5; --ink-2: #AFB2CE; --ink-3: #7A7EA0; --line: #2E3255;
+      --accent: #9B93F5; --accent-soft: #262254;
+      --gold: #E8BC5E; --gold-soft: #3A2E13;
+      --go: #6FCB9B; --go-soft: #16382A;
+      --mid: #E5B569; --mid-soft: #3A2C13;
+      --stop: #F2908E; --stop-soft: #402024;
+      --chip: #272B4A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14162A; --surface: #1C1F38; --raise: #232645;
+    --ink: #E9E9F5; --ink-2: #AFB2CE; --ink-3: #7A7EA0; --line: #2E3255;
+    --accent: #9B93F5; --accent-soft: #262254;
+    --gold: #E8BC5E; --gold-soft: #3A2E13;
+    --go: #6FCB9B; --go-soft: #16382A;
+    --mid: #E5B569; --mid-soft: #3A2C13;
+    --stop: #F2908E; --stop-soft: #402024;
+    --chip: #272B4A;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: 'Noto Sans TC', 'IBM Plex Sans', system-ui, sans-serif;
+    line-height: 1.75; padding: 44px 16px 72px;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  .px { font-family: 'Silkscreen', 'IBM Plex Mono', monospace; }
+  .eyebrow { font-family: 'Silkscreen', monospace; font-size: .78rem; letter-spacing: .1em; color: var(--accent); margin-bottom: 12px; }
+  h1 { font-size: 2rem; font-weight: 700; line-height: 1.3; text-wrap: balance; }
+  .lede { color: var(--ink-2); margin-top: 12px; max-width: 64ch; }
+  h2 { font-size: 1.15rem; font-weight: 700; margin: 48px 0 6px; padding-top: 22px; border-top: 1px solid var(--line); }
+  h2 + .sub { color: var(--ink-2); font-size: .92rem; margin-bottom: 16px; max-width: 68ch; }
+  p { max-width: 68ch; }
+  code, .mono { font-family: 'IBM Plex Mono', monospace; font-size: .92em; }
+
+  .budget { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 10px; margin: 22px 0 6px; }
+  .bcell { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .bcell .v { font-family: 'IBM Plex Mono', monospace; font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+  .bcell .v small { font-size: .85rem; color: var(--ink-2); }
+  .bcell .k { font-size: .78rem; color: var(--ink-2); margin-top: 2px; line-height: 1.5; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin-bottom: 22px; }
+  .screen { position: relative; background: #0d0f1c; border-bottom: 1px solid var(--line); }
+  .screen canvas { display: block; width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+  .screen .tag {
+    position: absolute; top: 8px; right: 8px; font-family: 'Silkscreen', monospace; font-size: .62rem;
+    background: rgba(0,0,0,.55); color: #fff; padding: 3px 7px; border-radius: 4px; letter-spacing: .06em;
+  }
+  .cbody { padding: 16px 18px 18px; }
+  .chead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .num { font-family: 'Silkscreen', monospace; font-size: 1.15rem; color: var(--accent); }
+  .cname { font-size: 1.2rem; font-weight: 700; }
+  .cfrom { font-size: .82rem; color: var(--ink-3); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit,minmax(250px,1fr)); gap: 14px 22px; margin-top: 12px; }
+  .fld .lb { font-family: 'Silkscreen', monospace; font-size: .66rem; letter-spacing: .08em; color: var(--ink-3); margin-bottom: 3px; }
+  .fld .tx { font-size: .9rem; color: var(--ink-2); line-height: 1.65; }
+  .fld .tx b { color: var(--ink); font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
+  .chip { font-family: 'IBM Plex Mono', monospace; font-size: .73rem; padding: 2px 9px; border-radius: 99px; background: var(--chip); color: var(--ink-2); white-space: nowrap; }
+  .chip.go { background: var(--go-soft); color: var(--go); }
+  .chip.mid { background: var(--mid-soft); color: var(--mid); }
+  .chip.stop { background: var(--stop-soft); color: var(--stop); }
+  .chip.ver { background: var(--accent-soft); color: var(--accent); }
+  .chip.gold { background: var(--gold-soft); color: var(--gold); }
+
+  .note { background: var(--raise); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 10px; padding: 15px 17px; margin: 20px 0; }
+  .note p { max-width: none; }
+  ul.clean { padding-left: 1.15em; max-width: 68ch; }
+  ul.clean li { margin-bottom: 7px; color: var(--ink-2); }
+  ul.clean li b { color: var(--ink); }
+  .tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; background: var(--surface); font-size: .88rem; }
+  th, td { padding: 9px 13px; text-align: left; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: none; }
+  th { font-size: .74rem; letter-spacing: .05em; color: var(--ink-2); font-weight: 600; white-space: nowrap; }
+  td.n { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .foot { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); font-size: .8rem; color: var(--ink-3); }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">MAHOU / PHASE 1 PROPOSAL</div>
+  <h1>六款派對遊戲提案</h1>
+  <p class="lede">全部走同一條技術路線：低解析度 pixel art ＋ 假 3D 透視，規範收斂成 repo 內建的風格聖經（<span class="mono">.claude/skills/pixel-fake3d</span>）。下面每一格畫面都是<b>真的在跑的渲染</b>，不是示意圖——所見即技術可行性證明。完整規格書：<span class="mono">docs/party-games-spec.md</span>。</p>
+
+  <div class="budget">
+    <div class="bcell"><div class="v">1.0 <small>ms</small></div><div class="k">Chromebook 實測：WebGL 12 分割每幀繪製</div></div>
+    <div class="bcell"><div class="v">58–60 <small>fps</small></div><div class="k">1872×1053 全解析度下穩定</div></div>
+    <div class="bcell"><div class="v">16× <small>餘裕</small></div><div class="k">對 16.7ms 的 60fps 預算</div></div>
+    <div class="bcell"><div class="v">150 <small>ms</small></div><div class="k">RTT 地板——唯一真正的限制</div></div>
+  </div>
+
+  <div class="note">
+    <p><b>共通技術方案：內部低解析度渲染 ＋ 整數倍放大。</b><br>
+    <span style="color:var(--ink-2)">每個畫面在 <span class="mono">256×144</span> 這種尺寸畫完，再用 <span class="mono">image-rendering: pixelated</span> 放大到全螢幕。三個好處一次拿到：<b>填充率降到 1/50</b>（8 分割輕鬆過關）、<b>美術要求降到最低</b>（一個小人只要 7×9 像素）、<b>風格統一</b>（所有遊戲自動長得像同一套作品）。假 3D 用逐掃描線透視（SFC Mode 7 的原味做法），或 WebGL 片段著色器算地面射線——Chromebook 上兩條路都有大把餘裕。</span></p>
+  </div>
+
+  <h2>風格聖經（讓 pixel art「精美」的五條）</h2>
+  <p class="sub">找過市集與開源的 pixel art skill：能用的內容很薄（結論見規格書附錄），所以把本 repo 實測驗證的技法自建成 project skill——<span class="mono">.claude/skills/pixel-fake3d/SKILL.md</span>，之後所有畫面工作自動遵循。核心五條：</p>
+  <div class="grid2" style="margin-bottom:8px">
+    <div class="fld"><div class="lb">01 · 受限調色盤</div><div class="tx">每場景 <b>10–14 色</b>。顏色一多就變成「縮小的照片」而不是像素畫。</div></div>
+    <div class="fld"><div class="lb">02 · 抖動要先 PUNCH</div><div class="tx">Bayer 4×4 有序抖動直接吃連續混合值會變<b>雜訊</b>；先用 smoothstep 把值推向 0/1，抖動只留在交界，才是「筆觸」。</div></div>
+    <div class="fld"><div class="lb">03 · 色相偏移著色</div><div class="tx">陰影往<b>冷色</b>走、亮部往<b>暖色</b>走。單純加減亮度會發灰發髒。</div></div>
+    <div class="fld"><div class="lb">04 · 構圖用形狀，質感用抖動</div><div class="tx">漩渦、大浪這種構圖元素用<b>明確的帶狀多邊形</b>畫出來；抖動只負責過渡。反過來做必失敗（星夜第一版的教訓）。</div></div>
+    <div class="fld"><div class="lb">05 · 畫一次、快取</div><div class="tx">複雜背景畫進緩衝區存起來（實測 11ms 一次性），每幀只畫會動的東西（<b>0.3ms</b>）。畫面再複雜都不影響幀率。</div></div>
+    <div class="fld"><div class="lb">實證</div><div class="tx">四張名畫（星夜／神奈川沖浪裏／吶喊／睡蓮）已用這套做完，線上 <span class="mono">/game6</span> 可玩參數。下面 #6 的畫面就是縮小版星夜。</div></div>
+  </div>
+
+  <h2>提案一覽</h2>
+  <p class="sub">下面六款依建議開發順序排列。每款都標了手機輸入、延遲判定策略，以及還沒被 Phase 0 驗證過的風險。</p>
+
+  <div class="card">
+    <div class="screen"><span class="tag">HOST SCREEN</span><canvas data-game="freeze"></canvas></div>
+    <div class="cbody">
+      <div class="chead"><span class="num">#1</span><span class="cname">木頭人・混合指令</span><span class="cfrom">原型：一二三木頭人 ＋ WarioWare 微型指令</span></div>
+      <div class="grid2">
+        <div class="fld"><div class="lb">HOW TO PLAY</div><div class="tx">鬼背對時，電視打出指令：<b>「搖！」「點紅色！」「衝！」</b>——照做才前進。鬼一轉身，指令變成<b>「不要動」</b>，這時任何動作（手機晃動超過閾值、點螢幕）都算犯規退後。混合指令讓它不只是反應快慢，還考驗<b>切換注意力</b>，小孩跟長輩各有優勢。最後看誰錯最少。</div></div>
+        <div class="fld"><div class="lb">PHONE INPUT</div><div class="tx">點擊 ＋ 搖動 ＋ 「靜止偵測」（加速度變異數低於門檻）。全部是 Phase 0 已驗證的輸入，<b>零新技術風險</b>。</div></div>
+        <div class="fld"><div class="lb">LATENCY</div><div class="tx"><b>可以做到完全公平。</b>鬼轉身時刻由 DO 蓋伺服器時間戳廣播；玩家動作用<b>已對時的 client 時間戳</b>判定，不是用伺服器收到的時間。150ms 的傳輸延遲因此完全不影響判定——這是整個平台最重要的一招。</div></div>
+        <div class="fld"><div class="lb">RISK</div><div class="tx">低。唯一要調的是「不動」的靈敏度：手抖、呼吸、放桌上都不該誤判，門檻要做成可現場調的滑桿（比照 Stage 0 的搖動參數）。</div></div>
+      </div>
+      <div class="chips"><span class="chip go">延遲免疫</span><span class="chip ver">輸入已驗證</span><span class="chip">開發 1–2 天</span><span class="chip gold">建議第一個做</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="screen"><span class="tag">PLAYER VIEW · 1/8</span><canvas data-game="ski"></canvas></div>
+    <div class="cbody">
+      <div class="chead"><span class="num">#3</span><span class="cname">下坡滑雪・第一人稱</span><span class="cfrom">原型：SFC 瑪利歐賽車 Mode 7 ＋ 3D 太空哈利</span></div>
+      <div class="grid2">
+        <div class="fld"><div class="lb">HOW TO PLAY</div><div class="tx">搖得越快滑得越快（已有原型）。升級成<b>第一人稱假 3D</b>，電視 8 分割同時看所有人。加入<b>轉彎</b>閃避樹木、<b>跳躍</b>吃跳台加速。</div></div>
+        <div class="fld"><div class="lb">PHONE INPUT</div><div class="tx">加速＝搖動（已驗證）。<b>轉彎＝手機左右傾斜</b>（<span class="mono">gamma</span>，開局要歸零校準）。<b>跳躍＝點螢幕</b>——刻意選離散輸入，因為點擊延遲已知穩定，比「向上甩」可靠得多，也不會跟搖動的加速度訊號打架。</div></div>
+        <div class="fld"><div class="lb">LATENCY</div><div class="tx">轉彎是連續控制，150ms 下手感會鈍。<b>對策：賽道加寬、樹距拉大、轉向做慣性平滑</b>，把「需要精準微調」的情境整個設計掉。跳躍用 client 時間戳判定起跳點，不受延遲影響。</div></div>
+        <div class="fld"><div class="lb">RISK</div><div class="tx">中。傾斜控制的手感是 handoff §7 要量的東西，還沒驗證。建議<b>同時保留「不轉彎」的簡化模式</b>當退路——現有原型已經證明純搖動版可玩。</div></div>
+      </div>
+      <div class="chips"><span class="chip mid">延遲中敏感</span><span class="chip ver">搖動已驗證</span><span class="chip stop">傾斜未驗證</span><span class="chip">已有原型</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="screen"><span class="tag">HOST SCREEN</span><canvas data-game="fling"></canvas></div>
+    <div class="cbody">
+      <div class="chead"><span class="num">#4</span><span class="cname">砸罐子・彈射保齡</span><span class="cfrom">原型：憤怒鳥 ＋ Wii Sports 保齡球</span></div>
+      <div class="grid2">
+        <div class="fld"><div class="lb">HOW TO PLAY</div><div class="tx">遠處堆著一座<b>方塊塔</b>（罐頭、木箱、年獸），拉弓發射把它砸垮，倒得越多分越高。堆疊物用格子化的 pixel 方塊，倒塌時整座垮下來——<b>視覺爽度最高的一款</b>，旁邊看的人會跟著叫。</div></div>
+        <div class="fld"><div class="lb">PHONE INPUT</div><div class="tx">兩種擇一，建議都做：<b>彈弓模式</b>——手指按住往後拉，放開發射（觸控拖曳，精準）；<b>甩投模式</b>——揮動手機，加速度峰值決定力道（派對感強，精準度低）。長輩用彈弓、小孩用甩投。</div></div>
+        <div class="fld"><div class="lb">LATENCY</div><div class="tx"><b>完全免疫。</b>發射後就只是物理演算：手機只上傳<b>發射參數</b>（角度、力道、旋轉），伺服器發同一組亂數種子，各端跑<b>決定性物理</b>算出同樣結果。網路延遲只影響「球什麼時候出現」，不影響公平也不影響手感。</div></div>
+        <div class="fld"><div class="lb">RISK</div><div class="tx">低—中。要寫一個簡化的方塊堆疊物理（格子化剛體、只處理軸對齊碰撞），這是六款裡程式量最大的，但完全離線可測、跟網路無關。</div></div>
+      </div>
+      <div class="chips"><span class="chip go">延遲免疫</span><span class="chip">觸控＋揮動</span><span class="chip mid">需寫物理</span><span class="chip gold">視覺爽度最高</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="screen"><span class="tag">HOST SCREEN · 20s</span><canvas data-game="chameleon"></canvas></div>
+    <div class="cbody">
+      <div class="chead"><span class="num">#6</span><span class="cname">名畫變色龍</span><span class="cfrom">原型：超級變色龍 MECCHA CHAMELEON ＋ 世界名畫</span></div>
+      <div class="grid2">
+        <div class="fld"><div class="lb">HOW TO PLAY</div><div class="tx">大螢幕是一幅 <b>pixel art 名畫</b>（星夜、神奈川沖浪裏、吶喊、睡蓮，全部程序化生成、零圖檔），裡面藏著幾隻「變色龍小人」——牠們取樣腳下的畫作顏色把自己染過去。20 秒內用手機蓋章抓出來，蓋中 +3、蓋錯 −1。找不到的人也有名畫可看，長輩會開始聊「這張我看過」。</div></div>
+        <div class="fld"><div class="lb">難度＝ΔE，可量測</div><div class="tx">偽裝強度是連續參數，直接換算成小人與背景的 <b>ΔE 色差</b>——套用顏色反應實測的同一把尺（ΔE&lt;40 等於亂猜）：長輩 55–70、一般 35–50、高手 22–32。公平破綻是<b>隨機眨眼</b>。</div></div>
+        <div class="fld"><div class="lb">PHONE INPUT</div><div class="tx"><b>主方案</b>：陀螺儀瞄準＋點擊蓋章。<b>必備降級</b>：手機縮圖直接點（已驗證的觸控座標）——先做降級版讓遊戲成立，主方案等探針數字。</div></div>
+        <div class="fld"><div class="lb">RISK</div><div class="tx">陀螺儀是全案最大未驗證風險：漂移、手抖半徑、到達時間三個數字<b>直接決定小人要畫多大</b>。開發前先花一小時做瞄準探針。視覺原型已上線（<span class="mono">/game6</span>），規格見 <span class="mono">docs/game6-masterpiece.md</span>。</div></div>
+      </div>
+      <div class="chips"><span class="chip go">延遲免疫</span><span class="chip ver">四張名畫已完成</span><span class="chip stop">陀螺儀未驗證</span><span class="chip gold">觀賞價值最高</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="screen"><span class="tag">HOST SCREEN · 4×4</span><canvas data-game="memory"></canvas></div>
+    <div class="cbody">
+      <div class="chead"><span class="num">#9</span><span class="cname">翻牌記憶・搶配對</span><span class="cfrom">原型：神經衰弱 ＋ 世界のアソビ大全51</span></div>
+      <div class="grid2">
+        <div class="fld"><div class="lb">HOW TO PLAY</div><div class="tx">開局<b>全部翻開 10 秒</b>給大家背，然後蓋起來開搶。翻對一對得分並保留，翻錯蓋回去。<b>小孩常常贏大人</b>——這對家宴氣氛的價值超過遊戲本身。</div></div>
+        <div class="fld"><div class="lb">PHONE INPUT</div><div class="tx">手機顯示同樣的牌陣縮圖，<b>直接點座標</b>。用的是最可靠的觸控絕對座標，Stage 0 已驗證狂點 0 掉包。</div></div>
+        <div class="fld"><div class="lb">LATENCY</div><div class="tx">搶同一張牌＝探針 A 的正式應用。翻牌意圖用 client 時間戳排序，DO 判先後——RTT 差 30ms 的人不會永遠輸。</div></div>
+        <div class="fld"><div class="lb">RISK</div><div class="tx">最低，但<b>張數上限由手機觸控精度決定</b>（見下表）。64 張是硬上限，再多手指點不準。</div></div>
+      </div>
+      <div class="chips"><span class="chip go">延遲免疫</span><span class="chip ver">輸入已驗證</span><span class="chip">開發成本最低</span><span class="chip">需探針 A</span></div>
+      <div class="tablebox">
+      <table>
+        <thead><tr><th>張數</th><th>牌陣</th><th>手機每格（444pt 寬）</th><th>判定</th></tr></thead>
+        <tbody>
+          <tr><td class="n">8</td><td class="n">4×2</td><td class="n">~105 pt</td><td>幼兒也能點</td></tr>
+          <tr><td class="n">16</td><td class="n">4×4</td><td class="n">~105 pt</td><td>甜蜜點</td></tr>
+          <tr><td class="n">32</td><td class="n">8×4</td><td class="n">~52 pt</td><td>仍高於 44pt 建議值</td></tr>
+          <tr><td class="n">64</td><td class="n">8×8</td><td class="n">~52 pt</td><td><b>上限</b>，需放大鏡輔助</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="screen"><span class="tag">HOST SCREEN · RELAY</span><canvas data-game="kitchen"></canvas></div>
+    <div class="cbody">
+      <div class="chead"><span class="num">#11</span><span class="cname">接力快炒・辦桌大戰</span><span class="cfrom">原型：Overcooked 煮過頭（拿掉自由移動）</span></div>
+      <div class="grid2">
+        <div class="fld"><div class="lb">HOW TO PLAY</div><div class="tx">兩隊接力出菜。<b>每人固定一個工位</b>，做完自己那道工序傳給下一位。五個系列各四到五道菜：<b>中式熱炒</b>（翻鍋）、<b>中式炸物</b>（下鍋、控時、起鍋）、<b>西式炸物</b>（裹粉、油炸）、<b>義式 Pizza</b>（揉麵、拋餅、鋪料、進爐）、<b>日式串燒</b>（翻面、刷醬）。菜色越後面越需要精準控時。</div></div>
+        <div class="fld"><div class="lb">PHONE INPUT</div><div class="tx">每個工序對應一種已驗證輸入：<b>翻鍋＝搖動</b>、<b>起鍋＝時機點擊</b>、<b>揉麵／拋餅＝拖曳</b>、<b>灑料＝傾斜</b>。整套下來剛好把四種輸入都用上，是最好的綜合壓力測試。</div></div>
+        <div class="fld"><div class="lb">LATENCY</div><div class="tx"><b>設計上直接免疫。</b>關鍵決定：<b>不做自由移動</b>——Overcooked 最貴、也最吃延遲的就是角色跑動。改成固定工位後，每個工序都是「本地做完、結果上報」，150ms 只影響電視上的動畫時機。</div></div>
+        <div class="fld"><div class="lb">RISK</div><div class="tx">中。程式量不大但<b>內容量大</b>（5 系列 × 4–5 道菜 × 每道 3–4 個工序）。建議先做兩個系列驗證手感，確認好玩再量產菜色。</div></div>
+      </div>
+      <div class="chips"><span class="chip go">延遲免疫</span><span class="chip ver">四種輸入全用上</span><span class="chip mid">內容量大</span><span class="chip">合作＋接力</span></div>
+    </div>
+  </div>
+
+  <h2>開發順序（規格書 §7 的批次表）</h2>
+  <ul class="clean">
+    <li><b>批次 0 — 共用引擎</b>：把 game6 與 bench 的渲染配方抽成 <span class="mono">engine/pixel.js · mode7.js</span>，新寫 <span class="mono">stamp.js</span>（client 時間戳判定協定）；同時做陀螺儀瞄準探針。</li>
+    <li><b>批次 1 — #1 木頭人</b>：全部已驗證輸入、延遲免疫、1.5 天可玩，順便把時間戳判定機制上線。</li>
+    <li><b>批次 2 — #9 翻牌 ＋ #6 降級版</b>：翻牌產出探針 A 的正式數據；名畫變色龍的畫已經畫好，降級版一天。</li>
+    <li><b>批次 3 — #3 滑雪升級 ＋ #4 砸罐子</b>：共用 Mode 7 管線；滑雪順便量傾斜手感（§7 A/B 半場），砸罐子的決定性物理可完全離線開發。</li>
+    <li><b>批次 4 — #11 接力快炒</b>：先做熱炒＋Pizza 兩系列驗手感，好玩再量產菜色。</li>
+    <li><b>#6 陀螺儀主方案</b>：只在探針三數字合格後開工。</li>
+  </ul>
+
+  <div class="foot">
+    技術基礎：Phase 0 網路量測（RTT 150ms／0% 掉包／8 人 p95 +9ms）· Chromebook 分割渲染實測（WebGL 12 分割 1.0ms／幀）· 名畫渲染管線 /game6（重繪 11ms、每幀 0.3ms）· 本頁六格畫面皆為即時渲染 256×144 · 規格書 docs/party-games-spec.md · 風格聖經 .claude/skills/pixel-fake3d
+  </div>
+</div>
+
+<script>
+(function () {
+  const W = 256, H = 144;                    // 內部解析度：所有畫面都在這個尺寸畫完再放大
+  const px = (c, x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x | 0, y | 0, Math.max(1, w | 0), Math.max(1, h | 0)); };
+  const sprite = (c, rows, pal, x, y, s) => {
+    for (let r = 0; r < rows.length; r++) {
+      const row = rows[r];
+      for (let i = 0; i < row.length; i++) {
+        const ch = row[i];
+        if (ch === '.' || !pal[ch]) continue;
+        px(c, x + i * s, y + r * s, s, s, pal[ch]);
+      }
+    }
+  };
+  const rnd = (n) => { let s = n * 9301 + 49297; return ((s * 233280) % 233281) / 233281; };
+  const hash = (i) => { const x = Math.sin(i * 127.1) * 43758.5453; return x - Math.floor(x); };
+
+  // 小人：7×9 像素，換調色盤就是不同的人
+  const PERSON = ['..hhh..', '.hhhhh.', '.hfffh.', '..fff..', '.bbbbb.', 'bbbbbbb', '.bbbbb.', '..b.b..', '..s.s..'];
+  const PERSON_BACK = ['..hhh..', '.hhhhh.', '.hhhhh.', '..hhh..', '.bbbbb.', 'bbbbbbb', '.bbbbb.', '..b.b..', '..s.s..'];
+  const PERSON_HAT = ['.HHHHH.', 'HHHHHHH', '.hfffh.', '..fff..', '.bbbbb.', 'bbbbbbb', '.bbbbb.', '..b.b..', '..s.s..'];
+  const skin = '#f0c090';
+  const PALS = [
+    { h: '#3b2a1f', f: skin, b: '#d94f4f', s: '#3a3a4a', H: '#f2c14e' },
+    { h: '#1f1a2e', f: skin, b: '#4f86d9', s: '#3a3a4a', H: '#f2c14e' },
+    { h: '#5a3b1f', f: skin, b: '#4fb36b', s: '#3a3a4a', H: '#f2c14e' },
+    { h: '#2b2b2b', f: skin, b: '#d98f3f', s: '#3a3a4a', H: '#f2c14e' },
+    { h: '#4a2f5a', f: skin, b: '#b264c9', s: '#3a3a4a', H: '#f2c14e' },
+    { h: '#333', f: skin, b: '#38b2ac', s: '#3a3a4a', H: '#f2c14e' },
+  ];
+
+  const CURSOR_COL = ['#e8604c', '#4fb36b', '#5b8fe0', '#f2c14e'];
+
+  // 天空：色帶（低解析度下漸層本來就該是分層的）
+  function sky(c, horizon, cols) {
+    const n = cols.length, band = horizon / n;
+    px(c, 0, 0, W, horizon + 2, cols[n - 1]);      // 先鋪滿：色帶高度取整後會留縫
+    for (let i = 0; i < n; i++) px(c, 0, i * band, W, Math.ceil(band) + 1, cols[i]);
+  }
+
+  // 假 3D 地面：逐掃描線透視（SFC Mode 7 的原味做法）
+  // z = h*f/(y-horizon)；一格在螢幕上的寬度 = f/z，正好等於 (y-horizon)
+  function ground(c, horizon, scroll, camX, pal, f = 90, cell = 1) {
+    for (let y = horizon + 1; y < H; y++) {
+      const d = y - horizon, z = f / d, cw = cell * f / z;
+      if (cw < 2.2) { px(c, 0, y, W, 1, pal.far); continue; }
+      const zi = Math.floor((z + scroll) / cell);
+      const wxLeft = (-W / 2) * z / f + camX;
+      let ci = Math.floor(wxLeft / cell);
+      let sx = (ci * cell - camX) * f / z + W / 2;
+      let guard = 0;
+      while (sx < W && guard++ < 200) {
+        px(c, sx, y, cw + 1, 1, ((ci + zi) & 1) ? pal.a : pal.b);
+        sx += cw; ci++;
+      }
+    }
+  }
+
+  function banner(c, text, y, bg, fg, size) {
+    c.font = 'bold ' + (size || 15) + 'px "Noto Sans TC", sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    const w = c.measureText(text).width + 14;
+    px(c, W / 2 - w / 2, y, w, (size || 15) + 7, bg);
+    c.fillStyle = fg; c.fillText(text, W / 2, y + (size || 15) / 2 + 4);
+    c.textAlign = 'start'; c.textBaseline = 'alphabetic';
+  }
+
+  // ============ #1 木頭人・混合指令 ============
+  const CMDS = [{ t: '搖！', c: '#f2c14e' }, { t: '點紅色！', c: '#e8604c' }, { t: '衝！', c: '#4fb36b' }];
+  function drawFreeze(c, t) {
+    const horizon = 46;
+    sky(c, horizon, ['#2b3a63', '#3d5182', '#5b76a8', '#8fa6c9']);
+    ground(c, horizon, 0, 0, { a: '#5c8f4e', b: '#54864a', far: '#4a7742' }, 90);
+    const phase = (t * 0.55) % 1;              // 0–0.62 背對（可動）；之後轉身
+    const facing = phase > 0.62;
+    // 鬼：站在遠處中央，s=2 放大
+    const guard = { h: '#20222e', f: skin, b: '#8c3b3b', s: '#2a2a36', H: '#f2c14e' };
+    sprite(c, facing ? PERSON : PERSON_BACK, guard, W / 2 - 10, horizon - 10, 3);
+    px(c, W / 2 - 12, horizon + 18, 24, 3, 'rgba(0,0,0,.28)');
+    // 玩家：背對時前進（y 增加＝往鏡頭走）
+    for (let i = 0; i < 5; i++) {
+      const base = 96 + i * 4;
+      const adv = facing ? 0 : Math.sin(t * 7 + i * 1.7) * 2;
+      const prog = ((t * 4 + i * 9) % 30);
+      const y = base + (facing ? 0 : prog * 0.15);
+      const x = 26 + i * 42;
+      const bob = facing ? 0 : Math.abs(Math.sin(t * 8 + i)) * 2;
+      sprite(c, PERSON, PALS[i], x + adv, y - bob, 2);
+      px(c, x - 2, y + 18, 22, 2, 'rgba(0,0,0,.22)');
+      if (facing && i === 2) { // 有人動了 → 判定犯規
+        c.font = 'bold 11px "Noto Sans TC",sans-serif'; c.fillStyle = '#ff5a5a';
+        c.fillText('✗', x + 4, y - 4);
+      }
+    }
+    const cmd = facing ? { t: '不要動', c: '#e8604c' } : CMDS[Math.floor(t * 0.55) % 3];
+    banner(c, cmd.t, 6, 'rgba(10,12,24,.82)', cmd.c, 15);
+    const barW = 118, remain = facing ? 1 - (phase - 0.62) / 0.38 : 1 - phase / 0.62;
+    px(c, W / 2 - barW / 2, 25, barW, 3, 'rgba(10,12,24,.55)');
+    px(c, W / 2 - barW / 2, 25, barW * Math.max(0, remain), 3, cmd.c);
+  }
+
+  // ============ #3 下坡滑雪・第一人稱 ============
+  const skiTrees = Array.from({ length: 26 }, (_, i) => ({ wx: (hash(i) - 0.5) * 9, wz: hash(i + 50) * 60 + 2 }));
+  function drawSki(c, t) {
+    const horizon = 40, f = 90;
+    const scroll = t * 16, camX = Math.sin(t * 0.7) * 1.1;
+    sky(c, horizon, ['#bcd7f0', '#cfe4f6', '#e6f1fb']);
+    // 遠山
+    for (let x = 0; x < W; x += 2) {
+      const m = Math.sin(x * .045) * 6 + Math.sin(x * .11) * 3;
+      px(c, x, horizon - 10 + m, 2, 12 - m, '#9fb6cf');
+    }
+    ground(c, horizon, scroll, camX, { a: '#f2f7fc', b: '#d7e6f4', far: '#e8f1f9' }, f);
+    // 賽道邊界旗
+    for (const side of [-3.2, 3.2]) {
+      for (let i = 0; i < 14; i++) {
+        const z = ((i * 4 - scroll) % 56 + 56) % 56 + 1.2;
+        const sx = (side - camX) * f / z + W / 2, sy = horizon + f / z, s = Math.max(1, (f / z) * 0.09);
+        if (sy < horizon || sy > H) continue;
+        px(c, sx - s / 2, sy - s * 5, s, s * 5, '#c9ccd6');
+        px(c, sx, sy - s * 5, s * 2.4, s * 1.8, '#e8604c');
+      }
+    }
+    // 樹（依深度縮放）
+    const vis = skiTrees.map((tr) => ({ tr, z: ((tr.wz - scroll) % 60 + 60) % 60 + 1.3 })).sort((a, b) => b.z - a.z);
+    for (const { tr, z } of vis) {
+      const sx = (tr.wx - camX) * f / z + W / 2, sy = horizon + f / z, s = (f / z) * 0.055;
+      if (sy > H + 20 || sx < -30 || sx > W + 30 || s < 0.6) continue;
+      px(c, sx - s * .8, sy - s * 4, s * 1.6, s * 4, '#6b4a2f');
+      for (let k = 0; k < 3; k++) {
+        const wch = s * (7 - k * 1.8);
+        px(c, sx - wch / 2, sy - s * (6.5 + k * 2.6), wch, s * 3, k === 0 ? '#2f6b45' : '#3a8054');
+      }
+    }
+    // 速度線
+    for (let i = 0; i < 10; i++) {
+      const p = ((t * 2.4 + i * 0.1) % 1);
+      const a = i * 0.63 + 1.2, r = p * p * 190;
+      px(c, W / 2 + Math.cos(a) * r, horizon + 14 + Math.sin(a) * r * .5, 2 + p * 5, 1, 'rgba(120,150,190,' + (0.55 - p * 0.45) + ')');
+    }
+    // 雪板（第一人稱視角）
+    const lean = Math.sin(t * 0.7) * 8;
+    px(c, 84 + lean, H - 16, 22, 5, '#e8604c'); px(c, 86 + lean, H - 12, 18, 3, '#b8402f');
+    px(c, 150 + lean, H - 16, 22, 5, '#e8604c'); px(c, 152 + lean, H - 12, 18, 3, '#b8402f');
+    // HUD
+    px(c, 6, 6, 74, 9, 'rgba(10,12,24,.62)');
+    const sp = 0.55 + Math.abs(Math.sin(t * 1.3)) * 0.45;
+    px(c, 8, 8, 70 * sp, 5, sp > .85 ? '#f2c14e' : '#6fcb9b');
+    c.font = 'bold 9px "IBM Plex Mono",monospace'; c.fillStyle = '#fff';
+    c.fillText((sp * 88 | 0) + ' km/h', 86, 14);
+    px(c, 6, 19, 74, 11, 'rgba(10,12,24,.62)');       // 距離放速度條下方（右上留給畫面標籤）
+    c.fillStyle = '#fff'; c.fillText('P3  ' + (t * 21 % 400 | 0) + 'm', 9, 27);
+  }
+
+  // ============ #4 砸罐子・彈射保齡 ============
+  const NB = 20;
+  function drawFling(c, t) {
+    const horizon = 50, f = 90, cyc = t % 6, stackZ = 5.2;
+    sky(c, horizon, ['#3f3357', '#5f4a75', '#93688b', '#c78f88']);
+    ground(c, horizon, 0, 0, { a: '#7a6a52', b: '#6f6049', far: '#635543' }, f);
+    const hitAt = 2.2, impact = Math.max(0, cyc - hitAt);
+    const blocks = [];
+    for (let i = 0; i < NB; i++) {
+      const col = i % 4, row = (i / 4) | 0;
+      let wx = (col - 1.5) * 0.74, wy = row * 0.6, wz = stackZ;
+      if (cyc > hitAt) {
+        const e = impact, str = (5 - row) * 0.45 + (Math.abs(col - 1.5) < 1 ? 1 : 0.35);
+        wx += (hash(i) - 0.5) * str * e * 2.6;
+        wy += str * e * 1.7 - 4.9 * e * e * 0.5;
+        wz += (hash(i + 9) - 0.3) * e * 1.8;
+        if (wy < 0) wy = 0;
+      }
+      blocks.push({ wx, wy, wz: Math.max(1.3, wz), col, row });
+    }
+    blocks.sort((a, b) => b.wz - a.wz);              // 遠的先畫
+    for (const b of blocks) {
+      const z = b.wz, s = f / z * 0.64;
+      const sx = b.wx * f / z + W / 2, sy = horizon + f / z - b.wy * f / z;
+      px(c, sx - s / 2, sy - s, s, s, ['#c98f4a', '#d69a52', '#b8813f'][(b.col + b.row) % 3]);
+      px(c, sx - s / 2, sy - s, s, Math.max(1, s * .18), 'rgba(255,255,255,.3)');
+      px(c, sx - s / 2, sy - Math.max(1, s * .18), s, Math.max(1, s * .18), 'rgba(0,0,0,.25)');
+    }
+    if (cyc > 0.9 && cyc < hitAt + 0.12) {           // 拋射物
+      const p = (cyc - 0.9) / (hitAt - 0.9);
+      const z = 1.5 + p * (stackZ - 1.5);
+      const wy = 0.9 + p * 1.5 - 4.9 * p * p * 0.44;
+      const s = Math.max(4, f / z * 0.42);
+      const sx = W / 2 + Math.sin(p * 0.6) * 7, sy = horizon + f / z - wy * f / z;
+      px(c, sx - s / 2 - 1, sy - s / 2 - 1, s + 2, s + 2, 'rgba(0,0,0,.3)');
+      px(c, sx - s / 2, sy - s / 2, s, s, '#f2c14e');
+      px(c, sx - s / 2 + 1, sy - s / 2 + 1, s - 2, s - 2, '#ffe08a');
+    }
+    if (cyc < 0.9) {                                  // 彈道預覽
+      const pull = Math.min(1, cyc / 0.9);
+      for (let i = 0; i < 14; i++) {
+        const p = i / 14, z = 1.5 + p * 3.7, wy = 0.9 + p * 1.6 * pull - 4.9 * p * p * 0.44;
+        px(c, W / 2 + Math.sin(p * .6) * 7, horizon + f / z - wy * f / z, 2, 2, 'rgba(255,255,255,.55)');
+      }
+      banner(c, '拉滿 ' + (pull * 100 | 0) + '%', H - 22, 'rgba(10,12,24,.75)', '#f2c14e', 11);
+    } else if (cyc > hitAt + 0.3) {
+      banner(c, '倒了 ' + Math.min(NB, ((cyc - hitAt) * 10) | 0) + ' 個！', H - 22, 'rgba(10,12,24,.8)', '#6fcb9b', 13);
+    }
+    px(c, 6, 6, 62, 11, 'rgba(10,12,24,.62)');
+    c.font = 'bold 9px "IBM Plex Mono",monospace'; c.fillStyle = '#fff'; c.fillText('P2  第 2 球', 9, 14);
+  }
+
+  // ============ #6 名畫變色龍（縮小版星夜，風格聖經全套：punch 抖動 + 色相偏移 + 快取）============
+  const ss2 = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
+  const punch2 = (v, k) => ss2((v - 0.5) * (k || 3) + 0.5);
+  const shade2 = (c, amt) => amt < 0
+    ? [c[0] * (1 + amt), c[1] * (1 + amt * .88), c[2] * (1 + amt * .62)]
+    : [c[0] + (255 - c[0]) * amt, c[1] + (255 - c[1]) * amt * .92, c[2] + (255 - c[2]) * amt * .6];
+  const hx = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const mix2 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const rgbs = (c) => 'rgb(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ')';
+  let starryCv = null, starryCtx = null, chamList = null;
+  function buildStarry() {
+    starryCv = document.createElement('canvas'); starryCv.width = W; starryCv.height = H;
+    const c = starryCv.getContext('2d', { alpha: false });
+    const nav = hx('#0b1030'), ind = hx('#16265e'), blu = hx('#24479b'), brt = hx('#3f74c8'),
+          star = hx('#f2d24e'), glow = hx('#fff2b8'), vil = hx('#0a1220'), win = hx('#e8a83c'),
+          cyp1 = hx('#0c1a13'), cyp2 = hx('#1d3a26');
+    const B4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+    const by = (x, y) => (B4[y & 3][x & 3] + .5) / 16;
+    const put = (x, y, col) => { c.fillStyle = rgbs(col); c.fillRect(x, y, 1, 1); };
+    // 夜空底
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+      put(x, y, punch2(.2 + y / H * .6, 2.2) > by(x, y) ? ind : nav);
+    // 流動帶（形狀）＋ punch 抖動（質感）
+    const band = (y0, amp, fr, ph, col) => {
+      for (let x = 0; x < W; x++) {
+        const cy = y0 + Math.sin(x * fr + ph) * amp, w = 5 + Math.sin(x * .07 + ph) * 2.5;
+        for (let y = Math.round(cy - w); y <= cy + w; y++) {
+          const d = Math.abs(y - cy) / w;
+          if (punch2(1 - d, 2.6) > by(x, y)) put(x, y, col);
+        }
+      }
+    };
+    band(H * .16, 6, .028, 0, blu); band(H * .30, 8, .022, 2.1, brt);
+    band(H * .44, 6, .026, 4.0, blu); band(H * .56, 5, .03, 1.1, ind);
+    // 兩個螺旋
+    for (const [cxn, cyn, rr, col] of [[.42, .30, 30, brt], [.68, .46, 18, blu]]) {
+      for (let i = 0; i <= 260; i++) {
+        const t = i / 260, ang = t * Math.PI * 4.6 + .7, r = 4 + t * rr;
+        const px2 = W * cxn + Math.cos(ang) * r * 1.25, py = H * cyn + Math.sin(ang) * r * .75;
+        const w = 3.5 - t * 1.8;
+        for (let dy = -w; dy <= w; dy++) for (let dx = -w; dx <= w; dx++)
+          if (dx * dx + dy * dy <= w * w && punch2(.8, 3) > by(px2 + dx | 0, py + dy | 0)) put(px2 + dx, py + dy, col);
+      }
+    }
+    // 星與月
+    for (const [nx, ny, r] of [[.09,.12,3],[.24,.20,2.6],[.55,.10,2.4],[.76,.24,2.8],[.90,.40,2.2]]) {
+      const sx = nx * W, sy = ny * H;
+      for (let dy = -r * 2.4; dy <= r * 2.4; dy++) for (let dx = -r * 2.4; dx <= r * 2.4; dx++) {
+        const d = Math.hypot(dx, dy) / (r * 2.4);
+        if (d <= 1 && (1 - d) * .5 > by(sx + dx | 0, sy + dy | 0)) put(sx + dx, sy + dy, mix2(brt, star, .6));
+      }
+      c.fillStyle = rgbs(star); c.fillRect(sx - r / 2, sy - r / 2, r, r);
+      c.fillStyle = rgbs(glow); c.fillRect(sx - r / 4, sy - r / 4, r / 2, r / 2);
+    }
+    const mx = .88 * W, my = .11 * H;
+    c.fillStyle = rgbs(star); c.beginPath(); c.arc(mx, my, 7, 0, 7); c.fill();
+    c.fillStyle = rgbs(mix2(blu, brt, .3)); c.beginPath(); c.arc(mx - 3, my - 1, 5.6, 0, 7); c.fill();
+    // 村莊剪影
+    c.fillStyle = rgbs(vil); c.fillRect(0, H * .84, W, H * .16);
+    for (let i = 0; i < 7; i++) {
+      const x = W * (.06 + i * .13), w2 = 14 + (i % 3) * 6, y = H * .84 - 4 - (i % 2) * 3;
+      c.fillStyle = rgbs(shade2(vil, .18)); c.fillRect(x, y, w2, 12);
+      c.beginPath(); c.moveTo(x - 2, y); c.lineTo(x + w2 / 2, y - 5); c.lineTo(x + w2 + 2, y); c.fill();
+      c.fillStyle = rgbs(win); c.fillRect(x + 3, y + 3, 2, 2);
+      if (w2 > 16) c.fillRect(x + 9, y + 3, 2, 2);
+    }
+    // 絲柏
+    c.fillStyle = rgbs(cyp1);
+    for (let i = 0; i <= 30; i++) {
+      const t = i / 30, y = H * (1 - t), w2 = (1 - t) * 15 + Math.sin(t * 7) * 3.4 + 2;
+      const cx = W * .08 + Math.sin(t * 5.2) * 3;
+      c.fillRect(cx - w2 / 2, y, w2, H / 30 + 1);
+      if ((i % 3) === 1) { c.fillStyle = rgbs(cyp2); c.fillRect(cx - w2 / 4, y, w2 / 2, H / 30 + 1); c.fillStyle = rgbs(cyp1); }
+    }
+    starryCtx = c;
+    // 藏變色龍：取樣腳下顏色 → 內插偽裝
+    chamList = [];
+    const spots = [[.30, .58], [.62, .22], [.83, .62], [.18, .34], [.52, .74]];
+    for (let i = 0; i < spots.length; i++) {
+      const x = Math.round(spots[i][0] * W), y = Math.round(spots[i][1] * H);
+      const d = c.getImageData(x + 3, y + 5, 1, 1).data;
+      chamList.push({ x, y, local: [d[0], d[1], d[2]], blink: i * 0.9 });
+    }
+  }
+  function drawChameleon(c, t) {
+    if (!starryCv) buildStarry();
+    c.drawImage(starryCv, 0, 0);
+    for (const ch of chamList) {
+      const body = mix2([150, 120, 90], ch.local, 0.78);
+      const pal = { o: shade2(body, -.34), h: shade2(body, -.22), f: mix2(shade2(body, .16), ch.local, .6),
+                    b: body, s: shade2(body, -.4),
+                    e: ((t - ch.blink) % 3.2) > .18 ? shade2(body, -.62) : mix2(shade2(body, .16), ch.local, .6) };
+      const rows = ['..hhh..', '.ohhho.', '.oefeo.', '..fff..', '.obbbo.', 'obbbbbo', '.obbbo.', '..b.b..', '..s.s..'];
+      for (let r = 0; r < rows.length; r++) for (let i = 0; i < 7; i++) {
+        const k = rows[r][i];
+        if (k === '.' || !pal[k]) continue;
+        c.fillStyle = rgbs(pal[k]); c.fillRect(ch.x + i, ch.y + r, 1, 1);
+      }
+    }
+    // 玩家印章游標
+    for (let p = 0; p < 3; p++) {
+      const cx = W / 2 + Math.sin(t * (0.7 + p * .25) + p * 2) * 100;
+      const cy = H * .48 + Math.cos(t * (0.55 + p * .2) + p) * 48;
+      c.strokeStyle = CURSOR_COL[p]; c.lineWidth = 1.5;
+      c.strokeRect((cx - 8) | 0, (cy - 8) | 0, 16, 16);
+      const sp = (t * (0.45 + p * .12) + p * 0.4) % 1;
+      if (sp < 0.15) {
+        const e = sp / 0.15, r = 8 + e * 12;
+        c.globalAlpha = 1 - e; c.strokeRect((cx - r) | 0, (cy - r) | 0, r * 2, r * 2); c.globalAlpha = 1;
+      }
+    }
+    banner(c, '星夜裡藏了 5 隻變色龍', 4, 'rgba(10,10,20,.85)', '#f2d24e', 12);
+    c.fillStyle = 'rgba(10,10,20,.8)'; c.fillRect(0, H - 12, W, 12);
+    const left = 20 - (t % 20);
+    c.font = 'bold 9px "IBM Plex Mono",monospace';
+    c.fillStyle = left < 5 ? '#ff6b5a' : '#fff';
+    c.fillText('剩 ' + left.toFixed(0) + 's', 6, H - 3);
+    c.font = 'bold 9px "Noto Sans TC",sans-serif';
+    for (let p = 0; p < 3; p++) {
+      c.fillStyle = CURSOR_COL[p]; c.fillRect(70 + p * 58, H - 9, 6, 6);
+      c.fillStyle = '#fff'; c.fillText(['甲 2', '乙 1', '丙 3'][p], 80 + p * 58, H - 3);
+    }
+  }
+
+  // ============ #9 翻牌記憶・搶配對 ============
+  const FACES = ['#e8604c', '#4fb36b', '#5b8fe0', '#f2c14e', '#b264c9', '#38b2ac', '#d98f3f', '#e8e4dc'];
+  function drawMemory(c, t) {
+    px(c, 0, 0, W, H, '#16202e');
+    for (let y = 0; y < H; y += 3) px(c, 0, y, W, 1, '#182333');
+    const cols = 4, rows = 4, cyc = t % 12, preview = cyc < 3.2;
+    const matched = [2, 7, 9];                       // 已配對消失
+    const flipping = 5;                              // 正在翻的那張
+    for (let r = 0; r < rows; r++) {
+      for (let i = 0; i < cols; i++) {
+        const idx = r * cols + i;
+        const s = 0.78 + r * 0.08;                   // 越近的列越大＝假 3D 牌桌
+        const cwd = 38 * s, chg = 26 * s;
+        const x = W / 2 + (i - 1.5) * 44 * s, y = 24 + r * 28;
+        if (!preview && matched.includes(idx)) {     // 已消失：留個淡框
+          px(c, x - cwd / 2, y, cwd, chg, 'rgba(255,255,255,.05)');
+          continue;
+        }
+        // flip: 0=蓋著(滿寬) 0.5=側面(最窄) 1=翻開(滿寬)
+        let flip = preview ? 1 : (idx === flipping ? (Math.sin(t * 2.2) * .5 + .5) : (idx % 7 === 3 ? 1 : 0));
+        const w = Math.max(2, cwd * Math.abs(Math.cos(Math.PI * flip)));
+        px(c, x - w / 2 + 2, y + 3, w, chg, 'rgba(0,0,0,.4)');
+        if (flip > 0.5) {                            // 正面
+          px(c, x - w / 2, y, w, chg, '#f4efe2');
+          if (w > 8) {
+            px(c, x - w / 2 + 3, y + 3, w - 6, chg - 6, FACES[idx % 8]);
+            px(c, x - w / 2 + 6, y + 6, Math.max(2, w - 12), Math.max(2, (chg - 12) / 2), 'rgba(255,255,255,.3)');
+          }
+        } else {                                     // 背面
+          px(c, x - w / 2, y, w, chg, '#3b4d6b');
+          if (w > 8) {
+            px(c, x - w / 2 + 3, y + 3, w - 6, chg - 6, '#2c3b55');
+            px(c, x - 4, y + chg / 2 - 4, 8, 8, '#5b8fe0');
+            px(c, x - 2, y + chg / 2 - 2, 4, 4, '#8fb6ee');
+          }
+        }
+      }
+    }
+    if (!preview) for (let p = 0; p < 3; p++) {
+      const cx = W / 2 + Math.sin(t * (1.1 + p * .3) + p * 2.1) * 84;
+      const cy = 62 + Math.cos(t * (0.9 + p * .2) + p) * 32;
+      c.strokeStyle = CURSOR_COL[p]; c.lineWidth = 2; c.strokeRect((cx - 8) | 0, (cy - 8) | 0, 16, 16);
+      px(c, cx - 1, cy - 1, 2, 2, CURSOR_COL[p]);
+    }
+    if (preview) banner(c, '記住！ ' + (3.2 - cyc).toFixed(1) + 's', 4, 'rgba(10,12,24,.88)', '#f2c14e', 13);
+    else banner(c, '搶翻配對', 4, 'rgba(10,12,24,.82)', '#6fcb9b', 12);
+  }
+
+  // ============ #11 接力快炒・辦桌大戰 ============
+  const STATIONS = ['搖', '點', '拖', '出'];
+  function drawKitchen(c, t) {
+    px(c, 0, 0, W, H, '#241e2e');
+    for (let x = 6; x < W; x += 22) px(c, x, 22, 14, 12, '#332b40');   // 背景櫥櫃
+    px(c, 0, 34, W, 4, '#3d3348');
+    for (let team = 0; team < 2; team++) {
+      const y0 = 42 + team * 50;
+      px(c, 4, y0, W - 8, 44, team ? '#6d5a44' : '#7a6549');           // 檯面
+      px(c, 4, y0, W - 8, 3, team ? '#8a755a' : '#9a8262');
+      c.font = 'bold 9px "Noto Sans TC",sans-serif';
+      c.fillStyle = team ? '#7fb0f0' : '#f08a7a';
+      c.fillText(team ? '藍隊' : '紅隊', 7, y0 + 15);
+      for (let st = 0; st < 4; st++) {
+        const x = 30 + st * 56, act = ((t * 0.9 + st * 0.6 + team * 1.3) % 3.4) < 1.7;
+        const by = y0 + 6;
+        px(c, x, by, 50, 34, '#463a30');                               // 工位
+        px(c, x, by, 50, 2, '#584a3c');
+        sprite(c, PERSON, PALS[(st + team * 3) % 6], x + 3, by + 12, 2);  // 廚師在工位「內」
+        px(c, x + 3, by + 2, 9, 9, 'rgba(0,0,0,.45)');                 // 輸入圖示
+        c.font = 'bold 8px "Noto Sans TC",sans-serif';
+        c.fillStyle = act ? '#f2c14e' : 'rgba(255,255,255,.45)';
+        c.fillText(STATIONS[st], x + 4, by + 9);
+        const ex = x + 32;                                             // 設備中心
+        if (st === 0) {                                                // 翻鍋（搖動）
+          const flip = act ? Math.abs(Math.sin(t * 9 + team)) : 0;
+          for (let k = 0; k < 3; k++) px(c, ex - 7 + k * 5, by + 26, 3, 3 + Math.abs(Math.sin(t * 12 + k)) * 3, '#e8604c');
+          px(c, ex - 9, by + 20 - flip * 4, 18, 6, '#2e2b2e');
+          for (let k = 0; k < 3; k++) px(c, ex - 6 + k * 5, by + 16 - flip * (7 + k * 2), 4, 4, ['#e8a04c', '#6fcb9b', '#f2c14e'][k]);
+        } else if (st === 1) {                                         // 油炸（時機點擊）
+          px(c, ex - 10, by + 18, 20, 11, '#3a3026');
+          px(c, ex - 8, by + 20, 16, 7, '#d9a24c');
+          for (let k = 0; k < 4; k++) px(c, ex - 6 + k * 4, by + 21 + Math.sin(t * 6 + k) * 2, 3, 3, '#b8783a');
+          const bar = ((t * 0.5 + team) % 1);
+          px(c, ex - 11, by + 10, 22, 4, '#241f1a');
+          px(c, ex - 11 + 0.6 * 22, by + 10, 5, 4, 'rgba(111,203,155,.5)');   // 完美區間
+          px(c, ex - 11 + bar * 22, by + 9, 2, 6, bar > .6 && bar < .82 ? '#6fcb9b' : '#e8604c');
+        } else if (st === 2) {                                         // 拋餅（拖曳）
+          const up = act ? Math.abs(Math.sin(t * 4 + team)) : 0;
+          px(c, ex - 11, by + 26, 22, 4, '#5a4a3a');
+          px(c, ex - 9, by + 20 - up * 13, 18, 4, '#e8c88a');
+          px(c, ex - 6, by + 19 - up * 13, 12, 2, '#d94f4f');
+        } else {                                                       // 出菜
+          px(c, ex - 10, by + 21, 20, 7, '#e8e4dc');
+          px(c, ex - 10, by + 21, 20, 2, '#fff');
+          px(c, ex - 6, by + 18, 12, 4, ['#6fcb9b', '#e8604c', '#f2c14e'][team]);
+          if (act) { c.font = 'bold 9px sans-serif'; c.fillStyle = '#6fcb9b'; c.fillText('OK', ex - 6, by + 15); }
+        }
+        if (st < 3) { // 接力箭頭
+          c.fillStyle = 'rgba(255,255,255,.3)'; c.font = 'bold 9px sans-serif';
+          c.fillText('>', x + 51, by + 22);
+        }
+      }
+    }
+    banner(c, '義式 Pizza ・ 第 3 道', 3, 'rgba(10,12,24,.88)', '#f2c14e', 12);
+    px(c, W - 68, 22, 62, 12, 'rgba(10,12,24,.75)');
+    c.font = 'bold 9px "Noto Sans TC",sans-serif'; c.fillStyle = '#fff';
+    c.fillText('紅 4 : 3 藍', W - 64, 31);
+  }
+
+  // ============ 驅動：只跑看得見的畫面，30fps ============
+  const GAMES = { freeze: drawFreeze, ski: drawSki, fling: drawFling, chameleon: drawChameleon, memory: drawMemory, kitchen: drawKitchen };
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const scenes = [...document.querySelectorAll('canvas[data-game]')].map((el) => {
+    el.width = W; el.height = H;
+    const ctx = el.getContext('2d', { alpha: false });
+    ctx.imageSmoothingEnabled = false;
+    return { el, ctx, fn: GAMES[el.dataset.game], visible: false };
+  });
+  const io = new IntersectionObserver((es) => {
+    for (const e of es) {
+      const s = scenes.find((x) => x.el === e.target);
+      if (s) s.visible = e.isIntersecting;
+    }
+  }, { rootMargin: '120px' });
+  scenes.forEach((s) => io.observe(s.el));
+
+  let last = 0;
+  function frame(now) {
+    if (now - last >= 33) {                       // ~30fps：mockup 不需要 60
+      last = now;
+      const t = now / 1000;
+      for (const s of scenes) if (s.visible && s.fn) s.fn(s.ctx, t);
+    }
+    requestAnimationFrame(frame);
+  }
+  // 靜態渲染一次（含 reduce-motion 的情況）
+  scenes.forEach((s) => s.fn && s.fn(s.ctx, 1.4));
+  if (!reduce) requestAnimationFrame(frame);
+})();
+</script>
