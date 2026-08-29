@@ -264,14 +264,19 @@
       <h3>滑雪手感調校</h3>
       <div class="note">速度倍率下一場生效，其餘立刻生效。數字會記在這台電腦上。</div>
       <div class="k">
-        <div class="lab"><span>速度倍率</span><b id="tvSpeed">1.8×</b></div>
-        <input type="range" id="tSpeed" min="0.6" max="3.2" step="0.1" value="1.8">
+        <div class="lab"><span>速度倍率</span><b id="tvSpeed">3.2×</b></div>
+        <input type="range" id="tSpeed" min="0.6" max="6" step="0.1" value="3.2">
         <div class="d">前進速度與障礙物間距一起放大 → 每秒遇到的障礙物一樣多，但掃過去更快。</div>
       </div>
       <div class="k">
-        <div class="lab"><span>地面密度</span><b id="tvTex">1.6×</b></div>
-        <input type="range" id="tTex" min="0.6" max="3.5" step="0.1" value="1.6">
-        <div class="d">只讓雪地花紋變細，難度完全不變的純視覺速度感。</div>
+        <div class="lab"><span>地面密度</span><b id="tvTex">3.5×</b></div>
+        <input type="range" id="tTex" min="0.6" max="6" step="0.1" value="3.5">
+        <div class="d">只讓雪地花紋變細，難度完全不變的純視覺速度感。太高會開始閃爍。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>比賽長度</span><b id="tvDur">60 秒</b></div>
+        <input type="range" id="tDur" min="20" max="120" step="5" value="60">
+        <div class="d">下一場生效。太短會還沒熱起來就結束。</div>
       </div>
       <div class="k">
         <div class="lab"><span>廣角</span><b id="tvFov">1.0×</b></div>
@@ -363,7 +368,7 @@
 </div>
 
 <div class="panel" id="skiPanel" style="display:none">
-  <h2>遊戲二：滑雪下坡 — 30 秒比距離 <span id="skiTimerLbl" style="color:#7dd3fc"></span></h2>
+  <h2>遊戲二：滑雪下坡 — 比距離（長度在「⚙︎ 手感」裡調）<span id="skiTimerLbl" style="color:#7dd3fc"></span></h2>
   <button id="skiStartBtn" style="background:#2563eb; margin-bottom:10px">開始</button>
   <p style="color:#64748b; font-size:.88rem">畫面在「遊戲」分頁的分割視野；這裡只放控制與結果。</p>
   <div id="skiResults" style="margin-top:8px; font-size:.95rem"></div>
@@ -650,12 +655,12 @@
     },
     ski: {
       title: '滑雪下坡',
-      lead: '30 秒比距離・手機平放拿好，螢幕朝上',
-      say: '手機平放拿好。連點畫面加速，左右傾斜閃開樹木。看到藍色跳台，就把手機往上抬，跳中了會衝很快。三十秒，看誰滑最遠。',
+      lead: () => `${TUNE.dur | 0} 秒比距離・手機平放拿好，螢幕朝上`,
+      say: '手機平放拿好，手要一直連點畫面才會有速度，停手就慢下來。左右傾斜閃開樹木。看到藍色跳台，就把手機往上抬。連續跳中三次會超加速，撞到就從頭算。看誰滑最遠。',
       rules: [
-        { ic: '👆', h: '連點加速', d: '點越快越快，但連點有速度上限' },
+        { ic: '👆', h: '手不能停', d: '一直連點才有速度，停手就慢下來' },
         { ic: '📱', h: '左右傾斜轉向', d: '把手機往左右倒，閃開樹和石頭' },
-        { ic: '⛷️', h: '看到跳台往上抬', d: '藍色跳台是唯一的加速來源，跳中了會衝一段' },
+        { ic: '🔥', h: '連三次跳台＝超加速', d: '跳台往上抬手機。連中三次解鎖更高的速度上限，撞到或跳空就從頭算' },
       ],
     },
   };
@@ -700,7 +705,7 @@
     briefOpen = true;
     readySet.clear();
     $('#briefTitle').textContent = b.title;
-    $('#briefLead').textContent = b.lead;
+    $('#briefLead').textContent = typeof b.lead === 'function' ? b.lead() : b.lead;
     $('#briefRules').innerHTML = b.rules.map((r) =>
       `<div class="rule"><div class="ic">${r.ic}</div><div class="h">${r.h}</div><div class="d">${r.d}</div></div>`).join('');
     $('#brief').classList.add('on');
@@ -741,7 +746,10 @@
       let sc = '–';
       if (curStage === 'ski') {
         const p = SKI.players.get(c.clientId);
-        if (p) sc = (p.final != null ? p.final : Math.round((p.wy - COURSE.START_Y) / WPM())) + 'm';
+        if (p) {
+          sc = (p.final != null ? p.final : Math.round((p.wy - COURSE.START_Y) / WPM())) + 'm';
+          if (p.combo > 1 && p.final == null) sc = `<span style="color:#f43f5e">${p.combo}連</span> ` + sc;
+        }
       } else {
         const st = FZ.players.find((p) => p.clientId === c.clientId);
         if (st) sc = st.progress + (st.violations ? ' ✗' + st.violations : '');
@@ -892,7 +900,7 @@
       if (r) {
         const pre = r.startAt - now2;
         const remain = r.startAt + r.duration - now2;
-        $('#hudRound').textContent = '滑雪 30 秒比距離';
+        $('#hudRound').textContent = '滑雪 ' + Math.round(r.duration / 1000) + ' 秒比距離';
         cmdEl.textContent = pre > 0 ? '準備… ' + Math.ceil(pre / 1000)
           : remain > 0 ? Math.ceil(remain / 1000) + ' 秒' : '結束！';
         // 時間到就自動收單：留 1.2 秒等最後一批 skiDone 進來再要排名
@@ -1078,7 +1086,7 @@
   // 每格一個獨立視野，全部寫進同一張 ImageData 再一次 putImageData。
   // 實測：1 格與 8 格同樣 4.3ms —— 分割數不是成本，總像素才是。
   // ---- 手感旋鈕：定案速度前先讓人現場調 ----
-  const TUNE_DEF = { speed: 1.8, tex: 1.6, fov: 1.0 };
+  const TUNE_DEF = { speed: 3.2, tex: 3.5, fov: 1.0, dur: 60 };
   const TUNE = Object.assign({}, TUNE_DEF, (() => {
     try { return JSON.parse(localStorage.getItem('mahou-tune') || '{}'); } catch (e) { return {}; }
   })());
@@ -1087,13 +1095,14 @@
     $('#tSpeed').value = TUNE.speed; $('#tvSpeed').textContent = (+TUNE.speed).toFixed(1) + '×';
     $('#tTex').value = TUNE.tex;     $('#tvTex').textContent = (+TUNE.tex).toFixed(1) + '×';
     $('#tFov').value = TUNE.fov;     $('#tvFov').textContent = (+TUNE.fov).toFixed(2) + '×';
+    $('#tDur').value = TUNE.dur;     $('#tvDur').textContent = (TUNE.dur | 0) + ' 秒';
   }
-  [['tSpeed', 'speed'], ['tTex', 'tex'], ['tFov', 'fov']].forEach(([id, key]) => {
+  [['tSpeed', 'speed'], ['tTex', 'tex'], ['tFov', 'fov'], ['tDur', 'dur']].forEach(([id, key]) => {
     $('#' + id).addEventListener('input', (e) => { TUNE[key] = +e.target.value; saveTune(); renderTune(); });
   });
   $('#tReset').addEventListener('click', () => { Object.assign(TUNE, TUNE_DEF); saveTune(); renderTune(); });
   $('#tCopy').addEventListener('click', async () => {
-    const txt = `速度 ${(+TUNE.speed).toFixed(1)}× / 地面 ${(+TUNE.tex).toFixed(1)}× / 廣角 ${(+TUNE.fov).toFixed(2)}×`;
+    const txt = `速度 ${(+TUNE.speed).toFixed(1)}× / 地面 ${(+TUNE.tex).toFixed(1)}× / 廣角 ${(+TUNE.fov).toFixed(2)}× / ${TUNE.dur | 0} 秒`;
     try { await navigator.clipboard.writeText(txt); $('#tCopy').textContent = '已複製 ✓'; }
     catch (e) { prompt('把這行貼給我：', txt); }
     setTimeout(() => { $('#tCopy').textContent = '複製設定'; }, 1600);
@@ -1104,7 +1113,7 @@
   });
   renderTune();
 
-  const SKI_DUR = 30000;
+  const skiDur = () => Math.max(20, Math.min(120, TUNE.dur | 0 || 60)) * 1000;
   const WPM = () => COURSE.WORLD_PER_M;   // 單一來源在 course.js，兩端不能各寫一份
   const SKI = { race: null, obs: [], players: new Map(), img: null, rankText: '' };
 
@@ -1113,7 +1122,7 @@
     sock.send({ type: 'stage', stage: 'ski' });
     setActiveBtn('ski');
     SKI.players.clear(); SKI.rankText = ''; $('#skiResults').textContent = '';
-    sock.send({ type: 'skiStart', duration: SKI_DUR, speedMul: +TUNE.speed });
+    sock.send({ type: 'skiStart', duration: skiDur(), speedMul: +TUNE.speed });
   });
   sock.on('skiStart', (m) => {
     SKI.race = { startAt: m.startAt, duration: m.duration, seed: m.seed, speedMul: m.speedMul || 1 };
@@ -1128,6 +1137,7 @@
     if (m.jumps > (p.jumps || 0)) p.flash = 1;      // 上跳台就閃一下
     Object.assign(p, { name: m.name, x: m.x, wy: m.wy, speed: m.speed, vx: m.vx,
                        air: m.air, airMax: m.airMax, rot: m.rot, jumps: m.jumps, hits: m.hits,
+                       combo: m.combo | 0, lv: m.lv | 0,
                        at: performance.now(), uplinkMs: m.uplinkMs });
   });
   sock.on('skiDone', (m) => {
@@ -1138,7 +1148,7 @@
     SFX.win();
     const rank = m.rank || [];
     $('#skiResults').innerHTML = '🏁 ' + rank.map((r, i) =>
-      `${i + 1}. <b>${esc(r.name)}</b> ${r.dist}m（跳 ${r.jumps}・撞 ${r.hits}）`).join(' · ');
+      `${i + 1}. <b>${esc(r.name)}</b> ${r.dist}m（跳 ${r.jumps}・最長 ${r.combo || 0} 連・撞 ${r.hits}）`).join(' · ');
     // 大螢幕只放前三，名字太多會擠爆 HUD
     SKI.rankText = rank.slice(0, 3).map((r, i) => `${'🥇🥈🥉'.slice(i * 2, i * 2 + 2)} ${r.name} ${r.dist}m`).join('　');
     SKI.race = null;
@@ -1240,7 +1250,7 @@
     fctx.putImageData(img, 0, 0);
     drawProps(vp);
     const from = COURSE.advance(idleObs, 0, wy);
-    for (let i = from; i < idleObs.length && idleObs[i].wy < wy + 2600; i++) {
+    for (let i = from; i < idleObs.length && idleObs[i].wy < wy + 2600 * COURSE.SPEED_MUL; i++) {
       const o = idleObs[i];
       const pr = MODE7.project(vp, o.wx, o.wy - COURSE.START_Y);
       if (!pr || pr.sy < vp.horizon || pr.sy > FH + 40) continue;
@@ -1301,9 +1311,11 @@
       drawProps(vp);
       // 由遠到近畫障礙物
       const near = [];
+      // 可視距離要跟著速度倍率放大，否則倍率一開高，樹會晚到 37 公尺才冒出來
+      const far = 2600 * COURSE.SPEED_MUL;
       for (const o of SKI.obs) {
         const d = o.wy - (vp.scroll + COURSE.START_Y);
-        if (d < -60 || d > 2600) continue;
+        if (d < -60 * COURSE.SPEED_MUL || d > far) continue;
         near.push(o);
       }
       for (const o of near) {
@@ -1350,6 +1362,11 @@
         fctx.ellipse(cx0, gy, 15 * scale, 4 * scale, 0, 0, Math.PI * 2);
         fctx.fill();
         CHARA.drawSki(fctx, vp.idx, dir, frame, cx0, feetY, scale, vp.rot || 0);
+        if (vp.p.lv > 0) {                                       // 超加速：整格鑲一圈紅邊
+          fctx.strokeStyle = `rgba(244,63,94,${.35 + .3 * Math.sin(performance.now() / 90)})`;
+          fctx.lineWidth = 3;
+          fctx.strokeRect(vp.x + 1.5, vp.y + 1.5, vp.w - 3, vp.h - 3);
+        }
         if (vp.p.flash > 0) {                                    // 上跳台：整格閃一下紫光
           fctx.fillStyle = `rgba(168,85,247,${vp.p.flash * .35})`;
           fctx.fillRect(vp.x, vp.y, vp.w, vp.h);
