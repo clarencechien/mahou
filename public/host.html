@@ -49,6 +49,7 @@
   <button data-stage="tap-single">③ 單點×10</button>
   <button data-stage="tap-spam">③ 狂點 3 秒</button>
   <button data-stage="shake">④ 搖動計數</button>
+  <button data-stage="freeze">🚦 木頭人</button>
   <button data-stage="color">🎨 顏色反應</button>
   <button data-stage="ski">⛷️ 滑雪下坡</button>
   <select id="hintSel" title="DO 區域（換區域會開新房）" style="font-size:1rem;padding:10px;border-radius:10px;background:#1e293b;color:#f1f5f9;border:none">
@@ -67,6 +68,16 @@
   </tr></thead>
   <tbody id="roster"></tbody>
 </table>
+
+<div class="panel" id="freezePanel" style="display:none">
+  <h2>木頭人・混合指令 — 10 回合，判定用 client 時間戳（延遲免疫）</h2>
+  <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px">
+    <button id="freezeStartBtn" style="background:#2563eb">開始 10 回合</button>
+    <span id="freezeInfo" style="color:#94a3b8; font-size:.9rem"></span>
+  </div>
+  <canvas id="freezeCv" width="384" height="216" style="width:100%; image-rendering:pixelated; border-radius:10px; background:#0b1120"></canvas>
+  <div id="freezeRank" style="margin-top:8px; font-size:.95rem"></div>
+</div>
 
 <div class="panel" id="colorPanel" style="display:none">
   <h2>遊戲一：顏色反應 — 20 局，ΔE 100 → 40 → 15 → 7</h2>
@@ -174,6 +185,7 @@
   function setActiveBtn(stage) {
     document.querySelectorAll('button[data-stage]').forEach((b) =>
       b.classList.toggle('active', b.dataset.stage === stage));
+    $('#freezePanel').style.display = stage === 'freeze' ? '' : 'none';
     $('#colorPanel').style.display = stage === 'color' ? '' : 'none';
     $('#skiPanel').style.display = stage === 'ski' ? '' : 'none';
   }
@@ -181,6 +193,120 @@
   // host 也需要伺服器時鐘（滑雪倒數對齊用）
   const hostClock = new Mahou.ClockSync(sock);
   sock.onOpen(() => hostClock.sync(6));
+
+  // ================= 木頭人・混合指令 =================
+  // host 只負責節奏（出指令、喊轉身），所有判定在 DO 用 client 時間戳做
+  const CMDS = [
+    { key: 'shake', label: '搖 3 下！', color: '#f2c14e' },
+    { key: 'tapRed', label: '點紅色！', color: '#e8604c' },
+    { key: 'spam', label: '狂點 5 下！', color: '#4fb36b' },
+    { key: 'dash', label: '衝！', color: '#38bdf8' },
+  ];
+  const FZ = { running: false, round: 0, cmd: null, green: false, players: [], phaseEnd: 0, phaseLen: 1 };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  $('#freezeStartBtn').addEventListener('click', async () => {
+    if (FZ.running) return;
+    sock.send({ type: 'stage', stage: 'freeze' });
+    setActiveBtn('freeze');
+    FZ.running = true; FZ.players = []; $('#freezeRank').textContent = '';
+    sock.send({ type: 'freezeStart' });
+    await sleep(600);
+    for (let r = 1; r <= 10 && FZ.running; r++) {
+      const cmd = CMDS[Math.floor(Math.random() * CMDS.length)];
+      const greenMs = 2400 + Math.random() * 2000;
+      sock.send({ type: 'freezeRound', cmd: cmd.key });
+      FZ.round = r; FZ.cmd = cmd; FZ.green = true;
+      FZ.phaseEnd = performance.now() + greenMs; FZ.phaseLen = greenMs;
+      await sleep(greenMs);
+      if (!FZ.running) break;
+      const redMs = 1800 + Math.random() * 1400;
+      sock.send({ type: 'freezeTurn' });
+      FZ.green = false;
+      FZ.phaseEnd = performance.now() + redMs; FZ.phaseLen = redMs;
+      await sleep(redMs);
+    }
+    sock.send({ type: 'freezeEnd' });
+    FZ.running = false; FZ.cmd = null;
+  });
+
+  sock.on('freezeState', (m) => { FZ.players = m.players; });
+  sock.on('freezeEnd', (m) => {
+    FZ.running = false;
+    $('#freezeRank').innerHTML = '🏁 ' + (m.rank || []).map((p, i) =>
+      `${i + 1}. <b>${esc(p.name)}</b> 前進 ${p.progress}・犯規 ${p.violations}`).join(' · ');
+  });
+
+  // 簡單小人（提案版的 7×9），換調色盤＝換人
+  const PERSON = ['..hhh..', '.hhhhh.', '.hfffh.', '..fff..', '.bbbbb.', 'bbbbbbb', '.bbbbb.', '..b.b..', '..s.s..'];
+  const PERSON_BACK = ['..hhh..', '.hhhhh.', '.hhhhh.', '..hhh..', '.bbbbb.', 'bbbbbbb', '.bbbbb.', '..b.b..', '..s.s..'];
+  const SKIN = '#f0c090';
+  const PALS = [
+    { h: '#3b2a1f', f: SKIN, b: '#d94f4f', s: '#3a3a4a' }, { h: '#1f1a2e', f: SKIN, b: '#4f86d9', s: '#3a3a4a' },
+    { h: '#5a3b1f', f: SKIN, b: '#4fb36b', s: '#3a3a4a' }, { h: '#2b2b2b', f: SKIN, b: '#d98f3f', s: '#3a3a4a' },
+    { h: '#4a2f5a', f: SKIN, b: '#b264c9', s: '#3a3a4a' }, { h: '#333333', f: SKIN, b: '#38b2ac', s: '#3a3a4a' },
+    { h: '#5a2a2a', f: SKIN, b: '#e0b83d', s: '#3a3a4a' }, { h: '#2a3a5a', f: SKIN, b: '#9ab04a', s: '#3a3a4a' },
+  ];
+  const fcv = $('#freezeCv'), fctx = fcv.getContext('2d', { alpha: false });
+  fctx.imageSmoothingEnabled = false;
+  const FW = 384, FH = 216, HZ = 74;
+  function fpx(x, y, w, h, c) { fctx.fillStyle = c; fctx.fillRect(x | 0, y | 0, Math.max(1, w | 0), Math.max(1, h | 0)); }
+  function fsprite(rows, pal, x, y, s) {
+    for (let r = 0; r < rows.length; r++) for (let i = 0; i < rows[r].length; i++) {
+      const k = rows[r][i];
+      if (k === '.' || !pal[k]) continue;
+      fpx(x + i * s, y + r * s, s, s, pal[k]);
+    }
+  }
+  function freezeDraw() {
+    const t = performance.now() / 1000;
+    // 天空與草地（Mode 7 棋盤）
+    fpx(0, 0, FW, HZ, '#7ba7de');
+    fpx(0, 0, FW, HZ * 0.45, '#5b8bc9');
+    for (let y = HZ; y < FH; y++) {
+      const d = y - HZ, z = 90 / d, cw = 90 / z;
+      if (cw < 2.2) { fpx(0, y, FW, 1, '#4a7742'); continue; }
+      const zi = Math.floor(z);
+      let ci = Math.floor((-FW / 2) * z / 90), sx = (ci - 0) * 90 / z + FW / 2;
+      let g = 0;
+      while (sx < FW && g++ < 200) { fpx(sx, y, cw + 1, 1, ((ci + zi) & 1) ? '#5c8f4e' : '#54864a'); sx += cw; ci++; }
+    }
+    // 鬼：綠燈背對、紅燈轉身
+    const guard = { h: '#20222e', f: SKIN, b: '#8c3b3b', s: '#2a2a36' };
+    fsprite(FZ.green ? PERSON_BACK : PERSON, guard, FW / 2 - 10, HZ - 12, 3);
+    fpx(FW / 2 - 12, HZ + 16, 24, 3, 'rgba(0,0,0,.28)');
+    // 玩家：progress 越高越靠近鬼
+    const list = roster.filter((c) => c.connected);
+    list.forEach((c, i) => {
+      const st = FZ.players.find((p) => p.clientId === c.clientId) || { progress: 0, violations: 0 };
+      const n = Math.max(list.length, 1);
+      const x = FW * (0.10 + (i + 0.5) / n * 0.80);
+      const y = FH - 34 - st.progress * 9;
+      const moving = FZ.green && FZ.running;
+      const bob = moving ? (Math.floor(t * 6 + i) % 2) : 0;
+      fpx(x - 8, y + 19, 17, 2, 'rgba(0,0,0,.25)');
+      fsprite(PERSON, PALS[i % PALS.length], x - 7, y - bob, 2);
+      fctx.font = 'bold 9px sans-serif'; fctx.textAlign = 'center';
+      fctx.fillStyle = '#fff'; fctx.fillText(c.name, x, y - 4);
+      if (st.violations) { fctx.fillStyle = '#ff5a5a'; fctx.fillText('✗'.repeat(Math.min(3, st.violations)), x, y + 32); }
+      fctx.textAlign = 'start';
+    });
+    // HUD：指令橫幅＋相位條
+    const label = !FZ.running ? '按開始' : (FZ.green ? (FZ.cmd ? FZ.cmd.label : '') : '不要動');
+    const col = !FZ.running ? '#94a3b8' : (FZ.green ? (FZ.cmd ? FZ.cmd.color : '#fff') : '#e8604c');
+    fpx(0, 0, FW, 26, 'rgba(8,10,20,.82)');
+    fctx.font = 'bold 17px "Noto Sans TC",sans-serif'; fctx.textAlign = 'center';
+    fctx.fillStyle = col; fctx.fillText(label, FW / 2, 18);
+    fctx.font = 'bold 10px ui-monospace,monospace'; fctx.fillStyle = '#94a3b8';
+    fctx.textAlign = 'start'; fctx.fillText('ROUND ' + String(FZ.round).padStart(2, '0'), 6, 17);
+    if (FZ.running) {
+      const left = Math.max(0, (FZ.phaseEnd - performance.now()) / FZ.phaseLen);
+      fpx(FW / 2 - 60, 28, 120, 3, 'rgba(255,255,255,.15)');
+      fpx(FW / 2 - 60, 28, 120 * left, 3, col);
+    }
+    requestAnimationFrame(freezeDraw);
+  }
+  requestAnimationFrame(freezeDraw);
 
   // ================= 遊戲一：顏色反應 =================
   // CIELAB(D65) → sRGB，ΔE 用 CIE76（Lab 空間歐氏距離），POC 足夠

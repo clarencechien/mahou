@@ -12,8 +12,10 @@ const MAX_MSG_BYTES = 16 * 1024;
 // 關房 = 踢掉所有 WS（code 4000/4001，client 看到就不再重連）→ DO 閒置後被回收，停止計費。
 const IDLE_LIMIT_MS = 30 * 60 * 1000;
 const MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const FREEZE_GRACE_MS = 250;   // 轉身後給人類的煞車時間，超過才算犯規
 const MEANINGFUL = new Set(['join', 'deviceUpdate', 'tap', 'spamStart', 'spamDone', 'shake', 'batch', 'stage',
-  'colorRound', 'colorPick', 'colorEnd', 'skiStart', 'skiRun', 'skiDone']);
+  'colorRound', 'colorPick', 'colorEnd', 'skiStart', 'skiRun', 'skiDone',
+  'freezeStart', 'freezeRound', 'freezeTurn', 'freezeAct', 'freezeEnd']);
 
 export class RoomDO {
   constructor(state, env) {
@@ -24,6 +26,7 @@ export class RoomDO {
     this.clients = new Map(); // clientId -> {ws, name, device, sync, spam, joinedAt, connected}
     this.stage = 'lobby';
     this.colorRound = null; // {round, deltaE, targetIdx, tShow, picks:Set, correctN}
+    this.freeze = null;     // {round, cmd, tGreen, tTurn, players:Map<id,{progress,violations,done}>}
     this.events = [];
     this.createdAt = Date.now();
     this.lastActivity = Date.now();
@@ -262,6 +265,72 @@ export class RoomDO {
         return;
       }
 
+      // ---- 遊戲一之外：木頭人・混合指令 ----
+      // 判定全部用 client 時間戳（已對時到伺服器時間軸），DO 只負責蓋章、比對、廣播。
+      // 因此 150ms 的傳輸延遲不影響任何公平性判定。
+      case 'freezeStart': {
+        if (ws._role !== 'host') return;
+        this.freeze = { round: 0, cmd: null, tGreen: 0, tTurn: 0, players: new Map() };
+        this.log({ type: 'freezeStart' });
+        this.broadcastAll({ type: 'freezeStart' });
+        this.sendFreezeState();
+        return;
+      }
+
+      case 'freezeRound': {
+        if (ws._role !== 'host' || !this.freeze) return;
+        const f = this.freeze;
+        f.round++; f.cmd = msg.cmd; f.tGreen = now; f.tTurn = 0;
+        for (const p of f.players.values()) { p.done = false; p.violated = false; }
+        this.log({ type: 'freezeRound', round: f.round, cmd: f.cmd, tGreen: now });
+        this.broadcastAll({ type: 'freezeRound', round: f.round, cmd: f.cmd, tGreen: now });
+        return;
+      }
+
+      case 'freezeTurn': {
+        if (ws._role !== 'host' || !this.freeze) return;
+        this.freeze.tTurn = now;
+        this.log({ type: 'freezeTurn', round: this.freeze.round, tTurn: now });
+        this.broadcastAll({ type: 'freezeTurn', round: this.freeze.round, tTurn: now });
+        return;
+      }
+
+      case 'freezeAct': {
+        const c = this.clients.get(ws._clientId);
+        const f = this.freeze;
+        if (!c || !f || (msg.round | 0) !== f.round) return;
+        let p = f.players.get(ws._clientId);
+        if (!p) { p = { progress: 0, violations: 0, done: false }; f.players.set(ws._clientId, p); }
+        // tClient 已是伺服器時間軸；沒對時的退回收到時間（會偏保守，記進遙測）
+        const tc = typeof msg.tClient === 'number' ? msg.tClient : now;
+        const uplinkMs = now - tc;
+        let verdict = 'ignored';
+        if (msg.kind === 'cmd') {
+          // 綠燈期間完成指令：必須在轉身之前（用 client 時間戳比，不是收到時間）
+          if (!p.done && (f.tTurn === 0 || tc < f.tTurn)) { p.progress++; p.done = true; verdict = 'ok'; }
+        } else if (msg.kind === 'move') {
+          // 轉身後還在動：GRACE 給人類的煞車時間，超過才算犯規
+          if (f.tTurn && tc > f.tTurn + FREEZE_GRACE_MS && !p.violated) {
+            p.violations++; p.progress = Math.max(0, p.progress - 1); p.violated = true; verdict = 'violation';
+          }
+        }
+        this.log({ type: 'freezeAct', clientId: ws._clientId, round: f.round, kind: msg.kind, tClient: tc, tServerRecv: now, uplinkMs, verdict, value: msg.value });
+        this.send(ws, { type: 'freezeVerdict', round: f.round, kind: msg.kind, verdict });
+        if (verdict !== 'ignored') this.sendFreezeState();
+        return;
+      }
+
+      case 'freezeEnd': {
+        if (ws._role !== 'host' || !this.freeze) return;
+        const rank = [...this.freeze.players.entries()]
+          .map(([id, p]) => ({ clientId: id, name: this.clients.get(id)?.name || '?', ...p }))
+          .sort((a, b) => b.progress - a.progress || a.violations - b.violations);
+        this.log({ type: 'freezeEnd', rank });
+        this.broadcastAll({ type: 'freezeEnd', rank });
+        this.freeze = null;
+        return;
+      }
+
       // ---- 遊戲二：滑雪下坡 ----
       case 'skiStart': {
         if (ws._role !== 'host') return;
@@ -336,6 +405,15 @@ export class RoomDO {
         connected: c.connected,
       })),
     };
+  }
+
+  sendFreezeState() {
+    if (!this.freeze) return;
+    const players = [...this.freeze.players.entries()].map(([id, p]) => ({
+      clientId: id, name: this.clients.get(id)?.name || '?',
+      progress: p.progress, violations: p.violations, done: p.done,
+    }));
+    this.broadcastAll({ type: 'freezeState', round: this.freeze.round, players });
   }
 
   sendRoster(ws) { this.send(ws, this.rosterPayload()); }

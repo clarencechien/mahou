@@ -44,6 +44,11 @@
   .colorBlock.picked { outline: 5px solid #fff; outline-offset: -5px; }
   .colorBlock.isTarget { outline: 6px solid #22c55e; outline-offset: -6px; }
   .colorBlock.picked.wrong { outline-color: #ef4444; }
+  #fzBig { flex:1; border-radius:24px; border:none; font-size:2rem; font-weight:800; background:#374151; color:#fff; }
+  #fzBig.hit { background:#22c55e; color:#052e16; }
+  .fzColors { flex:1; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:10px; }
+  .fzColors button { border-radius:18px; font-size:0; }
+  body.fzFreeze { background:#7f1d1d; }
   #speedTrack { height: 20px; background: #1f2937; border-radius: 10px; overflow: hidden; }
   #skiSpeedBar { height: 100%; width: 0%; background: #38bdf8; border-radius: 10px; }
 </style>
@@ -105,6 +110,17 @@
       <div class="slider"><span>不應期 <b id="vRef">120</b>ms</span><input type="range" id="pRef" min="40" max="400" step="10" value="120"><span></span></div>
     </div>
     <div class="card stat" id="shakeStat"></div>
+  </div>
+</section>
+
+<!-- 木頭人・混合指令 -->
+<section id="st-freeze" class="stage">
+  <button id="fzPermBtn">啟用感測器</button>
+  <div id="fzUI" style="display:none; flex-direction:column; gap:12px; flex:1">
+    <div class="big" id="fzCmd" style="font-size:2.4rem">等主持人開始</div>
+    <p class="hint" id="fzSub">綠燈時照指令做，紅燈不要動</p>
+    <div id="fzArea" style="flex:1; display:flex; flex-direction:column; gap:10px"></div>
+    <div class="card stat" id="fzStat"></div>
   </div>
 </section>
 
@@ -207,7 +223,7 @@
   }
 
   // ---- 關卡切換（host 廣播驅動） ----
-  const stageMap = { lobby: 'st-lobby', ping: 'st-ping', 'tap-single': 'st-tap', 'tap-spam': 'st-tap', shake: 'st-shake', color: 'st-color', ski: 'st-ski' };
+  const stageMap = { lobby: 'st-lobby', ping: 'st-ping', 'tap-single': 'st-tap', 'tap-spam': 'st-tap', shake: 'st-shake', color: 'st-color', ski: 'st-ski', freeze: 'st-freeze' };
   sock.on('stage', (m) => setStage(m.stage));
   function setStage(s) {
     stage = s;
@@ -218,6 +234,7 @@
     if (s === 'tap-single') setupTap('single');
     if (s === 'tap-spam') setupTap('spam');
     if (s === 'ski') setupSkiStage();
+    if (s === 'freeze') setupFreezeStage(); else document.body.classList.remove('fzFreeze');
   }
 
   // ---- 步驟 2：Ping 畫面（1Hz 即時顯示） ----
@@ -376,6 +393,113 @@
   }
   $('#shakeReset').addEventListener('pointerdown', () => {
     shakeCount = 0; $('#shakeCount').textContent = '0';
+  });
+
+  // ---- 木頭人・混合指令 ----
+  // 所有動作都用 clock.serverNow() 蓋 client 時間戳上報，DO 依此判定 → 延遲不影響公平性
+  let fz = null;
+  function setupFreezeStage() {
+    if (motionOn) { $('#fzPermBtn').style.display = 'none'; $('#fzUI').style.display = 'flex'; }
+    else { $('#fzPermBtn').style.display = ''; $('#fzUI').style.display = 'none'; }
+  }
+  $('#fzPermBtn').addEventListener('click', async () => {
+    if (!(await ensureMotion())) { $('#fzPermBtn').textContent = '權限被拒 — 關閉分頁重開再試'; return; }
+    setupFreezeStage();
+  });
+
+  sock.on('freezeStart', () => {
+    fz = { round: 0, cmd: null, green: false, sent: false, shakeBase: shakeCount, taps: 0, moved: false };
+    $('#fzStat').textContent = '';
+  });
+  sock.on('freezeRound', (m) => {
+    if (!fz) fz = {};
+    Object.assign(fz, { round: m.round, cmd: m.cmd, green: true, sent: false, shakeBase: shakeCount, taps: 0, moved: false });
+    document.body.classList.remove('fzFreeze');
+    renderFreezeCmd();
+  });
+  sock.on('freezeTurn', () => {
+    if (!fz) return;
+    fz.green = false;
+    document.body.classList.add('fzFreeze');
+    $('#fzCmd').textContent = '不要動！';
+    $('#fzSub').textContent = '手機放穩，別碰螢幕';
+    $('#fzArea').innerHTML = '';
+  });
+  sock.on('freezeEnd', (m) => {
+    fz = null;
+    document.body.classList.remove('fzFreeze');
+    $('#fzCmd').textContent = '結束！';
+    $('#fzArea').innerHTML = '';
+    if (m.rank) $('#fzStat').innerHTML = m.rank.map((p, i) => `${i + 1}. ${p.name} 前進 ${p.progress}・犯規 ${p.violations}`).join('<br>');
+  });
+  sock.on('freezeVerdict', (m) => {
+    if (m.verdict === 'ok') { $('#fzSub').textContent = '✓ 前進一格！'; navigator.vibrate?.(30); }
+    else if (m.verdict === 'violation') { $('#fzSub').textContent = '✗ 被抓到，退一格'; navigator.vibrate?.([60, 40, 60]); }
+  });
+
+  const CMD_TEXT = { shake: '搖 3 下！', tapRed: '點紅色！', spam: '狂點 5 下！', dash: '衝！狂搖' };
+  function sendAct(kind, value) {
+    sock.send({ type: 'freezeAct', round: fz.round, kind, value, tClient: clock.serverNow() });
+  }
+  function renderFreezeCmd() {
+    $('#fzCmd').textContent = CMD_TEXT[fz.cmd] || '';
+    $('#fzSub').textContent = '快！';
+    const area = $('#fzArea');
+    area.innerHTML = '';
+    if (fz.cmd === 'tapRed') {
+      const grid = document.createElement('div');
+      grid.className = 'fzColors';
+      const cols = ['#e8604c', '#4fb36b', '#5b8fe0', '#f2c14e'];
+      const order = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+      for (const idx of order) {
+        const b = document.createElement('button');
+        b.style.background = cols[idx];
+        b.addEventListener('pointerdown', () => {
+          if (!fz || fz.sent || !fz.green) return;
+          if (idx === 0) { fz.sent = true; sendAct('cmd', 'red'); b.style.outline = '5px solid #fff'; }
+          else { $('#fzSub').textContent = '不是那個顏色'; }
+        });
+        grid.appendChild(b);
+      }
+      area.appendChild(grid);
+    } else if (fz.cmd === 'spam') {
+      const b = document.createElement('button');
+      b.id = 'fzBig'; b.textContent = '狂點！';
+      b.addEventListener('pointerdown', () => {
+        if (!fz || !fz.green) return;
+        fz.taps++;
+        b.classList.add('hit'); setTimeout(() => b.classList.remove('hit'), 70);
+        b.textContent = fz.taps + ' / 5';
+        if (fz.taps >= 5 && !fz.sent) { fz.sent = true; sendAct('cmd', fz.taps); }
+      });
+      area.appendChild(b);
+    } else {
+      const b = document.createElement('button');
+      b.id = 'fzBig';
+      b.textContent = fz.cmd === 'dash' ? '用力搖！' : '搖 3 下';
+      b.disabled = true; b.style.opacity = 1;
+      area.appendChild(b);
+    }
+  }
+
+  // 感測器迴圈：綠燈算搖動達標、紅燈偵測任何動作＝犯規
+  setInterval(() => {
+    if (!fz || stage !== 'freeze' || !joined) return;
+    const need = fz.cmd === 'dash' ? 8 : 3;
+    if (fz.green && !fz.sent && (fz.cmd === 'shake' || fz.cmd === 'dash')) {
+      const n = shakeCount - fz.shakeBase;
+      const btn = document.getElementById('fzBig');
+      if (btn) btn.textContent = n + ' / ' + need;
+      if (n >= need) { fz.sent = true; sendAct('cmd', n); }
+    }
+    if (!fz.green && !fz.moved) {
+      // 紅燈期間只要搖動計數又跳，就是動了
+      if (shakeCount > fz.shakeBase + (fz.sent ? need : 0) + 1) { fz.moved = true; sendAct('move', 'shake'); }
+    }
+  }, 100);
+  // 紅燈時碰螢幕也算動
+  document.getElementById('st-freeze').addEventListener('pointerdown', () => {
+    if (fz && !fz.green && !fz.moved) { fz.moved = true; sendAct('move', 'touch'); }
   });
 
   // ---- 遊戲一：顏色反應 ----
