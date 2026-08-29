@@ -383,20 +383,22 @@ export class RoomDO {
         if (!c) return;
         const uplinkMs = typeof msg.tClient === 'number' ? now - msg.tClient : null;
         this.log({ type: 'skiRun', clientId: ws._clientId, x: msg.x, wy: msg.wy, speed: msg.speed,
-                   vx: msg.vx, air: msg.air, jumps: msg.jumps, hits: msg.hits,
+                   vx: msg.vx, air: msg.air, jumps: msg.jumps, hits: msg.hits, combo: msg.combo,
                    tClient: msg.tClient, tServerRecv: now, uplinkMs });
         this.toHosts({ type: 'skiRun', clientId: ws._clientId, name: c.name, x: msg.x, wy: msg.wy,
                        speed: msg.speed, vx: msg.vx, air: msg.air, airMax: msg.airMax, rot: msg.rot,
-                       jumps: msg.jumps, hits: msg.hits, tClient: msg.tClient, uplinkMs });
+                       jumps: msg.jumps, hits: msg.hits, combo: msg.combo, lv: msg.lv,
+                       tClient: msg.tClient, uplinkMs });
         return;
       }
 
       case 'skiDone': {
         const c = this.clients.get(ws._clientId);
         if (!c || !this.ski) return;
-        this.ski.results.set(ws._clientId, { dist: msg.dist, jumps: msg.jumps, hits: msg.hits });
-        this.log({ type: 'skiDone', clientId: ws._clientId, dist: msg.dist, jumps: msg.jumps, hits: msg.hits });
-        this.toHosts({ type: 'skiDone', clientId: ws._clientId, name: c.name, dist: msg.dist, jumps: msg.jumps, hits: msg.hits });
+        const r = { dist: msg.dist, jumps: msg.jumps, hits: msg.hits, combo: msg.combo | 0 };
+        this.ski.results.set(ws._clientId, r);
+        this.log({ type: 'skiDone', clientId: ws._clientId, ...r });
+        this.toHosts({ type: 'skiDone', clientId: ws._clientId, name: c.name, ...r });
         return;
       }
 

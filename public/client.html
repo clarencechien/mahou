@@ -681,6 +681,7 @@
   const SKI = {
     TAP_ACC: 2.4, DECAY: 1.0, TAP_CAP: 11, DRIFT: 4.0, HARD_CAP: 24,
     RAMP_SURGE: 7.0, SURGE_DECAY: 0.5, RAMP_AIR: 1.0, HOP_AIR: 0.5, ARM_S: 0.9,
+    COMBO_EVERY: 3, COMBO_CAP_STEP: 7, COMBO_SURGE: 6, COMBO_MAX_LV: 3,
     HIT_MUL: 0.45, STUN: 0.5,
     STEER: 260, TILT_DEAD: 3.5, TILT_RANGE: 26, TILT_EMA: 0.16,
     LIFT_TH: 6.0, LIFT_REFRACT: 320,
@@ -777,7 +778,7 @@
       startAt: m.startAt, duration: m.duration, obs: COURSE.build(m.seed, m.speedMul || 1), scan: 0,
       x: 0, wy: COURSE.START_Y, vx: 0, speed: SKI.DRIFT, boost: 0, surge: 0,
       air: 0, airMax: 0, rot: 0, stun: 0, arm: 0, armScored: false,
-      jumps: 0, misses: 0, hits: 0,
+      jumps: 0, misses: 0, hits: 0, combo: 0, lv: 0, bestCombo: 0, superT: 0,
       tapBase: tapCount, liftBase: liftCount, done: false, tick: 0, last: performance.now(),
     };
     $('#skiStat').textContent = '';
@@ -796,17 +797,33 @@
     ski.armScored = false;
     navigator.vibrate?.(15);
   }
+  // combo：連續跳台成功才算，撞到或空跳會斷。單純沒去跳的跳台不算斷——
+  // 不然要一路不漏跳才連得起來，派對場合沒人做得到。
+  function comboCap() { return SKI.HARD_CAP + ski.lv * SKI.COMBO_CAP_STEP; }
   function skiRampHit(i) {
     ski.obs[i].used = true;                                    // 同一座跳台只吃一次
     ski.air = ski.airMax = SKI.RAMP_AIR;
     ski.rot = 0;
-    ski.surge = Math.min(SKI.HARD_CAP, ski.surge + SKI.RAMP_SURGE);
     ski.jumps++;
+    ski.combo++;
+    ski.bestCombo = Math.max(ski.bestCombo, ski.combo);
     ski.arm = 0; ski.armScored = true;
-    $('#skiPadTitle').textContent = '跳台成功！';
-    $('#skiPadSub').textContent = '加速中';
-    navigator.vibrate?.([25, 25, 45]);
+    const lv = Math.min(SKI.COMBO_MAX_LV, Math.floor(ski.combo / SKI.COMBO_EVERY));
+    const levelUp = lv > ski.lv;
+    ski.lv = lv;
+    ski.surge = Math.min(comboCap(), ski.surge + SKI.RAMP_SURGE + (levelUp ? SKI.COMBO_SURGE : 0));
+    if (levelUp) {
+      ski.superT = 1.6;                                        // 超加速的畫面提示時間
+      $('#skiPadTitle').textContent = '超加速！' + ski.combo + ' 連';
+      $('#skiPadSub').textContent = '速度上限 ' + comboCap().toFixed(0);
+      navigator.vibrate?.([40, 30, 40, 30, 90]);
+    } else {
+      $('#skiPadTitle').textContent = ski.combo + ' 連跳台！';
+      $('#skiPadSub').textContent = '再 ' + (SKI.COMBO_EVERY - (ski.combo % SKI.COMBO_EVERY)) + ' 次超加速';
+      navigator.vibrate?.([25, 25, 45]);
+    }
   }
+  function breakCombo() { ski.combo = 0; ski.lv = 0; }
 
   function skiTick() {
     if (ended || !ski) return;
@@ -825,10 +842,10 @@
       if (!ski.done) {
         ski.done = true;
         const dist = Math.round((ski.wy - COURSE.START_Y) / WPM());
-        sock.send({ type: 'skiDone', dist, jumps: ski.jumps, hits: ski.hits });
+        sock.send({ type: 'skiDone', dist, jumps: ski.jumps, hits: ski.hits, combo: ski.bestCombo });
         $('#skiMsg').textContent = '結束！';
         $('#skiPadTitle').textContent = '結束';
-        $('#skiStat').innerHTML = `滑了 <b>${dist} m</b>・跳台 ${ski.jumps}・撞到 ${ski.hits}`;
+        $('#skiStat').innerHTML = `滑了 <b>${dist} m</b>・跳台 ${ski.jumps}・最長 ${ski.bestCombo} 連・撞到 ${ski.hits}`;
         $('#skiSpeedBar').style.width = '0%';
         clearInterval(skiTimer);
       }
@@ -846,7 +863,8 @@
     ski.boost = Math.min(SKI.TAP_CAP, ski.boost + newTaps * SKI.TAP_ACC);
     ski.boost = Math.max(0, ski.boost - ski.boost * SKI.DECAY * dt * (ski.stun > 0 ? 5 : 1));
     ski.surge = Math.max(0, ski.surge - ski.surge * SKI.SURGE_DECAY * dt * (ski.stun > 0 ? 5 : 1));
-    const target = Math.min(SKI.HARD_CAP, SKI.DRIFT + ski.boost + ski.surge);
+    const target = Math.min(comboCap(), SKI.DRIFT + ski.boost + ski.surge);
+    if (ski.superT > 0) ski.superT -= dt;
     ski.speed += (target - ski.speed) * Math.min(1, dt * 4);
 
     // 轉向：空中轉向力減半（跳起來就修不太動，這是空跳的代價）
@@ -871,9 +889,11 @@
       if (ri >= 0) skiRampHit(ri);
       else {
         ski.arm -= dt;
-        if (ski.arm <= 0 && !ski.armScored) {                  // 空跳：白跳一次，還少轉了一段
+        if (ski.arm <= 0 && !ski.armScored) {                  // 空跳：白跳一次，連段也斷掉
           ski.arm = 0; ski.misses++;
-          $('#skiPadTitle').textContent = '沒踩到跳台';
+          const had = ski.combo;
+          breakCombo();
+          $('#skiPadTitle').textContent = had >= SKI.COMBO_EVERY ? '連段斷了' : '沒踩到跳台';
         }
       }
     }
@@ -883,7 +903,8 @@
     if (hit >= 0 && ski.stun <= 0) {
       ski.hits++;
       ski.boost *= SKI.HIT_MUL; ski.surge *= SKI.HIT_MUL; ski.speed *= SKI.HIT_MUL;
-      ski.stun = SKI.STUN; ski.arm = 0;
+      ski.stun = SKI.STUN; ski.arm = 0; ski.superT = 0;
+      breakCombo();
       ski.obs[hit].wy = -1e9;                                  // 同一棵只撞一次
       $('#skiPadTitle').textContent = '撞到了！';
       navigator.vibrate?.([50, 30, 50]);
@@ -899,19 +920,25 @@
         ? (Math.abs(r.wx - ski.x) < COURSE.RAMP_X ? '正對跳台' : (r.wx < ski.x ? '跳台在左邊 ←' : '→ 跳台在右邊'))
         : '看到跳台就把手機往上抬';
     }
-    $('#skiPad').style.background = ski.stun > 0 ? '#7f1d1d' : (near ? '#4c1d95' : '#1f2937');
+    $('#skiPad').style.background = ski.stun > 0 ? '#7f1d1d'
+      : ski.superT > 0 ? '#9f1239' : (near ? '#4c1d95' : '#1f2937');
     $('#skiDist').textContent = Math.round((ski.wy - COURSE.START_Y) / WPM());
-    $('#skiSpeedBar').style.width = Math.min(100, (ski.speed / SKI.HARD_CAP) * 100) + '%';
-    $('#skiSpeedBar').style.background = ski.stun > 0 ? '#ef4444' : (ski.surge > 1 ? '#a855f7' : (ski.speed > SKI.DRIFT + SKI.TAP_CAP * .9 ? '#f2c14e' : '#38bdf8'));
+    $('#skiSpeedBar').style.width = Math.min(100, (ski.speed / comboCap()) * 100) + '%';
+    $('#skiSpeedBar').style.background = ski.stun > 0 ? '#ef4444'
+      : ski.lv > 0 ? '#f43f5e' : (ski.surge > 1 ? '#a855f7'
+      : (ski.speed > SKI.DRIFT + SKI.TAP_CAP * .9 ? '#f2c14e' : '#38bdf8'));
     $('#skiTiltDot').style.left = (50 + t * 44) + '%';
-    $('#skiStat').innerHTML = `速度 <b>${ski.speed.toFixed(1)}</b>・跳台 ${ski.jumps}・空跳 ${ski.misses}・撞到 ${ski.hits}`;
+    $('#skiStat').innerHTML = `速度 <b>${ski.speed.toFixed(1)}</b>` +
+      (ski.combo > 1 ? `・<b style="color:#f43f5e">${ski.combo} 連</b>` : '') +
+      `・跳台 ${ski.jumps}・空跳 ${ski.misses}・撞到 ${ski.hits}`;
 
     // 10Hz 上報（host 會用 speed/vx 外推補掉延遲）
     if (++ski.tick % 6 === 0) {
       sock.send({ type: 'skiRun', x: Math.round(ski.x), wy: Math.round(ski.wy),
                   speed: +ski.speed.toFixed(2), vx: Math.round(ski.vx), air: +ski.air.toFixed(2),
                   airMax: +ski.airMax.toFixed(2), rot: +ski.rot.toFixed(2),
-                  jumps: ski.jumps, hits: ski.hits, tClient: clock.serverNow() });
+                  jumps: ski.jumps, hits: ski.hits, combo: ski.combo, lv: ski.lv,
+                  tClient: clock.serverNow() });
     }
   }
 

@@ -16,7 +16,7 @@
 
   C.HALF_W = 260;          // 賽道半寬（世界紋理單位）
   C.START_Y = 165;         // 玩家起點的 wy
-  C.SPAN = 120000;         // 生成長度，全程加速也跑不完
+  C.SPAN = 260000;         // 生成長度：120 秒全程 combo 超加速也跑不完
   C.BASE_WPM = 22;         // 公尺 → 世界單位的基準值
 
   // 速度倍率：同時放大「每秒前進的世界單位」與「障礙物間距」。
@@ -27,7 +27,7 @@
   C.HIT_Y = 46;
   C.RAMP_Y = 70;
   C.setSpeed = function (mul) {
-    C.SPEED_MUL = Math.max(0.4, Math.min(4, +mul || 1));
+    C.SPEED_MUL = Math.max(0.4, Math.min(8, +mul || 1));
     C.WORLD_PER_M = C.BASE_WPM * C.SPEED_MUL;
     C.HIT_Y = 46 * C.SPEED_MUL;     // 判定窗口也要跟著放大，秒數才維持不變
     C.RAMP_Y = 70 * C.SPEED_MUL;
