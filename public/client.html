@@ -119,6 +119,22 @@
 <!-- 木頭人・混合指令 -->
 <section id="st-freeze" class="stage">
   <button id="fzPermBtn">啟用感測器</button>
+  <!-- 準備畫面：搖動要先試過，不然開打第一題就卡住 -->
+  <div id="fzCal" style="display:none; flex-direction:column; gap:12px; flex:1">
+    <p class="hint">開打前先試一下</p>
+    <div id="fzCalShake" style="flex:1; min-height:110px; border-radius:18px; background:#1f2937;
+         display:flex; flex-direction:column; align-items:center; justify-content:center">
+      <div style="font-size:1.3rem; font-weight:800">搖一搖手機</div>
+      <div id="fzCalShakeN" style="color:#94a3b8; font-size:.9rem">0 下</div>
+    </div>
+    <div id="fzCalTap" style="min-height:90px; border-radius:18px; background:#1f2937;
+         display:flex; flex-direction:column; align-items:center; justify-content:center;
+         user-select:none; -webkit-user-select:none; touch-action:manipulation">
+      <div style="font-size:1.3rem; font-weight:800">點一下這裡</div>
+      <div id="fzCalTapN" style="color:#94a3b8; font-size:.9rem">0 下</div>
+    </div>
+    <button id="fzReady" style="background:#16a34a; font-size:1.15rem">我準備好了</button>
+  </div>
   <div id="fzUI" style="display:none; flex-direction:column; gap:12px; flex:1">
     <div class="big" id="fzCmd" style="font-size:2.4rem">等主持人開始</div>
     <p class="hint" id="fzSub">綠燈時照指令做，紅燈不要動</p>
@@ -138,10 +154,32 @@
 <section id="st-ski" class="stage">
   <button id="skiPermBtn">啟用感測器</button>
   <div id="skiUI" style="display:none; flex-direction:column; gap:10px; flex:1">
-    <div id="skiCal" style="display:flex; flex-direction:column; gap:12px">
-      <p class="hint">把手機<b>平放在手上</b>，保持水平</p>
-      <div class="big" id="skiTiltNow" style="font-size:2rem">–</div>
+    <!-- 準備畫面：先校準，再讓人把三個動作都試一遍，才不會開打了還在摸索 -->
+    <div id="skiCal" style="display:flex; flex-direction:column; gap:10px; flex:1">
+      <p class="hint">手機<b>平放在手上</b>，螢幕朝上</p>
+      <div style="display:flex; gap:8px; align-items:center">
+        <div style="flex:1; height:26px; background:#1f2937; border-radius:13px; position:relative">
+          <div id="calTiltDot" style="position:absolute; top:3px; left:50%; width:20px; height:20px; margin-left:-10px; border-radius:50%; background:#38bdf8"></div>
+        </div>
+        <div id="skiTiltNow" style="font-family:ui-monospace,monospace; width:52px; text-align:right">–</div>
+      </div>
       <button id="skiZero" style="background:#374151">歸零校準</button>
+      <div id="calTest" style="flex:1; display:flex; flex-direction:column; gap:8px">
+        <p class="hint" style="margin:0">試試看三個動作：</p>
+        <div id="calTap" style="flex:1; min-height:86px; border-radius:18px; background:#1f2937;
+             display:flex; flex-direction:column; align-items:center; justify-content:center;
+             user-select:none; -webkit-user-select:none; touch-action:manipulation">
+          <div style="font-size:1.3rem; font-weight:800">① 連點這裡</div>
+          <div id="calTapN" style="color:#94a3b8; font-size:.9rem">0 下</div>
+        </div>
+        <div id="calLift" style="min-height:74px; border-radius:18px; background:#1f2937;
+             display:flex; flex-direction:column; align-items:center; justify-content:center">
+          <div style="font-size:1.3rem; font-weight:800">② 手機往上抬</div>
+          <div id="calLiftN" style="color:#94a3b8; font-size:.9rem">還沒偵測到</div>
+        </div>
+        <div style="color:#64748b; font-size:.85rem; text-align:center">③ 左右傾斜看上面的點會不會動</div>
+      </div>
+      <button id="skiReady" style="background:#16a34a; font-size:1.15rem">我準備好了</button>
     </div>
     <div id="skiPlay" style="display:none; flex-direction:column; gap:8px; flex:1">
       <p class="hint" id="skiMsg">準備…</p>
@@ -209,10 +247,18 @@
     $('#connDot').className = 'light good';
     if (joined) doJoin(); // 重連自動重新加入（input 已移除，用記住的 myName）
   });
-  sock.ws.addEventListener('close', () => { $('#connDot').className = 'light bad'; });
+  // 房間結束後整個 body 會被換掉，所有背景 timer 都要能安靜收工，
+  // 不然關房那一刻每支手機都會噴一串「null」的錯
+  let ended = false;
+  sock.ws.addEventListener('close', () => {
+    if (ended) return;
+    $('#connDot').className = 'light bad';
+  });
   // 房間被結束（host 按鈕或閒置逾時）：停掉所有背景流量，讓 DO 能被回收
   sock.onEnded(() => {
+    ended = true;
     clock.stopBackground();
+    clearInterval(skiTimer);
     document.body.innerHTML =
       '<div style="padding:40px 24px;text-align:center"><div style="font-size:2rem;font-weight:800">房間已結束</div>' +
       '<p style="color:#9ca3af;margin-top:12px">這個分頁可以關掉了</p></div>';
@@ -418,7 +464,7 @@
     });
     // 每 300ms 上報累計數（§4 步驟 4）
     setInterval(() => {
-      if (stage !== 'shake' || !joined) return;
+      if (ended || stage !== 'shake' || !joined) return;
       sock.send({ type: 'shake', count: shakeCount, params: { ...P }, tClientSend: clock.serverNow() });
     }, 300);
   }
@@ -430,10 +476,35 @@
   // ---- 木頭人・混合指令 ----
   // 所有動作都用 clock.serverNow() 蓋 client 時間戳上報，DO 依此判定 → 延遲不影響公平性
   let fz = null;
+  let fzReady = false, fzCalTaps = 0, fzCalShakes = 0;
   function setupFreezeStage() {
-    if (motionOn) { $('#fzPermBtn').style.display = 'none'; $('#fzUI').style.display = 'flex'; }
-    else { $('#fzPermBtn').style.display = ''; $('#fzUI').style.display = 'none'; }
+    $('#fzPermBtn').style.display = motionOn ? 'none' : '';
+    if (!motionOn) { $('#fzUI').style.display = 'none'; $('#fzCal').style.display = 'none'; return; }
+    $('#fzUI').style.display = fzReady ? 'flex' : 'none';
+    $('#fzCal').style.display = fzReady ? 'none' : 'flex';
+    fzCalShakes = shakeCount;
   }
+  $('#fzCalTap').addEventListener('pointerdown', (e) => {
+    e.preventDefault(); fzCalTaps++;
+    $('#fzCalTapN').textContent = fzCalTaps + ' 下';
+    $('#fzCalTap').style.background = '#2563eb';
+    setTimeout(() => { $('#fzCalTap').style.background = '#1f2937'; }, 70);
+  });
+  setInterval(() => {
+    if (ended || stage !== 'freeze' || fzReady || !motionOn) return;
+    const n = shakeCount - fzCalShakes;
+    if (n > 0) {
+      $('#fzCalShakeN').textContent = n + ' 下 ✓';
+      $('#fzCalShake').style.background = '#166534';
+      setTimeout(() => { $('#fzCalShake').style.background = '#1f2937'; }, 200);
+    }
+  }, 120);
+  $('#fzReady').addEventListener('click', () => {
+    fzReady = true;
+    sock.send({ type: 'ready', game: 'freeze' });
+    $('#fzCal').style.display = 'none';
+    $('#fzUI').style.display = 'flex';
+  });
   $('#fzPermBtn').addEventListener('click', async () => {
     if (!(await ensureMotion())) { $('#fzPermBtn').textContent = '權限被拒 — 關閉分頁重開再試'; return; }
     setupFreezeStage();
@@ -649,26 +720,50 @@
     if (motionOn) { $('#skiPermBtn').style.display = 'none'; $('#skiUI').style.display = 'flex'; startOrient(); }
     else { $('#skiPermBtn').style.display = ''; $('#skiUI').style.display = 'none'; }
     $('#skiJumpBtn').style.display = motionOn ? 'none' : '';   // 沒感測器就給按鈕，至少玩得下去
+    if (!skiReady) { $('#skiCal').style.display = 'flex'; $('#skiPlay').style.display = 'none'; }
   }
   $('#skiPermBtn').addEventListener('click', async () => {
     if (!(await ensureMotion())) {
       $('#skiPermBtn').textContent = '權限被拒 — 用按鈕跳躍';
       $('#skiUI').style.display = 'flex'; $('#skiJumpBtn').style.display = '';
+      $('#calLiftN').textContent = '沒有感測器，改用跳躍按鈕';
       return;
     }
     setupSkiStage();
   });
   $('#skiZero').addEventListener('click', () => {
     gammaZero = gammaF;
-    $('#skiMsg').textContent = '已歸零，等主持人開始';
+    $('#skiZero').textContent = '已歸零（再按一次可重來）';
+  });
+  // 準備畫面的試玩區：三個動作都要看得到即時回饋，不然沒人知道自己做對沒
+  let calTaps = 0, calLifts = 0;
+  $('#calTap').addEventListener('pointerdown', (e) => {
+    e.preventDefault(); calTaps++;
+    $('#calTapN').textContent = calTaps + ' 下';
+    $('#calTap').style.background = '#2563eb';
+    setTimeout(() => { $('#calTap').style.background = '#1f2937'; }, 70);
+  });
+  $('#skiReady').addEventListener('click', () => {
+    skiReady = true;
+    sock.send({ type: 'ready', game: 'ski' });
+    $('#skiMsg').textContent = '已就緒，等主持人開始';
     $('#skiCal').style.display = 'none';
     $('#skiPlay').style.display = 'flex';
   });
-  // 校準畫面即時顯示傾斜，讓人知道感測器活著
+  let skiReady = false;
   setInterval(() => {
-    if (stage !== 'ski' || !motionOn) return;
-    if ($('#skiCal').style.display !== 'none') $('#skiTiltNow').textContent = (gammaF - gammaZero).toFixed(0) + '°';
-  }, 100);
+    if (ended || stage !== 'ski' || !motionOn) return;
+    if ($('#skiCal').style.display === 'none') return;
+    const g = gammaF - gammaZero;
+    $('#skiTiltNow').textContent = g.toFixed(0) + '°';
+    $('#calTiltDot').style.left = (50 + Math.max(-1, Math.min(1, g / 30)) * 44) + '%';
+    if (liftCount > calLifts) {
+      calLifts = liftCount;
+      $('#calLiftN').textContent = '偵測到 ' + calLifts + ' 次 ✓';
+      $('#calLift').style.background = '#166534';
+      setTimeout(() => { $('#calLift').style.background = '#1f2937'; }, 260);
+    }
+  }, 80);
 
   // 連點：整片 pad 都算，用 pointerdown 才跟得上手速（click 會等 300ms 判定）
   $('#skiPad').addEventListener('pointerdown', (e) => { e.preventDefault(); tapCount++; });
@@ -714,7 +809,7 @@
   }
 
   function skiTick() {
-    if (!ski) return;
+    if (ended || !ski) return;
     const nowP = performance.now();
     const dt = Math.min(0.05, (nowP - ski.last) / 1000);
     ski.last = nowP;

@@ -15,7 +15,7 @@ const MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const FREEZE_GRACE_MS = 250;   // 轉身後給人類的煞車時間，超過才算犯規
 const MEANINGFUL = new Set(['join', 'deviceUpdate', 'tap', 'spamStart', 'spamDone', 'shake', 'batch', 'stage',
   'colorRound', 'colorPick', 'colorEnd', 'skiStart', 'skiRun', 'skiDone',
-  'freezeStart', 'freezeRound', 'freezeTurn', 'freezeAct', 'freezeEnd', 'skiEnd']);
+  'freezeStart', 'freezeRound', 'freezeTurn', 'freezeAct', 'freezeEnd', 'skiEnd', 'ready']);
 
 export class RoomDO {
   constructor(state, env) {
@@ -363,6 +363,16 @@ export class RoomDO {
         this.ski = { startAt, duration, seed, results: new Map() };
         this.log({ type: 'skiStart', startAt, duration, seed });
         this.broadcastAll({ type: 'skiStart', startAt, duration, seed });
+        return;
+      }
+
+      // 手機在說明畫面完成感應器設定就回報一次，主持人才知道可以開打了
+      case 'ready': {
+        const c = this.clients.get(ws._clientId);
+        if (!c) return;
+        c.ready = msg.game || true;
+        this.log({ type: 'ready', clientId: ws._clientId, game: msg.game });
+        this.toHosts({ type: 'ready', clientId: ws._clientId, name: c.name, game: msg.game });
         return;
       }
 
