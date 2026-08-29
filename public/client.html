@@ -413,7 +413,7 @@
   });
   sock.on('freezeRound', (m) => {
     if (!fz) fz = {};
-    Object.assign(fz, { round: m.round, cmd: m.cmd, green: true, sent: false, shakeBase: shakeCount, taps: 0, moved: false });
+    Object.assign(fz, { round: m.round, cmd: m.cmd, params: m.params || {}, green: true, sent: false, shakeBase: shakeCount, taps: 0, moved: false });
     document.body.classList.remove('fzFreeze');
     renderFreezeCmd();
   });
@@ -434,58 +434,86 @@
   });
   sock.on('freezeVerdict', (m) => {
     if (m.verdict === 'ok') { $('#fzSub').textContent = '✓ 前進一格！'; navigator.vibrate?.(30); }
+    else if (m.verdict === 'wrong') { $('#fzSub').textContent = '✗ 答錯了'; navigator.vibrate?.([50, 30, 50]); }
+    else if (m.verdict === 'over') { $('#fzSub').textContent = '✗ 點超過了，退一格'; navigator.vibrate?.([80, 40, 80]); }
     else if (m.verdict === 'violation') { $('#fzSub').textContent = '✗ 被抓到，退一格'; navigator.vibrate?.([60, 40, 60]); }
   });
 
-  const CMD_TEXT = { shake: '搖 3 下！', tapRed: '點紅色！', spam: '狂點 5 下！', dash: '衝！狂搖' };
+  const CMD_TEXT = {
+    math: (p) => p.q + ' = ?', color: (p) => '點「' + p.name + '」！',
+    tapN: (p) => '點 ' + p.n + ' 下（不能超過）', shake: (p) => '搖 ' + p.n + ' 下！', dash: () => '衝！用力連搖',
+  };
   function sendAct(kind, value) {
     sock.send({ type: 'freezeAct', round: fz.round, kind, value, tClient: clock.serverNow() });
   }
+  function bigBtn(text) {
+    const b = document.createElement('button');
+    b.id = 'fzBig'; b.textContent = text;
+    return b;
+  }
   function renderFreezeCmd() {
-    $('#fzCmd').textContent = CMD_TEXT[fz.cmd] || '';
+    const p = fz.params || {};
+    $('#fzCmd').textContent = (CMD_TEXT[fz.cmd] || (() => ''))(p);
     $('#fzSub').textContent = '快！';
     const area = $('#fzArea');
     area.innerHTML = '';
-    if (fz.cmd === 'tapRed') {
+
+    if (fz.cmd === 'math' || fz.cmd === 'color') {
+      // 四選一：位置每回合打亂，避免記位置
       const grid = document.createElement('div');
       grid.className = 'fzColors';
-      const cols = ['#e8604c', '#4fb36b', '#5b8fe0', '#f2c14e'];
-      const order = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+      const n = (p.opts || []).length;
+      const order = [...Array(n).keys()].sort(() => Math.random() - 0.5);
       for (const idx of order) {
         const b = document.createElement('button');
-        b.style.background = cols[idx];
+        if (fz.cmd === 'color') { b.style.background = p.opts[idx]; }
+        else { b.style.background = '#374151'; b.style.fontSize = '2.4rem'; b.textContent = p.opts[idx]; }
         b.addEventListener('pointerdown', () => {
           if (!fz || fz.sent || !fz.green) return;
-          if (idx === 0) { fz.sent = true; sendAct('cmd', 'red'); b.style.outline = '5px solid #fff'; }
-          else { $('#fzSub').textContent = '不是那個顏色'; }
+          fz.sent = true;
+          b.style.outline = '5px solid #fff';
+          sendAct('cmd', idx);
         });
         grid.appendChild(b);
       }
       area.appendChild(grid);
-    } else if (fz.cmd === 'spam') {
-      const b = document.createElement('button');
-      b.id = 'fzBig'; b.textContent = '狂點！';
+    } else if (fz.cmd === 'tapN') {
+      // 連點但不能超過：到達 n 鎖定，多點一下就送 over
+      const need = p.n || 4;
+      const b = bigBtn('0 / ' + need);
       b.addEventListener('pointerdown', () => {
         if (!fz || !fz.green) return;
         fz.taps++;
+        if (fz.taps > need) {
+          if (!fz.sent) { fz.sent = true; sendAct('over', fz.taps); }
+          b.textContent = '超過了！'; b.style.background = '#b91c1c';
+          return;
+        }
+        b.textContent = fz.taps + ' / ' + need;
         b.classList.add('hit'); setTimeout(() => b.classList.remove('hit'), 70);
-        b.textContent = fz.taps + ' / 5';
-        if (fz.taps >= 5 && !fz.sent) { fz.sent = true; sendAct('cmd', fz.taps); }
+        if (fz.taps === need && !fz.sent) { fz.sent = true; sendAct('cmd', need); }
       });
       area.appendChild(b);
     } else {
-      const b = document.createElement('button');
-      b.id = 'fzBig';
-      b.textContent = fz.cmd === 'dash' ? '用力搖！' : '搖 3 下';
+      // 搖動類：按鈕只當計數顯示，實際偵測在感測器迴圈
+      const need = p.n || 3;
+      const b = bigBtn('0 / ' + need);
       b.disabled = true; b.style.opacity = 1;
       area.appendChild(b);
+      if (fz.cmd === 'dash') {
+        const hint = document.createElement('p');
+        hint.className = 'hint';
+        hint.textContent = '↑↓ 上下用力甩，越快越好';
+        hint.style.fontSize = '1.1rem';
+        area.appendChild(hint);
+      }
     }
   }
 
   // 感測器迴圈：綠燈算搖動達標、紅燈偵測任何動作＝犯規
   setInterval(() => {
     if (!fz || stage !== 'freeze' || !joined) return;
-    const need = fz.cmd === 'dash' ? 8 : 3;
+    const need = (fz.params && fz.params.n) || (fz.cmd === 'dash' ? 8 : 3);
     if (fz.green && !fz.sent && (fz.cmd === 'shake' || fz.cmd === 'dash')) {
       const n = shakeCount - fz.shakeBase;
       const btn = document.getElementById('fzBig');

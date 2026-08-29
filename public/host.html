@@ -30,11 +30,105 @@
   #feed { font-size: .8rem; color: #94a3b8; max-height: 180px; overflow-y: auto; font-family: ui-monospace, monospace; line-height: 1.6; }
   #summary { font-size: .9rem; line-height: 1.9; }
   #summary b { color: #7dd3fc; }
+
+  /* ---- 產品外殼：頂列 + 遊戲/管理 兩種檢視 ---- */
+  body { padding: 0; }
+  .appbar {
+    display: flex; align-items: center; gap: 14px; padding: 10px 18px;
+    background: #0d1424; border-bottom: 1px solid #1c2942; position: sticky; top: 0; z-index: 20;
+  }
+  .brand { font-weight: 800; letter-spacing: .06em; font-size: 1.05rem; color: #e2e8f0; }
+  .brand span { color: #64748b; font-weight: 600; font-size: .8rem; margin-left: 6px; letter-spacing: 0; }
+  .roompill {
+    font-family: ui-monospace, monospace; font-size: 1.15rem; font-weight: 700; letter-spacing: .18em;
+    background: #16233c; border: 1px solid #27395c; border-radius: 8px; padding: 5px 12px; color: #7dd3fc;
+  }
+  .tabs { display: flex; gap: 4px; background: #16233c; border-radius: 9px; padding: 3px; }
+  .tabs button { background: transparent; padding: 7px 16px; font-size: .92rem; border-radius: 7px; }
+  .tabs button.on { background: #2563eb; }
+  .appbar .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .appbar .right button { padding: 8px 14px; font-size: .9rem; }
+  .dot { font-size: .78rem; color: #64748b; font-family: ui-monospace, monospace; }
+
+  .view { display: none; }
+  .view.on { display: block; }
+  #adminView { padding: 18px; }
+
+  /* ---- 遊戲檢視：畫面填滿，HUD 疊在上面 ---- */
+  #gameView { padding: 0; }
+  #gameWrap {
+    position: relative; width: 100%; height: calc(100vh - 52px);
+    background: #05080f; display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  #gameWrap:fullscreen { height: 100vh; }
+  #gameCv { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+  .ovl { position: absolute; pointer-events: none; z-index: 2; }
+  .ovl button { pointer-events: auto; }
+  .ovl.card {
+    background: rgba(8,12,22,.86); border: 1px solid #24365a; border-radius: 12px;
+    padding: 12px 14px; pointer-events: auto; backdrop-filter: blur(3px);
+  }
+  #joinCard { left: 20px; bottom: 20px; display: flex; gap: 14px; align-items: center; }
+  #joinCard .qrbox { background: #fff; padding: 6px; border-radius: 8px; line-height: 0; }
+  #joinCard .qrbox img, #joinCard .qrbox canvas { display: block; width: 104px; height: 104px; }
+  #joinCard .code { font-family: ui-monospace, monospace; font-size: 2.1rem; font-weight: 800; letter-spacing: .16em; color: #7dd3fc; }
+  #joinCard .u { color: #64748b; font-size: .72rem; word-break: break-all; max-width: 180px; margin-top: 2px; }
+  #playerStrip { right: 20px; top: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 210px; }
+  .pchip {
+    display: flex; align-items: center; gap: 8px; background: rgba(8,12,22,.8);
+    border: 1px solid #24365a; border-radius: 8px; padding: 5px 10px; font-size: .88rem;
+  }
+  .pchip i { width: 11px; height: 11px; border-radius: 3px; display: block; }
+  .pchip .nm { font-weight: 700; }
+  .pchip .sc { margin-left: auto; font-family: ui-monospace, monospace; color: #94a3b8; }
+  .pchip.off { opacity: .35; }
+  #gameCtl { left: 50%; transform: translateX(-50%); bottom: 20px; display: flex; gap: 10px; align-items: center; pointer-events: auto; z-index: 3; }
+  #playerStrip { pointer-events: none; }
+  #gameWrap > canvas { position: relative; z-index: 0; }
+  #gameCtl button { padding: 12px 26px; font-size: 1.05rem; }
+  #gameCtl button.go { background: #2563eb; }
+  #bigCenter {
+    left: 50%; top: 50%; transform: translate(-50%,-50%); text-align: center;
+    pointer-events: none; text-shadow: 0 3px 18px rgba(0,0,0,.8);
+  }
+  #bigCenter .t { font-size: 3.4rem; font-weight: 900; letter-spacing: .02em; }
+  #bigCenter .s { color: #cbd5e1; font-size: 1rem; margin-top: 6px; }
 </style>
 </head>
 <body>
-<h1>家宴多人互動 POC — 主控台 <span id="connState"></span></h1>
+<div class="appbar">
+  <div class="brand">mahou <span>派對遊戲主控</span></div>
+  <div class="roompill" id="barRoom">····</div>
+  <div class="tabs">
+    <button id="tabGame" class="on">遊戲</button>
+    <button id="tabAdmin">管理・測試</button>
+  </div>
+  <div class="right">
+    <span class="dot" id="connState"></span>
+    <button id="fsBtn">⛶ 全螢幕</button>
+  </div>
+</div>
 
+<div id="gameView" class="view on">
+  <div id="gameWrap">
+    <canvas id="gameCv"></canvas>
+    <div id="bigCenter" class="ovl"><div class="t" id="bcTitle"></div><div class="s" id="bcSub"></div></div>
+    <div id="joinCard" class="ovl card">
+      <div class="qrbox" id="qrGame"></div>
+      <div>
+        <div class="code" id="gameRoom">····</div>
+        <div class="u" id="gameUrl"></div>
+      </div>
+    </div>
+    <div id="playerStrip" class="ovl"></div>
+    <div id="gameCtl" class="ovl">
+      <button class="go" id="gStart">開始木頭人</button>
+      <button id="gStop" style="background:#7f1d1d; display:none">停止</button>
+    </div>
+  </div>
+</div>
+
+<div id="adminView" class="view">
 <div class="top">
   <div>
     <div class="roomcode" id="roomCode">····</div>
@@ -75,7 +169,7 @@
     <button id="freezeStartBtn" style="background:#2563eb">開始 10 回合</button>
     <span id="freezeInfo" style="color:#94a3b8; font-size:.9rem"></span>
   </div>
-  <canvas id="freezeCv" width="384" height="216" style="width:100%; image-rendering:pixelated; border-radius:10px; background:#0b1120"></canvas>
+  <p style="color:#64748b; font-size:.88rem">畫面在「遊戲」分頁；這裡只放控制與結果。</p>
   <div id="freezeRank" style="margin-top:8px; font-size:.95rem"></div>
 </div>
 
@@ -102,8 +196,11 @@
 
 <div class="panel"><h2>即席摘要（正式數據以匯出 JSON 為準）</h2><div id="summary">還沒有數據。</div></div>
 <div class="panel"><h2>事件流</h2><div id="feed"></div></div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="/engine/chara.js"></script>
+<script src="/engine/mode7.js"></script>
 <script src="/shared.js"></script>
 <script>
 (function () {
@@ -196,12 +293,47 @@
 
   // ================= 木頭人・混合指令 =================
   // host 只負責節奏（出指令、喊轉身），所有判定在 DO 用 client 時間戳做
-  const CMDS = [
-    { key: 'shake', label: '搖 3 下！', color: '#f2c14e' },
-    { key: 'tapRed', label: '點紅色！', color: '#e8604c' },
-    { key: 'spam', label: '狂點 5 下！', color: '#4fb36b' },
-    { key: 'dash', label: '衝！', color: '#38bdf8' },
+  window.__nextCmd = () => nextCmd();   // 測試用：驗證出題分布
+  const COLOR_SET = [
+    { name: '紅', hex: '#e8604c' }, { name: '綠', hex: '#4fb36b' },
+    { name: '藍', hex: '#5b8fe0' }, { name: '黃', hex: '#f2c14e' },
   ];
+  const CMD_KEYS = ['math', 'color', 'tapN', 'shake', 'dash'];
+  let cmdBag = [];
+  function nextCmd() {
+    // 洗牌袋：五種各抽完才重新洗，保證分布均勻（上一輪 tapRed 出現 6/10 次就是純隨機的鍋）
+    if (!cmdBag.length) cmdBag = CMD_KEYS.slice().sort(() => Math.random() - 0.5);
+    const key = cmdBag.pop();
+    const ri = (n) => Math.floor(Math.random() * n);
+    if (key === 'math') {
+      // 個位數加減，答案保持 0–9
+      const sub = Math.random() < 0.45;
+      let a, b, ans;
+      if (sub) { a = 2 + ri(8); b = 1 + ri(a); ans = a - b; }
+      else { a = 1 + ri(8); b = 1 + ri(9 - a); ans = a + b; }
+      const opts = [ans];
+      while (opts.length < 4) { const c = Math.max(0, ans + ri(7) - 3); if (!opts.includes(c)) opts.push(c); }
+      opts.sort(() => Math.random() - 0.5);
+      return { key, label: `${a} ${sub ? '−' : '+'} ${b} = ?`,
+               params: { q: `${a} ${sub ? '−' : '+'} ${b}`, opts, answer: opts.indexOf(ans) } };
+    }
+    if (key === 'color') {
+      const target = ri(4);
+      const opts = COLOR_SET.map((c) => c.hex);
+      return { key, label: `點「${COLOR_SET[target].name}」色！`,
+               params: { name: COLOR_SET[target].name, opts, answer: target } };
+    }
+    if (key === 'tapN') {
+      const n = 3 + ri(4);                       // 3–6 下，不能超過
+      return { key, label: `點 ${n} 下（不能超過）`, params: { n } };
+    }
+    if (key === 'shake') {
+      const n = 3 + ri(3);
+      return { key, label: `搖 ${n} 下！`, params: { n } };
+    }
+    return { key, label: '衝！用力連搖', params: { n: 8 } };
+  }
+
   const FZ = { running: false, round: 0, cmd: null, green: false, players: [], phaseEnd: 0, phaseLen: 1 };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -209,13 +341,13 @@
     if (FZ.running) return;
     sock.send({ type: 'stage', stage: 'freeze' });
     setActiveBtn('freeze');
-    FZ.running = true; FZ.players = []; $('#freezeRank').textContent = '';
+    FZ.running = true; FZ.players = []; cmdBag = []; $('#freezeRank').textContent = '';
     sock.send({ type: 'freezeStart' });
     await sleep(600);
     for (let r = 1; r <= 10 && FZ.running; r++) {
-      const cmd = CMDS[Math.floor(Math.random() * CMDS.length)];
-      const greenMs = 2400 + Math.random() * 2000;
-      sock.send({ type: 'freezeRound', cmd: cmd.key });
+      const cmd = nextCmd();
+      const greenMs = 2600 + Math.random() * 2200;
+      sock.send({ type: 'freezeRound', cmd: cmd.key, params: cmd.params });
       FZ.round = r; FZ.cmd = cmd; FZ.green = true;
       FZ.phaseEnd = performance.now() + greenMs; FZ.phaseLen = greenMs;
       await sleep(greenMs);
@@ -237,73 +369,143 @@
       `${i + 1}. <b>${esc(p.name)}</b> 前進 ${p.progress}・犯規 ${p.violations}`).join(' · ');
   });
 
-  // 簡單小人（提案版的 7×9），換調色盤＝換人
-  const PERSON = ['..hhh..', '.hhhhh.', '.hfffh.', '..fff..', '.bbbbb.', 'bbbbbbb', '.bbbbb.', '..b.b..', '..s.s..'];
-  const PERSON_BACK = ['..hhh..', '.hhhhh.', '.hhhhh.', '..hhh..', '.bbbbb.', 'bbbbbbb', '.bbbbb.', '..b.b..', '..s.s..'];
-  const SKIN = '#f0c090';
-  const PALS = [
-    { h: '#3b2a1f', f: SKIN, b: '#d94f4f', s: '#3a3a4a' }, { h: '#1f1a2e', f: SKIN, b: '#4f86d9', s: '#3a3a4a' },
-    { h: '#5a3b1f', f: SKIN, b: '#4fb36b', s: '#3a3a4a' }, { h: '#2b2b2b', f: SKIN, b: '#d98f3f', s: '#3a3a4a' },
-    { h: '#4a2f5a', f: SKIN, b: '#b264c9', s: '#3a3a4a' }, { h: '#333333', f: SKIN, b: '#38b2ac', s: '#3a3a4a' },
-    { h: '#5a2a2a', f: SKIN, b: '#e0b83d', s: '#3a3a4a' }, { h: '#2a3a5a', f: SKIN, b: '#9ab04a', s: '#3a3a4a' },
-  ];
-  const fcv = $('#freezeCv'), fctx = fcv.getContext('2d', { alpha: false });
-  fctx.imageSmoothingEnabled = false;
-  const FW = 384, FH = 216, HZ = 74;
-  function fpx(x, y, w, h, c) { fctx.fillStyle = c; fctx.fillRect(x | 0, y | 0, Math.max(1, w | 0), Math.max(1, h | 0)); }
-  function fsprite(rows, pal, x, y, s) {
-    for (let r = 0; r < rows.length; r++) for (let i = 0; i < rows[r].length; i++) {
-      const k = rows[r][i];
-      if (k === '.' || !pal[k]) continue;
-      fpx(x + i * s, y + r * s, s, s, pal[k]);
-    }
+  // ---------------- 產品外殼：檢視切換 / 全螢幕 / 加入卡 / 玩家條 ----------------
+  $('#barRoom').textContent = roomId;
+  $('#gameRoom').textContent = roomId;
+  $('#gameUrl').textContent = clientUrl.replace(/^https?:\/\//, '');
+  try { new QRCode($('#qrGame'), { text: clientUrl, width: 104, height: 104 }); }
+  catch (e) { $('#qrGame').textContent = 'QR 失敗'; }
+
+  function setView(v) {
+    $('#gameView').classList.toggle('on', v === 'game');
+    $('#adminView').classList.toggle('on', v === 'admin');
+    $('#tabGame').classList.toggle('on', v === 'game');
+    $('#tabAdmin').classList.toggle('on', v === 'admin');
+    if (v === 'game') fitCanvas();
   }
+  $('#tabGame').addEventListener('click', () => setView('game'));
+  $('#tabAdmin').addEventListener('click', () => setView('admin'));
+  $('#fsBtn').addEventListener('click', () => {
+    const w = $('#gameWrap');
+    if (document.fullscreenElement) document.exitFullscreen();
+    else w.requestFullscreen?.().then(fitCanvas).catch(() => {});
+  });
+  document.addEventListener('fullscreenchange', () => setTimeout(fitCanvas, 60));
+
+  // 遊戲檢視的開始鈕＝管理檢視那顆的同義詞
+  $('#gStart').addEventListener('click', () => $('#freezeStartBtn').click());
+  $('#gStop').addEventListener('click', () => { FZ.running = false; sock.send({ type: 'freezeEnd' }); });
+
+  function renderPlayerStrip() {
+    const list = roster.filter((c) => c.connected || FZ.players.some((p) => p.clientId === c.clientId));
+    $('#playerStrip').innerHTML = list.map((c, i) => {
+      const st = FZ.players.find((p) => p.clientId === c.clientId);
+      const col = CHARA.PLAYERS[i % 8].accent1;
+      return `<div class="pchip${c.connected ? '' : ' off'}"><i style="background:${col}"></i>` +
+        `<span class="nm">${esc(c.name)}</span>` +
+        `<span class="sc">${st ? st.progress + (st.violations ? ' ✗' + st.violations : '') : '–'}</span></div>`;
+    }).join('');
+  }
+  function renderCenter() {
+    const t = $('#bcTitle'), sub = $('#bcSub');
+    const n = roster.filter((c) => c.connected).length;
+    if (FZ.running) { t.textContent = ''; sub.textContent = ''; return; }
+    if (!n) { t.textContent = '掃 QR 加入'; sub.textContent = '手機掃左下角的 QR code'; }
+    else { t.textContent = n + ' 人已加入'; sub.textContent = '按「開始木頭人」'; }
+  }
+  // 大廳時把加入卡放大置中，開場後縮回左下（真正的派對遊戲都這樣做）
+  function updateShell() {
+    const playing = FZ.running;
+    $('#gStart').style.display = playing ? 'none' : '';
+    $('#gStop').style.display = playing ? '' : 'none';
+    $('#joinCard').style.transform = playing ? 'scale(.82)' : 'scale(1)';
+    $('#joinCard').style.transformOrigin = 'left bottom';
+    renderPlayerStrip(); renderCenter();
+  }
+  setInterval(updateShell, 400);
+
+  // 木頭人場景：Mode 7 草地（畫一次快取）＋ 程序化角色
+  const FW = 384, FH = 216, FHZ = 74, FF = 90;
+  const fcv = $('#gameCv'), fctx = fcv.getContext('2d', { alpha: false });
+  fcv.width = FW; fcv.height = FH;
+  fctx.imageSmoothingEnabled = false;
+  // 畫面用整數倍放大填滿容器（風格聖經：禁止非整數倍）
+  function fitCanvas() {
+    const wrap = $('#gameWrap');
+    const k = Math.max(1, Math.floor(Math.min(wrap.clientWidth / FW, wrap.clientHeight / FH)));
+    fcv.style.width = (FW * k) + 'px';
+    fcv.style.height = (FH * k) + 'px';
+  }
+  addEventListener('resize', fitCanvas);
+  setTimeout(fitCanvas, 0);
+  let groundCv = null;
+  function buildGround() {
+    groundCv = document.createElement('canvas');
+    groundCv.width = FW; groundCv.height = FH;
+    const g = groundCv.getContext('2d', { alpha: false });
+    g.imageSmoothingEnabled = false;
+    const world = MODE7.buildWorld('grass');
+    const opts = { W: FW, H: FH, horizon: FHZ, f: FF, scroll: 0 };
+    MODE7.render(g, world, opts);
+    MODE7.horizonScape(g, { ...opts, kind: 'grass' }); // 遠丘＋樹線（同調色盤）
+    MODE7.laneLines(g, opts, [7.5, 10.5, 14.5]);       // 起跑線／中線
+  }
+
   function freezeDraw() {
+    if (!groundCv) buildGround();
     const t = performance.now() / 1000;
-    // 天空與草地（Mode 7 棋盤）
-    fpx(0, 0, FW, HZ, '#7ba7de');
-    fpx(0, 0, FW, HZ * 0.45, '#5b8bc9');
-    for (let y = HZ; y < FH; y++) {
-      const d = y - HZ, z = 90 / d, cw = 90 / z;
-      if (cw < 2.2) { fpx(0, y, FW, 1, '#4a7742'); continue; }
-      const zi = Math.floor(z);
-      let ci = Math.floor((-FW / 2) * z / 90), sx = (ci - 0) * 90 / z + FW / 2;
-      let g = 0;
-      while (sx < FW && g++ < 200) { fpx(sx, y, cw + 1, 1, ((ci + zi) & 1) ? '#5c8f4e' : '#54864a'); sx += cw; ci++; }
-    }
-    // 鬼：綠燈背對、紅燈轉身
-    const guard = { h: '#20222e', f: SKIN, b: '#8c3b3b', s: '#2a2a36' };
-    fsprite(FZ.green ? PERSON_BACK : PERSON, guard, FW / 2 - 10, HZ - 12, 3);
-    fpx(FW / 2 - 12, HZ + 16, 24, 3, 'rgba(0,0,0,.28)');
-    // 玩家：progress 越高越靠近鬼
+    fctx.drawImage(groundCv, 0, 0);
+
+    // 鬼：綠燈背對、紅燈轉身正對玩家
+    const guardFeet = FHZ + 34;
+    CHARA.drawFeet(fctx, CHARA.GUARD, FZ.green ? 'back' : 'front', 0, FW / 2, guardFeet, 2);
+
+    // 玩家：progress 決定前進距離（越近鬼＝越上面＝越小），每人一個識別色
     const list = roster.filter((c) => c.connected);
-    list.forEach((c, i) => {
+    const items = list.map((c, i) => {
       const st = FZ.players.find((p) => p.clientId === c.clientId) || { progress: 0, violations: 0 };
       const n = Math.max(list.length, 1);
-      const x = FW * (0.10 + (i + 0.5) / n * 0.80);
-      const y = FH - 34 - st.progress * 9;
-      const moving = FZ.green && FZ.running;
-      const bob = moving ? (Math.floor(t * 6 + i) % 2) : 0;
-      fpx(x - 8, y + 19, 17, 2, 'rgba(0,0,0,.25)');
-      fsprite(PERSON, PALS[i % PALS.length], x - 7, y - bob, 2);
-      fctx.font = 'bold 9px sans-serif'; fctx.textAlign = 'center';
-      fctx.fillStyle = '#fff'; fctx.fillText(c.name, x, y - 4);
-      if (st.violations) { fctx.fillStyle = '#ff5a5a'; fctx.fillText('✗'.repeat(Math.min(3, st.violations)), x, y + 32); }
+      const prog = Math.min(st.progress / 12, 1);
+      const feetY = FH - 10 - prog * 96;                    // 底部起跑 → 往上接近鬼
+      const u = feetY > FHZ + 78 ? 2 : 1;                   // 只用整數倍（風格聖經）
+      const spread = 0.14 + 0.72 * ((i + 0.5) / n);
+      const cx = FW / 2 + (spread - 0.5) * FW * (0.55 + prog * -0.25);
+      return { c, st, feetY, u, cx, i };
+    }).sort((a, b) => a.feetY - b.feetY);                   // 由遠到近畫
+
+    for (const it of items) {
+      const walking = FZ.green && FZ.running;
+      const frame = walking ? (Math.floor(t * 7 + it.i) % 4) : 0;
+      CHARA.drawFeet(fctx, it.i, 'back', frame, it.cx, it.feetY, it.u);
+      const h = 32 * it.u;
+      fctx.font = 'bold ' + (it.u === 2 ? 11 : 9) + 'px "Noto Sans TC",sans-serif';
+      fctx.textAlign = 'center';
+      fctx.fillStyle = 'rgba(10,12,24,.65)';
+      const nw = fctx.measureText(it.c.name).width + 8;
+      fctx.fillRect(it.cx - nw / 2, it.feetY - h - 12, nw, 12);
+      fctx.fillStyle = CHARA.PLAYERS[it.i % 8].accent2;
+      fctx.fillText(it.c.name, it.cx, it.feetY - h - 3);
+      if (it.st.violations) {
+        fctx.fillStyle = '#ff5a5a';
+        fctx.fillText('✗'.repeat(Math.min(3, it.st.violations)), it.cx, it.feetY + 10);
+      }
       fctx.textAlign = 'start';
-    });
-    // HUD：指令橫幅＋相位條
+    }
+
+    // HUD：指令橫幅 ＋ 相位條
     const label = !FZ.running ? '按開始' : (FZ.green ? (FZ.cmd ? FZ.cmd.label : '') : '不要動');
-    const col = !FZ.running ? '#94a3b8' : (FZ.green ? (FZ.cmd ? FZ.cmd.color : '#fff') : '#e8604c');
-    fpx(0, 0, FW, 26, 'rgba(8,10,20,.82)');
-    fctx.font = 'bold 17px "Noto Sans TC",sans-serif'; fctx.textAlign = 'center';
-    fctx.fillStyle = col; fctx.fillText(label, FW / 2, 18);
+    const col = !FZ.running ? '#94a3b8' : (FZ.green ? '#f2f4f8' : '#ff6b5a');
+    fctx.fillStyle = 'rgba(8,10,20,.86)'; fctx.fillRect(0, 0, FW, 30);
+    fctx.font = 'bold 18px "Noto Sans TC",sans-serif'; fctx.textAlign = 'center';
+    fctx.fillStyle = col; fctx.fillText(label, FW / 2, 21);
     fctx.font = 'bold 10px ui-monospace,monospace'; fctx.fillStyle = '#94a3b8';
-    fctx.textAlign = 'start'; fctx.fillText('ROUND ' + String(FZ.round).padStart(2, '0'), 6, 17);
+    fctx.textAlign = 'start'; fctx.fillText('ROUND ' + String(FZ.round).padStart(2, '0') + '/10', 6, 20);
     if (FZ.running) {
       const left = Math.max(0, (FZ.phaseEnd - performance.now()) / FZ.phaseLen);
-      fpx(FW / 2 - 60, 28, 120, 3, 'rgba(255,255,255,.15)');
-      fpx(FW / 2 - 60, 28, 120 * left, 3, col);
+      fctx.fillStyle = 'rgba(255,255,255,.16)'; fctx.fillRect(FW / 2 - 70, 32, 140, 3);
+      fctx.fillStyle = FZ.green ? '#4fc75a' : '#ff6b5a'; fctx.fillRect(FW / 2 - 70, 32, 140 * left, 3);
     }
+    fctx.textAlign = 'start';
     requestAnimationFrame(freezeDraw);
   }
   requestAnimationFrame(freezeDraw);

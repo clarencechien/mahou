@@ -281,9 +281,15 @@ export class RoomDO {
         if (ws._role !== 'host' || !this.freeze) return;
         const f = this.freeze;
         f.round++; f.cmd = msg.cmd; f.tGreen = now; f.tTurn = 0;
-        for (const p of f.players.values()) { p.done = false; p.violated = false; }
-        this.log({ type: 'freezeRound', round: f.round, cmd: f.cmd, tGreen: now });
-        this.broadcastAll({ type: 'freezeRound', round: f.round, cmd: f.cmd, tGreen: now });
+        // params 分兩份：answer 只留在 DO（正解），pub 才廣播出去
+        f.answer = (msg.params && msg.params.answer !== undefined) ? msg.params.answer : null;
+        f.need = (msg.params && msg.params.need) || 0;
+        const pub = { ...(msg.params || {}) };
+        delete pub.answer;
+        f.pub = pub;
+        for (const p of f.players.values()) { p.done = false; p.violated = false; p.overed = false; }
+        this.log({ type: 'freezeRound', round: f.round, cmd: f.cmd, params: msg.params, tGreen: now });
+        this.broadcastAll({ type: 'freezeRound', round: f.round, cmd: f.cmd, params: pub, tGreen: now });
         return;
       }
 
@@ -307,7 +313,21 @@ export class RoomDO {
         let verdict = 'ignored';
         if (msg.kind === 'cmd') {
           // 綠燈期間完成指令：必須在轉身之前（用 client 時間戳比，不是收到時間）
-          if (!p.done && (f.tTurn === 0 || tc < f.tTurn)) { p.progress++; p.done = true; verdict = 'ok'; }
+          const inWindow = !p.done && (f.tTurn === 0 || tc < f.tTurn);
+          if (inWindow) {
+            // 有正解的指令（算術／指定顏色）要答對才算；數量型指令看 need
+            const correct = f.answer === null ? true : (msg.value === f.answer);
+            p.done = true;
+            if (correct) { p.progress++; verdict = 'ok'; }
+            else { verdict = 'wrong'; }
+          }
+        } else if (msg.kind === 'over') {
+          // 連點超過上限：這回合作廢並退一格
+          if (!p.overed && (f.tTurn === 0 || tc < f.tTurn)) {
+            p.overed = true; p.done = true;
+            p.progress = Math.max(0, p.progress - 1);
+            verdict = 'over';
+          }
         } else if (msg.kind === 'move') {
           // 轉身後還在動：GRACE 給人類的煞車時間，超過才算犯規
           if (f.tTurn && tc > f.tTurn + FREEZE_GRACE_MS && !p.violated) {
