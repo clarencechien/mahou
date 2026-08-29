@@ -143,14 +143,21 @@
       <div class="big" id="skiTiltNow" style="font-size:2rem">–</div>
       <button id="skiZero" style="background:#374151">歸零校準</button>
     </div>
-    <div id="skiPlay" style="display:none; flex-direction:column; gap:10px; flex:1">
+    <div id="skiPlay" style="display:none; flex-direction:column; gap:8px; flex:1">
       <p class="hint" id="skiMsg">準備…</p>
-      <div class="big" style="font-size:2.6rem"><span id="skiDist">0</span><span style="font-size:1.1rem"> m</span></div>
+      <div class="big" style="font-size:2.4rem"><span id="skiDist">0</span><span style="font-size:1.1rem"> m</span></div>
       <div id="speedTrack"><div id="skiSpeedBar"></div></div>
       <div id="skiTiltBar" style="height:26px; background:#1f2937; border-radius:13px; position:relative">
         <div id="skiTiltDot" style="position:absolute; top:3px; left:50%; width:20px; height:20px; margin-left:-10px; border-radius:50%; background:#38bdf8"></div>
       </div>
-      <button id="skiJump" style="flex:1; font-size:2rem; border-radius:24px; background:#374151">點我跳躍</button>
+      <!-- 整片就是加速墊：連點愈快愈快。跳躍靠「把手機往上抬」，不佔畫面 -->
+      <div id="skiPad" style="flex:1; min-height:150px; border-radius:24px; background:#1f2937;
+           display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+           user-select:none; -webkit-user-select:none; touch-action:manipulation">
+        <div id="skiPadTitle" style="font-size:1.9rem; font-weight:800">連點加速</div>
+        <div id="skiPadSub" style="font-size:.95rem; color:#94a3b8">看到跳台就把手機往上抬</div>
+      </div>
+      <button id="skiJumpBtn" style="display:none; font-size:1.3rem; border-radius:18px; background:#7c3aed; padding:14px">跳躍</button>
       <div class="card stat" id="skiStat"></div>
     </div>
   </div>
@@ -598,14 +605,18 @@
   });
 
   // ---- 遊戲二：滑雪下坡（client 權威：手機跑完整物理）----
-  // 平放上下搖＝加速（衝刺後緩降）、左右傾＝轉向、點畫面＝跳躍。
-  // gamma 在劇烈搖動下會抖，所以走重低通＋死區——犧牲一點轉向反應換穩定。
+  // 手機直握、螢幕朝上平放。連點＝加速、左右傾＝轉向、把手機往上抬＝跳躍。
+  // 加速只能推到 TAP_CAP；要更快只能靠跳台，這樣「閃障礙」與「衝跳台」才是同一個選擇。
   const SKI = {
-    ACC_PER_SHAKE: 2.6, DECAY: 1.3, CAP_BASE: 9, CAP_STEP: 2.4, CAP_MAX: 20,
-    JUMPS_PER_LEVEL: 3, AIR_TIME: 0.82, HIT_MUL: 0.42, STUN: 0.55,
-    STEER: 210, TILT_DEAD: 3.5, TILT_RANGE: 26, TILT_EMA: 0.16, WORLD_PER_M: 11,
+    TAP_ACC: 2.4, DECAY: 1.0, TAP_CAP: 11, DRIFT: 4.0, HARD_CAP: 24,
+    RAMP_SURGE: 7.0, SURGE_DECAY: 0.5, RAMP_AIR: 1.0, HOP_AIR: 0.5, ARM_S: 0.9,
+    HIT_MUL: 0.45, STUN: 0.5,
+    STEER: 260, TILT_DEAD: 3.5, TILT_RANGE: 26, TILT_EMA: 0.16,
+    LIFT_TH: 6.0, LIFT_REFRACT: 320,
   };
+  const WPM = () => COURSE.WORLD_PER_M;
   let ski = null, skiTimer = null, gammaRaw = 0, gammaZero = 0, gammaF = 0, orientOn = false;
+  let tapCount = 0, liftCount = 0, liftZ = 0, zBase = 9.8, lastLift = 0, liftPeak = 0;
 
   function startOrient() {
     if (orientOn) return;
@@ -613,7 +624,18 @@
     addEventListener('deviceorientation', (e) => {
       if (e.gamma == null) return;
       gammaRaw = e.gamma;
-      gammaF += (gammaRaw - gammaF) * SKI.TILT_EMA;      // 重低通：搖動時 gamma 會亂跳
+      gammaF += (gammaRaw - gammaF) * SKI.TILT_EMA;      // 重低通：連點時 gamma 也會抖
+    });
+    // 抬起手機偵測：平放時 z 軸吃滿重力，往上抬會先衝出一個正向尖峰。
+    // 基準線用低通跟著姿勢跑，所以斜著拿也偵測得到。
+    addEventListener('devicemotion', (e) => {
+      const a = e.accelerationIncludingGravity;
+      if (!a || a.z == null) return;
+      zBase += (a.z - zBase) * 0.08;
+      liftZ = a.z - zBase;
+      liftPeak = Math.max(liftPeak * 0.9, liftZ);
+      const now = performance.now();
+      if (liftZ > SKI.LIFT_TH && now - lastLift > SKI.LIFT_REFRACT) { lastLift = now; liftCount++; }
     });
   }
   function tiltNorm() {
@@ -626,9 +648,14 @@
   function setupSkiStage() {
     if (motionOn) { $('#skiPermBtn').style.display = 'none'; $('#skiUI').style.display = 'flex'; startOrient(); }
     else { $('#skiPermBtn').style.display = ''; $('#skiUI').style.display = 'none'; }
+    $('#skiJumpBtn').style.display = motionOn ? 'none' : '';   // 沒感測器就給按鈕，至少玩得下去
   }
   $('#skiPermBtn').addEventListener('click', async () => {
-    if (!(await ensureMotion())) { $('#skiPermBtn').textContent = '權限被拒 — 關閉分頁重開再試'; return; }
+    if (!(await ensureMotion())) {
+      $('#skiPermBtn').textContent = '權限被拒 — 用按鈕跳躍';
+      $('#skiUI').style.display = 'flex'; $('#skiJumpBtn').style.display = '';
+      return;
+    }
     setupSkiStage();
   });
   $('#skiZero').addEventListener('click', () => {
@@ -643,28 +670,48 @@
     if ($('#skiCal').style.display !== 'none') $('#skiTiltNow').textContent = (gammaF - gammaZero).toFixed(0) + '°';
   }, 100);
 
+  // 連點：整片 pad 都算，用 pointerdown 才跟得上手速（click 會等 300ms 判定）
+  $('#skiPad').addEventListener('pointerdown', (e) => { e.preventDefault(); tapCount++; });
+  $('#skiJumpBtn').addEventListener('pointerdown', (e) => { e.stopPropagation(); liftCount++; });
+
   sock.on('skiStart', (m) => {
     if (gammaZero === 0 && gammaF !== 0) gammaZero = gammaF;   // 沒按歸零就用當下姿勢
     $('#skiCal').style.display = 'none';
     $('#skiPlay').style.display = 'flex';
     ski = {
       startAt: m.startAt, duration: m.duration, obs: COURSE.build(m.seed), scan: 0,
-      x: 0, wy: COURSE.START_Y, vx: 0, speed: 0, boost: 0, cap: SKI.CAP_BASE,
-      air: 0, rot: 0, stun: 0, jumps: 0, hits: 0, airStart: 0, cleanAir: true,
-      shakeBase: shakeCount, done: false, tick: 0, last: performance.now(),
+      x: 0, wy: COURSE.START_Y, vx: 0, speed: SKI.DRIFT, boost: 0, surge: 0,
+      air: 0, airMax: 0, rot: 0, stun: 0, arm: 0, armScored: false,
+      jumps: 0, misses: 0, hits: 0,
+      tapBase: tapCount, liftBase: liftCount, done: false, tick: 0, last: performance.now(),
     };
     $('#skiStat').textContent = '';
     clearInterval(skiTimer);
     skiTimer = setInterval(skiTick, 1000 / 60);
   });
 
-  $('#skiJump').addEventListener('pointerdown', () => {
+  // 跳躍先起跳、後結算。起跳後 0.9 秒內壓到跳台就算數——這段「容忍值」是關鍵，
+  // 提示提早出現，人的反應又有快有慢，要在起跳當下判定的話幾乎沒人跳得到。
+  function skiJump() {
     if (!ski || ski.done || ski.air > 0 || ski.stun > 0) return;
     const now = clock.serverNow() ?? Date.now();
     if (now < ski.startAt) return;
-    ski.air = SKI.AIR_TIME; ski.airStart = SKI.AIR_TIME; ski.cleanAir = true;
-    navigator.vibrate?.(20);
-  });
+    ski.air = ski.airMax = SKI.HOP_AIR;
+    ski.arm = SKI.ARM_S;
+    ski.armScored = false;
+    navigator.vibrate?.(15);
+  }
+  function skiRampHit(i) {
+    ski.obs[i].used = true;                                    // 同一座跳台只吃一次
+    ski.air = ski.airMax = SKI.RAMP_AIR;
+    ski.rot = 0;
+    ski.surge = Math.min(SKI.HARD_CAP, ski.surge + SKI.RAMP_SURGE);
+    ski.jumps++;
+    ski.arm = 0; ski.armScored = true;
+    $('#skiPadTitle').textContent = '跳台成功！';
+    $('#skiPadSub').textContent = '加速中';
+    navigator.vibrate?.([25, 25, 45]);
+  }
 
   function skiTick() {
     if (!ski) return;
@@ -675,16 +722,18 @@
 
     if (now < ski.startAt) {
       $('#skiMsg').textContent = '準備… ' + Math.ceil((ski.startAt - now) / 1000);
+      ski.tapBase = tapCount; ski.liftBase = liftCount;        // 開始前亂點不算
       return;
     }
     const remain = ski.startAt + ski.duration - now;
     if (remain <= 0) {
       if (!ski.done) {
         ski.done = true;
-        const dist = Math.round((ski.wy - COURSE.START_Y) / SKI.WORLD_PER_M);
+        const dist = Math.round((ski.wy - COURSE.START_Y) / WPM());
         sock.send({ type: 'skiDone', dist, jumps: ski.jumps, hits: ski.hits });
         $('#skiMsg').textContent = '結束！';
-        $('#skiStat').innerHTML = `滑了 <b>${dist} m</b>・跳躍 ${ski.jumps}・撞到 ${ski.hits}`;
+        $('#skiPadTitle').textContent = '結束';
+        $('#skiStat').innerHTML = `滑了 <b>${dist} m</b>・跳台 ${ski.jumps}・撞到 ${ski.hits}`;
         $('#skiSpeedBar').style.width = '0%';
         clearInterval(skiTimer);
       }
@@ -692,61 +741,92 @@
     }
     $('#skiMsg').textContent = '剩 ' + Math.ceil(remain / 1000) + ' 秒';
 
-    // 加速：每次搖動給一份 boost，boost 按比例緩降 → 平衡點 ≈ ACC×搖動頻率÷DECAY，
-    // 所以速度跟「持續搖多快」掛勾（約 4-5 下/秒才頂到上限），停手約 0.5 秒掉一半。
-    const newShakes = shakeCount - ski.shakeBase;
-    ski.shakeBase = shakeCount;
-    ski.boost = Math.min(ski.cap, ski.boost + newShakes * SKI.ACC_PER_SHAKE);
-    ski.boost = Math.max(0, ski.boost - ski.boost * SKI.DECAY * dt * (ski.stun > 0 ? 5 : 1));
-    ski.speed += (ski.boost - ski.speed) * Math.min(1, dt * 5);
+    // 抬手機＝跳躍（一幀可能累積多次，只取一次）
+    if (liftCount > ski.liftBase) { ski.liftBase = liftCount; skiJump(); }
 
-    // 轉向：空中轉向力減半（比較難修正，跳躍才有風險）
+    // 加速：連點推 boost，boost 按比例緩降 → 平衡點 ≈ 每秒點擊數 × 2.4，
+    // 上限 11；要再快只能靠跳台的 surge，surge 可以疊到 24。
+    const newTaps = tapCount - ski.tapBase;
+    ski.tapBase = tapCount;
+    ski.boost = Math.min(SKI.TAP_CAP, ski.boost + newTaps * SKI.TAP_ACC);
+    ski.boost = Math.max(0, ski.boost - ski.boost * SKI.DECAY * dt * (ski.stun > 0 ? 5 : 1));
+    ski.surge = Math.max(0, ski.surge - ski.surge * SKI.SURGE_DECAY * dt * (ski.stun > 0 ? 5 : 1));
+    const target = Math.min(SKI.HARD_CAP, SKI.DRIFT + ski.boost + ski.surge);
+    ski.speed += (target - ski.speed) * Math.min(1, dt * 4);
+
+    // 轉向：空中轉向力減半（跳起來就修不太動，這是空跳的代價）
     const t = tiltNorm();
     ski.vx = t * SKI.STEER * (ski.air > 0 ? 0.5 : 1);
     ski.x = Math.max(-COURSE.HALF_W, Math.min(COURSE.HALF_W, ski.x + ski.vx * dt));
 
-    // 前進 ＋ 跳躍
-    ski.wy += ski.speed * SKI.WORLD_PER_M * dt;
+    // 前進 ＋ 滯空
+    ski.wy += ski.speed * WPM() * dt;
     if (ski.stun > 0) ski.stun -= dt;
     if (ski.air > 0) {
       ski.air -= dt;
-      ski.rot = (1 - ski.air / ski.airStart) * Math.PI * 2;     // 滯空一圈
-      if (ski.air <= 0) {
-        ski.air = 0; ski.rot = 0;
-        if (ski.cleanAir) {
-          ski.jumps++;
-          ski.cap = Math.min(SKI.CAP_MAX, SKI.CAP_BASE + Math.floor(ski.jumps / SKI.JUMPS_PER_LEVEL) * SKI.CAP_STEP);
-          navigator.vibrate?.(35);
+      ski.rot = (1 - ski.air / ski.airMax) * Math.PI * 2;      // 滯空轉一圈
+      if (ski.air <= 0) { ski.air = 0; ski.rot = 0; }
+    }
+
+    ski.scan = COURSE.advance(ski.obs, ski.scan, ski.wy);
+
+    // 跳台結算：容忍期內壓到跳台就算跳成功
+    if (ski.arm > 0) {
+      const ri = COURSE.rampAt(ski.obs, ski.scan, ski.x, ski.wy);
+      if (ri >= 0) skiRampHit(ri);
+      else {
+        ski.arm -= dt;
+        if (ski.arm <= 0 && !ski.armScored) {                  // 空跳：白跳一次，還少轉了一段
+          ski.arm = 0; ski.misses++;
+          $('#skiPadTitle').textContent = '沒踩到跳台';
         }
       }
     }
 
     // 碰撞
-    ski.scan = COURSE.advance(ski.obs, ski.scan, ski.wy);
     const hit = COURSE.hitAt(ski.obs, ski.scan, ski.x, ski.wy, ski.air);
     if (hit >= 0 && ski.stun <= 0) {
-      ski.hits++; ski.boost *= SKI.HIT_MUL; ski.speed *= SKI.HIT_MUL;
-      ski.stun = SKI.STUN; ski.cleanAir = false;
-      ski.obs[hit].wy = -1e9;                                   // 同一棵只撞一次
+      ski.hits++;
+      ski.boost *= SKI.HIT_MUL; ski.surge *= SKI.HIT_MUL; ski.speed *= SKI.HIT_MUL;
+      ski.stun = SKI.STUN; ski.arm = 0;
+      ski.obs[hit].wy = -1e9;                                  // 同一棵只撞一次
+      $('#skiPadTitle').textContent = '撞到了！';
       navigator.vibrate?.([50, 30, 50]);
     }
 
     // 畫面回饋
-    $('#skiDist').textContent = Math.round((ski.wy - COURSE.START_Y) / SKI.WORLD_PER_M);
-    $('#skiSpeedBar').style.width = Math.min(100, (ski.speed / SKI.CAP_MAX) * 100) + '%';
-    $('#skiSpeedBar').style.background = ski.stun > 0 ? '#ef4444' : (ski.speed > ski.cap * .9 ? '#f2c14e' : '#38bdf8');
+    // 跳台預警：用當前速度換算，固定給 0.9 秒的抬手機反應時間
+    const r = COURSE.nextRamp(ski.obs, ski.scan, ski.x, ski.wy, ski.speed * WPM() * 0.55 + 110);
+    const near = !!r;
+    if (ski.stun <= 0 && ski.air <= 0 && ski.arm <= 0) {
+      $('#skiPadTitle').textContent = near ? '抬起手機！' : '連點加速';
+      $('#skiPadSub').textContent = near
+        ? (Math.abs(r.wx - ski.x) < COURSE.RAMP_X ? '正對跳台' : (r.wx < ski.x ? '跳台在左邊 ←' : '→ 跳台在右邊'))
+        : '看到跳台就把手機往上抬';
+    }
+    $('#skiPad').style.background = ski.stun > 0 ? '#7f1d1d' : (near ? '#4c1d95' : '#1f2937');
+    $('#skiDist').textContent = Math.round((ski.wy - COURSE.START_Y) / WPM());
+    $('#skiSpeedBar').style.width = Math.min(100, (ski.speed / SKI.HARD_CAP) * 100) + '%';
+    $('#skiSpeedBar').style.background = ski.stun > 0 ? '#ef4444' : (ski.surge > 1 ? '#a855f7' : (ski.speed > SKI.DRIFT + SKI.TAP_CAP * .9 ? '#f2c14e' : '#38bdf8'));
     $('#skiTiltDot').style.left = (50 + t * 44) + '%';
-    $('#skiJump').textContent = ski.air > 0 ? '空中！' : (ski.stun > 0 ? '撞到了' : '點我跳躍');
-    $('#skiStat').innerHTML = `速度上限 <b>${ski.cap.toFixed(1)}</b>・跳躍 ${ski.jumps}・撞到 ${ski.hits}`;
+    $('#skiStat').innerHTML = `速度 <b>${ski.speed.toFixed(1)}</b>・跳台 ${ski.jumps}・空跳 ${ski.misses}・撞到 ${ski.hits}`;
 
     // 10Hz 上報（host 會用 speed/vx 外推補掉延遲）
     if (++ski.tick % 6 === 0) {
       sock.send({ type: 'skiRun', x: Math.round(ski.x), wy: Math.round(ski.wy),
                   speed: +ski.speed.toFixed(2), vx: Math.round(ski.vx), air: +ski.air.toFixed(2),
-                  rot: +ski.rot.toFixed(2), jumps: ski.jumps, hits: ski.hits,
-                  cap: +ski.cap.toFixed(1), tClient: clock.serverNow() });
+                  airMax: +ski.airMax.toFixed(2), rot: +ski.rot.toFixed(2),
+                  jumps: ski.jumps, hits: ski.hits, tClient: clock.serverNow() });
     }
   }
+
+  // 測試鉤子：無感測器環境模擬連點、抬手機與傾斜
+  window.__testTap = () => { tapCount++; };
+  window.__testLift = () => { liftCount++; };
+  window.__testTilt = (deg) => { gammaF = deg; gammaZero = 0; };
+  window.__skiState = () => (ski ? { x: Math.round(ski.x), wy: Math.round(ski.wy),
+    speed: +ski.speed.toFixed(1), jumps: ski.jumps, misses: ski.misses, hits: ski.hits,
+    arm: +(ski.arm || 0).toFixed(2) } : null);
 
   sock.on('skiEnd', (m) => {
     clearInterval(skiTimer); ski = null;

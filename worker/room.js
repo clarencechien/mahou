@@ -371,11 +371,11 @@ export class RoomDO {
         if (!c) return;
         const uplinkMs = typeof msg.tClient === 'number' ? now - msg.tClient : null;
         this.log({ type: 'skiRun', clientId: ws._clientId, x: msg.x, wy: msg.wy, speed: msg.speed,
-                   vx: msg.vx, air: msg.air, jumps: msg.jumps, hits: msg.hits, cap: msg.cap,
+                   vx: msg.vx, air: msg.air, jumps: msg.jumps, hits: msg.hits,
                    tClient: msg.tClient, tServerRecv: now, uplinkMs });
         this.toHosts({ type: 'skiRun', clientId: ws._clientId, name: c.name, x: msg.x, wy: msg.wy,
-                       speed: msg.speed, vx: msg.vx, air: msg.air, rot: msg.rot, jumps: msg.jumps,
-                       hits: msg.hits, cap: msg.cap, tClient: msg.tClient, uplinkMs });
+                       speed: msg.speed, vx: msg.vx, air: msg.air, airMax: msg.airMax, rot: msg.rot,
+                       jumps: msg.jumps, hits: msg.hits, tClient: msg.tClient, uplinkMs });
         return;
       }
 

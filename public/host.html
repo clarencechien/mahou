@@ -302,8 +302,9 @@
   });
 
   const sock = new Mahou.Sock(roomId, 'host', `&hint=${encodeURIComponent(hint)}`);
+  let roomEnded = false;
   sock.onOpen(() => { $('#connState').textContent = '🟢' + ($('#connState').dataset.colo || ''); });
-  sock.ws.addEventListener('close', () => { $('#connState').textContent = '🔴'; });
+  sock.ws.addEventListener('close', () => { if (!roomEnded) $('#connState').textContent = '🔴'; });
   // DO 落點診斷：doColo 離現場越遠，RTT 地板越高
   fetch(`/whereami/${roomId}?hint=${encodeURIComponent(hint)}`).then((r) => r.json()).then((w) => {
     $('#connState').dataset.colo = ` DO@${w.doColo}·邊緣@${w.edgeColo}`;
@@ -356,6 +357,34 @@
     $('#colorPanel').style.display = stage === 'color' ? '' : 'none';
     $('#skiPanel').style.display = stage === 'ski' ? '' : 'none';
   }
+
+  // ---- 匯出：POC 唯一真正的交付物 ----
+  async function doExport() {
+    const res = await fetch(`/export/${roomId}`);
+    if (!res.ok) { alert('匯出失敗：' + res.status); return false; }
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `mahou-${roomId}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);   // 太早 revoke 會下載到空檔
+    return true;
+  }
+  $('#exportBtn').addEventListener('click', doExport);
+
+  // ---- 結束房間（計費防呆）：先自動匯出一次，再踢掉所有連線讓 DO 休眠 ----
+  $('#endBtn').addEventListener('click', async () => {
+    if (!confirm('結束房間？會先自動匯出 JSON，然後踢掉所有人。')) return;
+    await doExport();
+    sock.send({ type: 'endRoom' });
+  });
+  sock.onEnded((reason) => {
+    roomEnded = true;                 // 讓 ws close 不要把這行訊息蓋掉
+    $('#connState').textContent = `⏹ 已結束（${reason}）`;
+    document.querySelectorAll('button[data-stage], #endBtn, #gStart, #gStop').forEach((b) => (b.disabled = true));
+  });
 
   // host 也需要伺服器時鐘（滑雪倒數對齊用）
   const hostClock = new Mahou.ClockSync(sock);
@@ -504,7 +533,7 @@
       let sc = '–';
       if (curStage === 'ski') {
         const p = SKI.players.get(c.clientId);
-        if (p) sc = (p.final != null ? p.final : Math.round((p.wy - COURSE.START_Y) / WORLD_PER_M)) + 'm';
+        if (p) sc = (p.final != null ? p.final : Math.round((p.wy - COURSE.START_Y) / WPM())) + 'm';
       } else {
         const st = FZ.players.find((p) => p.clientId === c.clientId);
         if (st) sc = st.progress + (st.violations ? ' ✗' + st.violations : '');
@@ -827,7 +856,8 @@
   // ================= 遊戲二：滑雪下坡（分割畫面） =================
   // 每格一個獨立視野，全部寫進同一張 ImageData 再一次 putImageData。
   // 實測：1 格與 8 格同樣 4.3ms —— 分割數不是成本，總像素才是。
-  const SKI_DUR = 30000, WORLD_PER_M = 11;
+  const SKI_DUR = 30000;
+  const WPM = () => COURSE.WORLD_PER_M;   // 單一來源在 course.js，兩端不能各寫一份
   const SKI = { race: null, obs: [], players: new Map(), img: null, rankText: '' };
 
   $('#skiStartBtn').addEventListener('click', () => {
@@ -844,9 +874,11 @@
   });
   sock.on('skiRun', (m) => {
     let p = SKI.players.get(m.clientId);
-    if (!p) { p = { name: m.name, dispX: m.x, dispY: m.wy }; SKI.players.set(m.clientId, p); }
+    if (!p) { p = { name: m.name, dispX: m.x, dispY: m.wy, hits: 0, jumps: 0 }; SKI.players.set(m.clientId, p); }
+    if (m.hits > (p.hits || 0)) p.shake = 1;        // 撞到就抖一下那一格
+    if (m.jumps > (p.jumps || 0)) p.flash = 1;      // 上跳台就閃一下
     Object.assign(p, { name: m.name, x: m.x, wy: m.wy, speed: m.speed, vx: m.vx,
-                       air: m.air, rot: m.rot, jumps: m.jumps, hits: m.hits, cap: m.cap,
+                       air: m.air, airMax: m.airMax, rot: m.rot, jumps: m.jumps, hits: m.hits,
                        at: performance.now(), uplinkMs: m.uplinkMs });
   });
   sock.on('skiDone', (m) => {
@@ -912,16 +944,19 @@
       let wy = COURSE.START_Y, x = 0, speed = 0, air = 0, rot = 0;
       if (p) {
         const lag = Math.min(0.6, (performance.now() - p.at) / 1000);
-        wy = p.final != null ? p.wy : p.wy + p.speed * WORLD_PER_M * lag;
+        wy = p.final != null ? p.wy : p.wy + p.speed * WPM() * lag;
         x = Math.max(-COURSE.HALF_W, Math.min(COURSE.HALF_W, p.x + p.vx * lag));
         speed = p.speed; air = p.air; rot = p.rot;
         p.dispX += (x - p.dispX) * 0.35;       // 平滑，避免 10Hz 的階梯感
         p.dispY += (wy - p.dispY) * 0.35;
         x = p.dispX; wy = p.dispY;
       }
+      // 速度越快 f 越小＝視野越廣，畫面兩側的東西掃得更兇，這是最省力的速度感
+      const sp01 = Math.max(0, Math.min(1, speed / 20));
       const vp = { x: Math.round(v.x), y: Math.round(v.y), w: vw, h: vh,
-                   horizon: Math.round(vh * 0.34), scroll: wy - COURSE.START_Y, camX: x, f: 90,
-                   c, p, speed, air, rot, idx: i };
+                   horizon: Math.round(vh * 0.34), scroll: wy - COURSE.START_Y, camX: x,
+                   f: 94 - sp01 * 16,
+                   c, p, speed, air, rot, sp01, idx: i };
       MODE7.renderInto(img, FW, SKI.world, vp);
       vps.push(vp);
     });
@@ -942,7 +977,32 @@
         const pr = MODE7.project(vp, o.wx, o.wy - COURSE.START_Y);
         if (!pr || pr.sy < vp.y + vp.horizon || pr.sy > vp.y + vp.h + 40) continue;
         const sc = Math.max(1, pr.k * 46);
-        if (o.rock) {
+        if (sc > 3) {                                        // 落地陰影，不然全部像浮在雪上
+          fctx.fillStyle = 'rgba(70,100,140,.28)';
+          fctx.beginPath();
+          fctx.ellipse(pr.sx, pr.sy, sc * (o.ramp ? .8 : .42), sc * .14, 0, 0, Math.PI * 2);
+          fctx.fill();
+        }
+        if (o.ramp) {
+          // 跳台：由近而遠收縮的坡面＋抬高的起跳唇＋兩支旗子。
+          // 雪地上唯一的暗色塊＝一眼看得到（明度對比，不靠色相；風格聖經 §3）
+          const w2 = sc * 1.5, deck = sc * .5, lip = sc * .34;
+          const nx = w2 / 2, fx = w2 * .3, fy = pr.sy - deck;
+          fctx.fillStyle = '#33507d';                        // 坡面
+          fctx.beginPath();
+          fctx.moveTo(pr.sx - nx, pr.sy); fctx.lineTo(pr.sx + nx, pr.sy);
+          fctx.lineTo(pr.sx + fx, fy); fctx.lineTo(pr.sx - fx, fy);
+          fctx.closePath(); fctx.fill();
+          fctx.fillStyle = '#4a6ea8';                        // 唇：立起來的那一面
+          fctx.fillRect(pr.sx - fx, fy - lip, fx * 2, lip);
+          fctx.fillStyle = '#eaf4ff';                        // 起跳邊緣的亮線
+          fctx.fillRect(pr.sx - fx, fy - lip - Math.max(1, sc * .1), fx * 2, Math.max(1, sc * .1));
+          fctx.fillStyle = '#e8604c';                        // 旗子：遠遠就認得出來
+          for (const sgn of [-1, 1]) {
+            fctx.fillRect(pr.sx + sgn * nx - Math.max(1, sc * .05), pr.sy - sc * .8, Math.max(1, sc * .07), sc * .8);
+            fctx.fillRect(pr.sx + sgn * nx, pr.sy - sc * .8, sgn * sc * .26, sc * .22);
+          }
+        } else if (o.rock) {
           fctx.fillStyle = '#5b6470'; fctx.fillRect(pr.sx - sc * .45, pr.sy - sc * .5, sc * .9, sc * .5);
           fctx.fillStyle = '#79838f'; fctx.fillRect(pr.sx - sc * .3, pr.sy - sc * .45, sc * .45, sc * .18);
         } else {
@@ -954,14 +1014,55 @@
           }
         }
       }
+      // 速度線：從消失點往外掃的短白條，只在夠快時出現
+      if (vp.sp01 > 0.35) {
+        const cx = vp.x + vp.w / 2, cy = vp.y + vp.horizon;
+        const n = Math.round(4 + vp.sp01 * 8);
+        fctx.globalAlpha = (vp.sp01 - 0.35) / 0.65 * 0.5;
+        fctx.strokeStyle = '#ffffff'; fctx.lineWidth = 1;
+        for (let k = 0; k < n; k++) {
+          const ph = ((performance.now() / 260) + k / n) % 1;   // 由中心往外加速展開
+          const r0 = Math.pow(ph, 2.2) * vp.w * .95;
+          if (r0 < vp.w * .12) continue;
+          const ang = (k / n) * Math.PI * 2 + k * 1.7;
+          const dx = Math.cos(ang), dy = Math.sin(ang) * .55;
+          fctx.beginPath();
+          fctx.moveTo(cx + dx * r0, cy + dy * r0);
+          fctx.lineTo(cx + dx * (r0 + vp.w * .1), cy + dy * (r0 + vp.w * .1));
+          fctx.stroke();
+        }
+        fctx.globalAlpha = 1;
+      }
       // 玩家角色固定在畫面下方中央，轉向靠傾身（左右側身）
       if (vp.p) {
         const lean = Math.max(-1, Math.min(1, (vp.p.vx || 0) / 180));
         const dir = lean < -.35 ? 'left' : lean > .35 ? 'right' : 'back';
         const frame = Math.floor(performance.now() / 110) % 4;
         const scale = Math.max(.40, (vp.h / 216) * 0.9);          // 角色高度約佔格高 27%
-        const feetY = vp.y + vp.h * 0.90 - (vp.air > 0 ? vp.air * vp.h * 0.30 : 0);
-        CHARA.drawSki(fctx, vp.idx, dir, frame, vp.x + vp.w / 2 + lean * vp.w * .06, feetY, scale, vp.rot || 0);
+        // 滯空高度用拋物線，落地才有重量感；airMax 讓小跳與跳台的高度差得出來
+        const am = vp.p.airMax || 0.42;
+        const arc = vp.air > 0 ? Math.sin(Math.PI * (1 - vp.air / am)) * (0.16 + am * 0.26) : 0;
+        const sh = vp.p.shake || 0;
+        const jx = sh > 0 ? (Math.random() - .5) * 6 * sh : 0;
+        const jy = sh > 0 ? (Math.random() - .5) * 5 * sh : 0;
+        const feetY = vp.y + vp.h * (0.90 - arc) + jy;
+        const cx0 = vp.x + vp.w / 2 + lean * vp.w * .06 + jx;
+        const gy = vp.y + vp.h * 0.90 + jy;                  // 影子留在地面，跳起來才看得出高度
+        fctx.fillStyle = `rgba(70,100,140,${0.3 - arc * 0.5})`;
+        fctx.beginPath();
+        fctx.ellipse(cx0, gy, 15 * scale, 4 * scale, 0, 0, Math.PI * 2);
+        fctx.fill();
+        CHARA.drawSki(fctx, vp.idx, dir, frame, cx0, feetY, scale, vp.rot || 0);
+        if (vp.p.flash > 0) {                                    // 上跳台：整格閃一下紫光
+          fctx.fillStyle = `rgba(168,85,247,${vp.p.flash * .35})`;
+          fctx.fillRect(vp.x, vp.y, vp.w, vp.h);
+          vp.p.flash = Math.max(0, vp.p.flash - 0.06);
+        }
+        if (sh > 0) {
+          fctx.fillStyle = `rgba(239,68,68,${sh * .28})`;
+          fctx.fillRect(vp.x, vp.y, vp.w, vp.h);
+          vp.p.shake = Math.max(0, sh - 0.05);
+        }
       }
       fctx.restore();
     }
