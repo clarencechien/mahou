@@ -93,6 +93,58 @@
   }
   #bigCenter .t { font-size: 3.4rem; font-weight: 900; letter-spacing: .02em; }
   #bigCenter .s { color: #cbd5e1; font-size: 1rem; margin-top: 6px; }
+
+  /* HUD 一律用 DOM 文字：canvas 只畫像素場景，文字才會清晰 */
+  #hudTop {
+    left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 16px;
+    padding: 12px 20px; background: linear-gradient(rgba(6,9,17,.92), rgba(6,9,17,.55) 78%, transparent);
+  }
+  #hudRound { font-family: ui-monospace, monospace; font-size: .95rem; color: #94a3b8; letter-spacing: .06em; white-space: nowrap; }
+  #hudCmd { flex: 1; text-align: center; font-size: 2.1rem; font-weight: 800; letter-spacing: .02em; text-shadow: 0 2px 12px rgba(0,0,0,.7); }
+  #hudCmd.red { color: #ff6b5a; }
+  #hudBar { position: absolute; left: 50%; transform: translateX(-50%); bottom: 4px; width: 260px; height: 4px; background: rgba(255,255,255,.16); border-radius: 3px; overflow: hidden; }
+  #hudBar i { display: block; height: 100%; background: #4fc75a; border-radius: 3px; }
+
+  /* 吟唱：像對話框，否則「一」「二」在天空中只是兩條孤立筆畫 */
+  #chant {
+    left: 50%; transform: translateX(-50%); display: flex; gap: 4px; align-items: center;
+    background: rgba(10,14,26,.86); border: 2px solid rgba(255,214,102,.5); border-radius: 14px;
+    padding: 8px 18px; opacity: 0; transition: opacity .18s;
+  }
+  #chant.show { opacity: 1; }
+  #chant::after {                                  /* 對話框的小尾巴，指向鬼 */
+    content: ''; position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%);
+    border: 9px solid transparent; border-top-color: rgba(255,214,102,.5); border-bottom: 0;
+  }
+  #chant span {
+    font-size: 2.4rem; font-weight: 900; color: #fff5cc; opacity: .18; transform: scale(.82);
+    padding: 0 6px; transition: opacity .12s, transform .16s cubic-bezier(.2,1.6,.4,1), color .12s;
+  }
+  #chant span.on { opacity: 1; transform: scale(1); text-shadow: 0 0 18px rgba(255,220,120,.75); }
+  #chant span.last { font-size: 2.4rem; letter-spacing: .02em; }
+  #chant span.last.on { color: #ffd166; transform: scale(1.12); }
+
+  .nameTag {
+    position: absolute; transform: translate(-50%, -100%); white-space: nowrap;
+    font-size: .95rem; font-weight: 700; padding: 3px 9px; border-radius: 7px;
+    background: rgba(8,12,22,.82); border: 1px solid rgba(255,255,255,.14);
+    text-shadow: 0 1px 4px rgba(0,0,0,.8); pointer-events: none;
+  }
+  .nameTag b { font-family: ui-monospace, monospace; font-weight: 600; margin-left: 6px; color: #94a3b8; font-size: .82em; }
+  .nameTag.bad { border-color: #ef4444; }
+
+  #joinCard { cursor: pointer; transition: transform .25s cubic-bezier(.2,1.2,.4,1), opacity .25s; }
+  #joinCard .hintline { color: #64748b; font-size: .7rem; margin-top: 3px; }
+  #qrBig {
+    position: absolute; inset: 0; background: rgba(4,7,14,.93); display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 18px; z-index: 9; cursor: pointer;
+  }
+  #qrBig.on { display: flex; }
+  #qrBig .box { background: #fff; padding: 18px; border-radius: 18px; line-height: 0; }
+  #qrBig .box img, #qrBig .box canvas { width: min(46vh, 380px); height: min(46vh, 380px); display: block; }
+  #qrBig .code { font-family: ui-monospace, monospace; font-size: 3.6rem; font-weight: 800; letter-spacing: .2em; color: #7dd3fc; }
+  #qrBig .u { color: #94a3b8; font-size: 1rem; }
+  #qrBig .x { color: #64748b; font-size: .85rem; }
 </style>
 </head>
 <body>
@@ -112,13 +164,28 @@
 <div id="gameView" class="view on">
   <div id="gameWrap">
     <canvas id="gameCv"></canvas>
+    <div id="nameLayer" class="ovl" style="inset:0"></div>
+    <div id="hudTop" class="ovl">
+      <div id="hudRound">ROUND 00/10</div>
+      <div id="hudCmd"></div>
+      <div class="spacer" style="visibility:hidden; font-family:ui-monospace,monospace; font-size:.95rem; letter-spacing:.06em">ROUND 00/10</div>
+      <div id="hudBar"><i style="width:0%"></i></div>
+    </div>
+    <div id="chant" class="ovl"></div>
     <div id="bigCenter" class="ovl"><div class="t" id="bcTitle"></div><div class="s" id="bcSub"></div></div>
     <div id="joinCard" class="ovl card">
       <div class="qrbox" id="qrGame"></div>
       <div>
         <div class="code" id="gameRoom">····</div>
         <div class="u" id="gameUrl"></div>
+        <div class="hintline">點一下放大 QR</div>
       </div>
+    </div>
+    <div id="qrBig">
+      <div class="box" id="qrHuge"></div>
+      <div class="code" id="qrBigCode">····</div>
+      <div class="u" id="qrBigUrl"></div>
+      <div class="x">點任一處關閉</div>
     </div>
     <div id="playerStrip" class="ovl"></div>
     <div id="gameCtl" class="ovl">
@@ -200,6 +267,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="/engine/chara.js"></script>
+<script src="/engine/sfx.js"></script>
 <script src="/engine/mode7.js"></script>
 <script src="/shared.js"></script>
 <script>
@@ -365,6 +433,7 @@
   sock.on('freezeState', (m) => { FZ.players = m.players; });
   sock.on('freezeEnd', (m) => {
     FZ.running = false;
+    SFX.win();
     $('#freezeRank').innerHTML = '🏁 ' + (m.rank || []).map((p, i) =>
       `${i + 1}. <b>${esc(p.name)}</b> 前進 ${p.progress}・犯規 ${p.violations}`).join(' · ');
   });
@@ -383,6 +452,15 @@
     $('#tabAdmin').classList.toggle('on', v === 'admin');
     if (v === 'game') fitCanvas();
   }
+  // QR：點一下放大讓全場掃，開場自動縮小
+  $('#qrBigCode').textContent = roomId;
+  $('#qrBigUrl').textContent = clientUrl.replace(/^https?:\/\//, '');
+  try { new QRCode($('#qrHuge'), { text: clientUrl, width: 380, height: 380 }); }
+  catch (e) { $('#qrHuge').textContent = 'QR 失敗'; }
+  const showQR = (on) => $('#qrBig').classList.toggle('on', on);
+  $('#joinCard').addEventListener('click', () => showQR(true));
+  $('#qrBig').addEventListener('click', () => showQR(false));
+
   $('#tabGame').addEventListener('click', () => setView('game'));
   $('#tabAdmin').addEventListener('click', () => setView('admin'));
   $('#fsBtn').addEventListener('click', () => {
@@ -393,7 +471,12 @@
   document.addEventListener('fullscreenchange', () => setTimeout(fitCanvas, 60));
 
   // 遊戲檢視的開始鈕＝管理檢視那顆的同義詞
-  $('#gStart').addEventListener('click', () => $('#freezeStartBtn').click());
+  $('#gStart').addEventListener('click', () => {
+    SFX.init();                       // AudioContext 必須由使用者手勢啟動
+    showQR(false);                    // 開場自動收起放大的 QR
+    SFX.go();
+    $('#freezeStartBtn').click();
+  });
   $('#gStop').addEventListener('click', () => { FZ.running = false; sock.send({ type: 'freezeEnd' }); });
 
   function renderPlayerStrip() {
@@ -418,7 +501,8 @@
     const playing = FZ.running;
     $('#gStart').style.display = playing ? 'none' : '';
     $('#gStop').style.display = playing ? '' : 'none';
-    $('#joinCard').style.transform = playing ? 'scale(.82)' : 'scale(1)';
+    $('#joinCard').style.transform = playing ? 'scale(.62)' : 'scale(1)';
+    $('#joinCard').style.opacity = playing ? '.75' : '1';
     $('#joinCard').style.transformOrigin = 'left bottom';
     renderPlayerStrip(); renderCenter();
   }
@@ -438,7 +522,7 @@
   }
   addEventListener('resize', fitCanvas);
   setTimeout(fitCanvas, 0);
-  let groundCv = null;
+  let groundCv = null, lastItems = [];
   function buildGround() {
     groundCv = document.createElement('canvas');
     groundCv.width = FW; groundCv.height = FH;
@@ -477,38 +561,96 @@
       const walking = FZ.green && FZ.running;
       const frame = walking ? (Math.floor(t * 7 + it.i) % 4) : 0;
       CHARA.drawFeet(fctx, it.i, 'back', frame, it.cx, it.feetY, it.u);
-      const h = 32 * it.u;
-      fctx.font = 'bold ' + (it.u === 2 ? 11 : 9) + 'px "Noto Sans TC",sans-serif';
-      fctx.textAlign = 'center';
-      fctx.fillStyle = 'rgba(10,12,24,.65)';
-      const nw = fctx.measureText(it.c.name).width + 8;
-      fctx.fillRect(it.cx - nw / 2, it.feetY - h - 12, nw, 12);
-      fctx.fillStyle = CHARA.PLAYERS[it.i % 8].accent2;
-      fctx.fillText(it.c.name, it.cx, it.feetY - h - 3);
-      if (it.st.violations) {
-        fctx.fillStyle = '#ff5a5a';
-        fctx.fillText('✗'.repeat(Math.min(3, it.st.violations)), it.cx, it.feetY + 10);
-      }
-      fctx.textAlign = 'start';
     }
-
-    // HUD：指令橫幅 ＋ 相位條
-    const label = !FZ.running ? '按開始' : (FZ.green ? (FZ.cmd ? FZ.cmd.label : '') : '不要動');
-    const col = !FZ.running ? '#94a3b8' : (FZ.green ? '#f2f4f8' : '#ff6b5a');
-    fctx.fillStyle = 'rgba(8,10,20,.86)'; fctx.fillRect(0, 0, FW, 30);
-    fctx.font = 'bold 18px "Noto Sans TC",sans-serif'; fctx.textAlign = 'center';
-    fctx.fillStyle = col; fctx.fillText(label, FW / 2, 21);
-    fctx.font = 'bold 10px ui-monospace,monospace'; fctx.fillStyle = '#94a3b8';
-    fctx.textAlign = 'start'; fctx.fillText('ROUND ' + String(FZ.round).padStart(2, '0') + '/10', 6, 20);
-    if (FZ.running) {
-      const left = Math.max(0, (FZ.phaseEnd - performance.now()) / FZ.phaseLen);
-      fctx.fillStyle = 'rgba(255,255,255,.16)'; fctx.fillRect(FW / 2 - 70, 32, 140, 3);
-      fctx.fillStyle = FZ.green ? '#4fc75a' : '#ff6b5a'; fctx.fillRect(FW / 2 - 70, 32, 140 * left, 3);
-    }
-    fctx.textAlign = 'start';
+    // 名牌與 HUD 全部交給 DOM（canvas 只畫像素場景，文字才不會被放大糊掉）
+    lastItems = items;
     requestAnimationFrame(freezeDraw);
   }
   requestAnimationFrame(freezeDraw);
+
+  // ---------------- DOM 疊層：名牌 / HUD / 一二三木頭人 ----------------
+  const CHANT = ['一', '二', '三', '木頭人！'];
+  const chantEl = $('#chant');
+  chantEl.innerHTML = CHANT.map((c, i) => `<span class="${i === 3 ? 'last' : ''}">${c}</span>`).join('');
+  const chantSpans = [...chantEl.querySelectorAll('span')];
+  let chantShown = -1, lastGreen = null;
+
+  const tagPool = [];
+  function updateOverlay() {
+    const wrap = $('#gameWrap');
+    const cr = fcv.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+    const k = fcv.clientWidth / FW;
+    const ox = cr.left - wr.left, oy = cr.top - wr.top;
+
+    // 名牌：跟著角色頭頂，用 DOM 文字所以永遠清晰、可放五個字
+    lastItems.forEach((it, i) => {
+      let el = tagPool[i];
+      if (!el) { el = document.createElement('div'); el.className = 'nameTag'; wrap.appendChild(el); tagPool[i] = el; }
+      el.style.display = '';
+      el.style.left = (ox + it.cx * k) + 'px';
+      el.style.top = (oy + (it.feetY - 32 * it.u - 4) * k) + 'px';
+      el.style.color = CHARA.PLAYERS[it.i % 8].accent2;
+      el.classList.toggle('bad', !!it.st.violations);
+      const v = it.st.violations ? ' ✗'.repeat(Math.min(3, it.st.violations)) : '';
+      el.innerHTML = esc(it.c.name) + '<b>' + it.st.progress + v + '</b>';
+    });
+    for (let i = lastItems.length; i < tagPool.length; i++) tagPool[i].style.display = 'none';
+
+    // 頂部 HUD
+    $('#hudRound').textContent = 'ROUND ' + String(FZ.round).padStart(2, '0') + '/10';
+    const cmdEl = $('#hudCmd');
+    if (!FZ.running) { cmdEl.textContent = ''; cmdEl.classList.remove('red'); }
+    else if (FZ.green) { cmdEl.textContent = FZ.cmd ? FZ.cmd.label : ''; cmdEl.classList.remove('red'); }
+    else { cmdEl.textContent = '不要動！'; cmdEl.classList.add('red'); }
+    const bar = $('#hudBar').firstElementChild;
+    if (FZ.running) {
+      const left = Math.max(0, Math.min(1, (FZ.phaseEnd - performance.now()) / FZ.phaseLen));
+      bar.style.width = (left * 100) + '%';
+      bar.style.background = FZ.green ? '#4fc75a' : '#ff6b5a';
+    } else bar.style.width = '0%';
+
+    // 吟唱框跟著鬼的頭頂（鬼在 FW/2、腳底 FHZ+34、身高 64）
+    chantEl.style.left = (ox + (FW / 2) * k) + 'px';
+    chantEl.style.top = (oy + (FHZ + 34 - 64 - 4) * k) + 'px';   // 貼在鬼頭頂上方一點，別壓到 HUD
+    chantEl.style.transform = 'translate(-50%, -100%)';
+
+    // 一二三木頭人：綠燈期間逐字出現，最後一字後留一段緊張時間才轉身
+    if (FZ.running && FZ.green) {
+      chantEl.classList.add('show');
+      const elapsed = 1 - Math.max(0, (FZ.phaseEnd - performance.now()) / FZ.phaseLen);
+      const idx = elapsed < .15 ? -1 : elapsed < .36 ? 0 : elapsed < .57 ? 1 : elapsed < .78 ? 2 : 3;
+      if (idx !== chantShown) {
+        chantShown = idx;
+        chantSpans.forEach((sp, i) => sp.classList.toggle('on', i <= idx));
+        if (idx >= 0) SFX.chant(idx);
+      }
+    } else {
+      if (lastGreen === true && FZ.running) { SFX.turn(); }     // 剛轉身
+      chantEl.classList.remove('show');
+      if (chantShown !== -1) { chantShown = -1; chantSpans.forEach((sp) => sp.classList.remove('on')); }
+    }
+    lastGreen = FZ.running ? FZ.green : null;
+
+    requestAnimationFrame(updateOverlay);
+  }
+  requestAnimationFrame(updateOverlay);
+
+  // 音效：DO 回報時發聲
+  sock.on('freezeVerdictBroadcast', () => {});
+  const _origFreezeState = sock.handlers['freezeState'];
+  sock.on('freezeState', (m) => {
+    const before = FZ.players;
+    if (_origFreezeState) _origFreezeState(m);
+    FZ.players = m.players;
+    // 有人前進＝清脆音；有人犯規＝被抓音
+    for (const p of m.players) {
+      const old = before.find((x) => x.clientId === p.clientId);
+      if (!old) continue;
+      if (p.progress > old.progress) SFX.ok();
+      else if (p.violations > old.violations) SFX.caught();
+      else if (p.progress < old.progress) SFX.bad();
+    }
+  });
 
   // ================= 遊戲一：顏色反應 =================
   // CIELAB(D65) → sRGB，ΔE 用 CIE76（Lab 空間歐氏距離），POC 足夠

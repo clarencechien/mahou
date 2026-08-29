@@ -138,7 +138,7 @@ export class RoomDO {
         const prev = this.clients.get(clientId);
         const c = {
           ws,
-          name: String(msg.name || '?').slice(0, 8),
+          name: String(msg.name || '?').slice(0, 10),
           device: msg.device || null,
           sync: prev?.sync || null,
           spam: { expected: 0, received: 0, seqs: new Set() },

@@ -66,10 +66,13 @@
 
 <!-- 步驟 1：加入 -->
 <section id="st-join" class="stage active">
-  <p class="hint">輸入暱稱（兩個字以內）</p>
-  <input id="nick" maxlength="2" placeholder="暱稱" autocomplete="off">
+  <p class="hint">輸入暱稱（五個字以內）</p>
+  <input id="nick" maxlength="5" placeholder="暱稱" autocomplete="off" autocapitalize="off" spellcheck="false">
   <button id="joinBtn">加入房間</button>
   <p class="hint" id="joinMsg"></p>
+  <p class="hint" id="iosTip" style="display:none; font-size:.82rem; line-height:1.6; color:#6b7280">
+    iPhone 若遊戲中一直跳出「還原輸入」：<br>設定 → 輔助使用 → 觸控 → 關閉「搖動以還原」
+  </p>
 </section>
 
 <!-- 大廳：等 host 切關卡 -->
@@ -171,6 +174,7 @@
   }
 
   Mahou.keepAwake();
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent)) $('#iosTip').style.display = '';
 
   // clientId 存 sessionStorage，斷線重整後身分不變
   const idKey = 'mahou-cid-' + roomId;
@@ -186,7 +190,7 @@
 
   sock.onOpen(() => {
     $('#connDot').className = 'light good';
-    if (joined) doJoin(); // 重連自動重新加入
+    if (joined) doJoin(); // 重連自動重新加入（input 已移除，用記住的 myName）
   });
   sock.ws.addEventListener('close', () => { $('#connDot').className = 'light bad'; });
   // 房間被結束（host 按鈕或閒置逾時）：停掉所有背景流量，讓 DO 能被回收
@@ -199,16 +203,26 @@
 
   // ---- 步驟 1：加入 ----
   function doJoin() {
-    sock.send({ type: 'join', clientId, name: $('#nick').value.trim() || '客', device });
+    const nk = $('#nick');
+    if (nk && nk.value.trim()) myName = nk.value.trim();
+    sock.send({ type: 'join', clientId, name: myName, device });
   }
   $('#joinBtn').addEventListener('pointerdown', () => {
-    if (!$('#nick').value.trim()) { $('#joinMsg').textContent = '先填暱稱'; return; }
+    const nk = $('#nick');
+    if (nk && !nk.value.trim()) { $('#joinMsg').textContent = '先填暱稱'; return; }
     $('#joinMsg').textContent = '加入中…';
     doJoin();
   });
+  let myName = '客';
   sock.on('joined', async (m) => {
     joined = true;
-    $('#lobbyName').textContent = $('#nick').value.trim() || '客';
+    myName = ($('#nick') && $('#nick').value.trim()) || myName;
+    // iOS「搖動以還原」只在有輸入紀錄（undo stack）時觸發。這遊戲要一直搖手機，
+    // 所以加入後立刻 blur 並把 input 從 DOM 移除，清掉 undo 情境。
+    const nk = $('#nick');
+    if (nk) { nk.blur(); nk.remove(); }
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    $('#lobbyName').textContent = myName;
     setStage(m.stage || 'lobby');
     // 進場自動對時（N=10 取最小 RTT），之後每 10 秒背景重測記漂移
     await clock.sync(10);
