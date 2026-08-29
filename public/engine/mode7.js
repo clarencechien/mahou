@@ -75,6 +75,48 @@
     return pal[idx];
   }
 
+  // 分割畫面用：把一格視野畫進共用 ImageData 的子矩形。
+  // 一次 putImageData 就能上完所有格子——分割數不是成本，總像素才是。
+  // vp: {x,y,w,h,horizon,scroll,camX,f=90}
+  M7.renderInto = function (img, fullW, world, vp) {
+    const d = img.data, kind = world.kind;
+    const f = vp.f || 90, hz = vp.horizon, camX = vp.camX || 0, scroll = vp.scroll || 0;
+    const sky = SKY[kind], far = FAR[kind];
+    for (let ly = 0; ly < vp.h; ly++) {
+      let o = ((vp.y + ly) * fullW + vp.x) * 4;
+      if (ly <= hz) {
+        const t = ly / hz;
+        const r = Math.round(sky[0] * (1 - t * .12)), g = Math.round(sky[1] * (1 - t * .05)), b = sky[2];
+        for (let lx = 0; lx < vp.w; lx++) { d[o++] = r; d[o++] = g; d[o++] = b; d[o++] = 255; }
+        continue;
+      }
+      const dy = ly - hz, z = f / dy, wy = z * 165 + scroll;
+      for (let lx = 0; lx < vp.w; lx++) {
+        const wx = (lx - vp.w / 2) * z / f * 112 + camX;
+        const rgb = z > 22 ? far : sample(world, kind, wx, wy);
+        d[o++] = rgb[0]; d[o++] = rgb[1]; d[o++] = rgb[2]; d[o++] = 255;
+      }
+    }
+  };
+
+  // 世界座標 → 該格的螢幕座標。從 renderInto 的投影式反推：
+  //   wy = z*165 + scroll        → z  = (wy - scroll) / 165
+  //   wx = (lx - w/2)*z/f*112+camX → lx = w/2 + (wx-camX)*f/(z*112)
+  //   sy = horizon + f/z
+  M7.project = function (vp, wx, wy) {
+    const f = vp.f || 90;
+    const z = (wy - (vp.scroll || 0)) / 165;
+    if (z <= 0.05) return null;                       // 在鏡頭後面
+    const dy = f / z;
+    if (dy > vp.h * 3) return null;                   // 太近，已經衝出畫面
+    return {
+      sx: vp.x + vp.w / 2 + (wx - (vp.camX || 0)) * f / (z * 112),
+      sy: vp.y + vp.horizon + dy,
+      k: dy / (f / 1),                                // 尺寸係數（z=1 時為 1）
+      z,
+    };
+  };
+
   // opts: {W,H,horizon,scroll,f=90,sky:true}
   M7.render = function (ctx, world, opts) {
     const W = opts.W, H = opts.H, horizon = opts.horizon, f = opts.f || 90;

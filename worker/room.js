@@ -15,7 +15,7 @@ const MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const FREEZE_GRACE_MS = 250;   // 轉身後給人類的煞車時間，超過才算犯規
 const MEANINGFUL = new Set(['join', 'deviceUpdate', 'tap', 'spamStart', 'spamDone', 'shake', 'batch', 'stage',
   'colorRound', 'colorPick', 'colorEnd', 'skiStart', 'skiRun', 'skiDone',
-  'freezeStart', 'freezeRound', 'freezeTurn', 'freezeAct', 'freezeEnd']);
+  'freezeStart', 'freezeRound', 'freezeTurn', 'freezeAct', 'freezeEnd', 'skiEnd']);
 
 export class RoomDO {
   constructor(state, env) {
@@ -27,6 +27,7 @@ export class RoomDO {
     this.stage = 'lobby';
     this.colorRound = null; // {round, deltaE, targetIdx, tShow, picks:Set, correctN}
     this.freeze = null;     // {round, cmd, tGreen, tTurn, players:Map<id,{progress,violations,done}>}
+    this.ski = null;        // {startAt, duration, seed, results:Map}
     this.events = [];
     this.createdAt = Date.now();
     this.lastActivity = Date.now();
@@ -352,30 +353,49 @@ export class RoomDO {
       }
 
       // ---- 遊戲二：滑雪下坡 ----
+      // client 權威：手機跑完整物理，DO 只發種子（保證兩端世界一致）、轉發、記遙測。
+      // host 收到狀態後用回報的速度外推 ~RTT，所以大螢幕上的位置幾乎即時。
       case 'skiStart': {
         if (ws._role !== 'host') return;
-        const startAt = now + 3500; // 各端用伺服器時鐘對齊倒數
+        const startAt = now + 4200;                        // 倒數 ＋ 校準時間
         const duration = Math.min(msg.duration | 0 || 30000, 120000);
-        this.log({ type: 'skiStart', startAt, duration });
-        this.broadcastAll({ type: 'skiStart', startAt, duration });
+        const seed = (Math.random() * 0x7fffffff) | 0;
+        this.ski = { startAt, duration, seed, results: new Map() };
+        this.log({ type: 'skiStart', startAt, duration, seed });
+        this.broadcastAll({ type: 'skiStart', startAt, duration, seed });
         return;
       }
 
       case 'skiRun': {
         const c = this.clients.get(ws._clientId);
         if (!c) return;
-        const uplinkMs = typeof msg.tClientSend === 'number' ? now - msg.tClientSend : null;
-        // 距離由 client 積分、伺服器只轉發（handoff §6：先測「完全信任 client」版本）
-        this.log({ type: 'skiRun', clientId: ws._clientId, speed: msg.speed, distance: msg.distance, shakeRate: msg.shakeRate, tClientSend: msg.tClientSend, tServerRecv: now, uplinkMs });
-        this.toHosts({ type: 'skiRun', clientId: ws._clientId, name: c.name, speed: msg.speed, distance: msg.distance, uplinkMs });
+        const uplinkMs = typeof msg.tClient === 'number' ? now - msg.tClient : null;
+        this.log({ type: 'skiRun', clientId: ws._clientId, x: msg.x, wy: msg.wy, speed: msg.speed,
+                   vx: msg.vx, air: msg.air, jumps: msg.jumps, hits: msg.hits, cap: msg.cap,
+                   tClient: msg.tClient, tServerRecv: now, uplinkMs });
+        this.toHosts({ type: 'skiRun', clientId: ws._clientId, name: c.name, x: msg.x, wy: msg.wy,
+                       speed: msg.speed, vx: msg.vx, air: msg.air, rot: msg.rot, jumps: msg.jumps,
+                       hits: msg.hits, cap: msg.cap, tClient: msg.tClient, uplinkMs });
         return;
       }
 
       case 'skiDone': {
         const c = this.clients.get(ws._clientId);
-        if (!c) return;
-        this.log({ type: 'skiDone', clientId: ws._clientId, distance: msg.distance });
-        this.toHosts({ type: 'skiDone', clientId: ws._clientId, name: c.name, distance: msg.distance });
+        if (!c || !this.ski) return;
+        this.ski.results.set(ws._clientId, { dist: msg.dist, jumps: msg.jumps, hits: msg.hits });
+        this.log({ type: 'skiDone', clientId: ws._clientId, dist: msg.dist, jumps: msg.jumps, hits: msg.hits });
+        this.toHosts({ type: 'skiDone', clientId: ws._clientId, name: c.name, dist: msg.dist, jumps: msg.jumps, hits: msg.hits });
+        return;
+      }
+
+      case 'skiEnd': {
+        if (ws._role !== 'host' || !this.ski) return;
+        const rank = [...this.ski.results.entries()]
+          .map(([id, r]) => ({ clientId: id, name: this.clients.get(id)?.name || '?', ...r }))
+          .sort((a, b) => b.dist - a.dist);
+        this.log({ type: 'skiEnd', rank });
+        this.broadcastAll({ type: 'skiEnd', rank });
+        this.ski = null;
         return;
       }
 
