@@ -50,6 +50,26 @@
   .appbar .right button { padding: 8px 14px; font-size: .9rem; }
   .dot { font-size: .78rem; color: #64748b; font-family: ui-monospace, monospace; }
 
+  /* 遊戲控制搬到頂列：底部留給畫面，不要再壓掉一條 */
+  #gameCtl { display: flex; gap: 8px; align-items: center; margin-left: 24px; }
+  #gamePick { display: flex; gap: 5px; }
+  #gamePick button { padding: 7px 13px; font-size: .88rem; background: #16233c; border: 1px solid #27395c; }
+  #gamePick button.on { background: #334d7a; border-color: #4a6ea8; color: #fff; }
+  #gameCtl button.go { background: #2563eb; padding: 8px 20px; font-size: .95rem; font-weight: 700; }
+  #gameCtl button#gStop { background: #7f1d1d; padding: 8px 20px; font-size: .95rem; }
+
+  /* 全螢幕：頂列變成會自己收起來的浮層，畫面吃滿整個螢幕 */
+  body.fs .appbar {
+    position: fixed; left: 0; right: 0; top: 0;
+    background: rgba(8,12,22,.82); backdrop-filter: blur(6px); border-bottom-color: rgba(60,80,120,.4);
+    transform: translateY(-102%); transition: transform .22s ease; will-change: transform;
+  }
+  body.fs.showbar .appbar { transform: none; }
+  body.fs #gameWrap { height: 100vh; }
+  body.fs #adminView { padding-top: 60px; }
+  /* 全螢幕比賽中：只留分數與畫面，其餘淡出 */
+  body.fs.playing #joinCard { opacity: 0; pointer-events: none; }
+
   .view { display: none; }
   .view.on { display: block; }
   #adminView { padding: 18px; }
@@ -82,16 +102,16 @@
   .pchip .nm { font-weight: 700; }
   .pchip .sc { margin-left: auto; font-family: ui-monospace, monospace; color: #94a3b8; }
   .pchip.off { opacity: .35; }
-  #gameCtl { left: 50%; transform: translateX(-50%); bottom: 20px; display: flex; gap: 10px; align-items: center; pointer-events: auto; z-index: 3; }
   #playerStrip { pointer-events: none; }
   #gameWrap > canvas { position: relative; z-index: 0; }
-  #gameCtl button { padding: 12px 26px; font-size: 1.05rem; }
-  #gameCtl button.go { background: #2563eb; }
   #bigCenter {
     left: 50%; top: 50%; transform: translate(-50%,-50%); text-align: center;
-    pointer-events: none; text-shadow: 0 3px 18px rgba(0,0,0,.8);
+    pointer-events: none; transition: opacity .2s;
   }
-  #bigCenter .t { font-size: 3.4rem; font-weight: 900; letter-spacing: .02em; }
+  /* 雪地是亮的，純文字加陰影還是讀不到——要一塊實底板 */
+  #bigCenter.has { background: rgba(6,10,20,.72); border: 1px solid rgba(120,150,190,.28);
+    border-radius: 18px; padding: 22px 46px; backdrop-filter: blur(4px); }
+  #bigCenter .t { font-size: 3.4rem; font-weight: 900; letter-spacing: .02em; line-height: 1.1; }
   #bigCenter .s { color: #cbd5e1; font-size: 1rem; margin-top: 6px; }
 
   /* HUD 一律用 DOM 文字：canvas 只畫像素場景，文字才會清晰 */
@@ -145,6 +165,34 @@
   #qrBig .code { font-family: ui-monospace, monospace; font-size: 3.6rem; font-weight: 800; letter-spacing: .2em; color: #7dd3fc; }
   #qrBig .u { color: #94a3b8; font-size: 1rem; }
   #qrBig .x { color: #64748b; font-size: .85rem; }
+
+  /* ---- 開場說明：規則 + 語音解說 + 等大家把感應器設好 ---- */
+  #brief {
+    position: absolute; inset: 0; background: rgba(4,7,14,.94); display: none;
+    align-items: center; justify-content: center; z-index: 10; padding: 24px;
+  }
+  #brief.on { display: flex; }
+  #brief .box { max-width: 880px; width: 100%; }
+  #brief h1 { font-size: 2.6rem; margin: 0 0 4px; letter-spacing: .02em; }
+  #brief .lead { color: #94a3b8; font-size: 1rem; margin-bottom: 22px; }
+  #brief .rules { display: flex; gap: 14px; margin-bottom: 22px; }
+  #brief .rule {
+    flex: 1; background: #101a2e; border: 1px solid #24365a; border-radius: 14px; padding: 16px 18px;
+  }
+  #brief .rule .ic { font-size: 2rem; line-height: 1; margin-bottom: 8px; }
+  #brief .rule .h { font-weight: 800; font-size: 1.1rem; margin-bottom: 4px; }
+  #brief .rule .d { color: #94a3b8; font-size: .92rem; line-height: 1.55; }
+  #brief .ready { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  #brief .rbar { flex: 1; min-width: 200px; height: 8px; background: #1e293b; border-radius: 5px; overflow: hidden; }
+  #brief .rbar i { display: block; height: 100%; width: 0%; background: #16a34a; transition: width .3s; }
+  #brief .rlist { display: flex; gap: 6px; flex-wrap: wrap; }
+  #brief .rchip { font-size: .84rem; padding: 4px 10px; border-radius: 7px; background: #1e293b; color: #94a3b8; }
+  #brief .rchip.ok { background: #14532d; color: #bbf7d0; }
+  #brief .acts { display: flex; gap: 10px; align-items: center; }
+  #brief .acts button { padding: 13px 30px; font-size: 1.05rem; }
+  #brief #briefGo { background: #16a34a; font-weight: 700; }
+  #brief #briefSay { background: #334155; }
+  #brief #briefCancel { background: transparent; color: #64748b; }
 </style>
 </head>
 <body>
@@ -154,6 +202,11 @@
   <div class="tabs">
     <button id="tabGame" class="on">遊戲</button>
     <button id="tabAdmin">管理・測試</button>
+  </div>
+  <div id="gameCtl">
+    <span id="gamePick"></span>
+    <button class="go" id="gStart">開始 木頭人</button>
+    <button id="gStop" style="display:none">停止</button>
   </div>
   <div class="right">
     <span class="dot" id="connState"></span>
@@ -188,10 +241,22 @@
       <div class="x">點任一處關閉</div>
     </div>
     <div id="playerStrip" class="ovl"></div>
-    <div id="gameCtl" class="ovl">
-      <span id="gamePick" style="display:flex; gap:6px; pointer-events:auto"></span>
-      <button class="go" id="gStart">開始 木頭人</button>
-      <button id="gStop" style="background:#7f1d1d; display:none">停止</button>
+    <div id="brief">
+      <div class="box">
+        <h1 id="briefTitle">遊戲說明</h1>
+        <div class="lead" id="briefLead"></div>
+        <div class="rules" id="briefRules"></div>
+        <div class="ready">
+          <div style="font-weight:700; white-space:nowrap" id="briefReadyN">0 / 0 人已就緒</div>
+          <div class="rbar"><i id="briefBar"></i></div>
+          <div class="rlist" id="briefList"></div>
+        </div>
+        <div class="acts">
+          <button id="briefGo">開始遊戲</button>
+          <button id="briefSay">🔊 再念一次</button>
+          <button id="briefCancel">返回</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -302,8 +367,9 @@
   });
 
   const sock = new Mahou.Sock(roomId, 'host', `&hint=${encodeURIComponent(hint)}`);
+  let roomEnded = false;
   sock.onOpen(() => { $('#connState').textContent = '🟢' + ($('#connState').dataset.colo || ''); });
-  sock.ws.addEventListener('close', () => { $('#connState').textContent = '🔴'; });
+  sock.ws.addEventListener('close', () => { if (!roomEnded) $('#connState').textContent = '🔴'; });
   // DO 落點診斷：doColo 離現場越遠，RTT 地板越高
   fetch(`/whereami/${roomId}?hint=${encodeURIComponent(hint)}`).then((r) => r.json()).then((w) => {
     $('#connState').dataset.colo = ` DO@${w.doColo}·邊緣@${w.edgeColo}`;
@@ -356,6 +422,34 @@
     $('#colorPanel').style.display = stage === 'color' ? '' : 'none';
     $('#skiPanel').style.display = stage === 'ski' ? '' : 'none';
   }
+
+  // ---- 匯出：POC 唯一真正的交付物 ----
+  async function doExport() {
+    const res = await fetch(`/export/${roomId}`);
+    if (!res.ok) { alert('匯出失敗：' + res.status); return false; }
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `mahou-${roomId}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);   // 太早 revoke 會下載到空檔
+    return true;
+  }
+  $('#exportBtn').addEventListener('click', doExport);
+
+  // ---- 結束房間（計費防呆）：先自動匯出一次，再踢掉所有連線讓 DO 休眠 ----
+  $('#endBtn').addEventListener('click', async () => {
+    if (!confirm('結束房間？會先自動匯出 JSON，然後踢掉所有人。')) return;
+    await doExport();
+    sock.send({ type: 'endRoom' });
+  });
+  sock.onEnded((reason) => {
+    roomEnded = true;                 // 讓 ws close 不要把這行訊息蓋掉
+    $('#connState').textContent = `⏹ 已結束（${reason}）`;
+    document.querySelectorAll('button[data-stage], #endBtn, #gStart, #gStop').forEach((b) => (b.disabled = true));
+  });
 
   // host 也需要伺服器時鐘（滑雪倒數對齊用）
   const hostClock = new Mahou.ClockSync(sock);
@@ -465,12 +559,27 @@
 
   $('#tabGame').addEventListener('click', () => setView('game'));
   $('#tabAdmin').addEventListener('click', () => setView('admin'));
+  // 全螢幕吃整個頁面（不是只有 #gameWrap），頂列才留得住；
+  // 之後頂列自己收起來，畫面上就只剩遊戲跟分數。
   $('#fsBtn').addEventListener('click', () => {
-    const w = $('#gameWrap');
     if (document.fullscreenElement) document.exitFullscreen();
-    else w.requestFullscreen?.().then(fitCanvas).catch(() => {});
+    else document.documentElement.requestFullscreen?.().catch(() => {});
   });
-  document.addEventListener('fullscreenchange', () => setTimeout(fitCanvas, 60));
+  let barTimer = null;
+  function pokeBar() {
+    document.body.classList.add('showbar');
+    clearTimeout(barTimer);
+    barTimer = setTimeout(() => document.body.classList.remove('showbar'), 2600);
+  }
+  addEventListener('mousemove', () => { if (document.body.classList.contains('fs')) pokeBar(); });
+  addEventListener('keydown', () => { if (document.body.classList.contains('fs')) pokeBar(); });
+  document.addEventListener('fullscreenchange', () => {
+    const on = !!document.fullscreenElement;
+    document.body.classList.toggle('fs', on);
+    $('#fsBtn').textContent = on ? '⛶ 離開全螢幕' : '⛶ 全螢幕';
+    if (on) pokeBar(); else { clearTimeout(barTimer); document.body.classList.remove('showbar'); }
+    setTimeout(fitCanvas, 60);
+  });
 
   // 遊戲檢視的開始鈕＝管理檢視那顆的同義詞
   // 遊戲選擇：大螢幕上直接切，不用回管理分頁
@@ -478,19 +587,105 @@
   let pickedGame = 0;
   function renderGamePick() {
     $('#gamePick').innerHTML = GAMES.map((g, i) =>
-      `<button data-g="${i}" class="${i === pickedGame ? 'go' : ''}">${g.label}</button>`).join('');
+      `<button data-g="${i}" class="${i === pickedGame ? 'on' : ''}">${g.label}</button>`).join('');
     $('#gamePick').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
       pickedGame = +b.dataset.g; renderGamePick();
       $('#gStart').textContent = '開始 ' + GAMES[pickedGame].label;
     }));
   }
   renderGamePick();
-  $('#gStart').addEventListener('click', () => {
-    SFX.init();                       // AudioContext 必須由使用者手勢啟動
-    showQR(false);                    // 開場自動收起放大的 QR
+  // ---- 開場說明：文案與 docs/games.md 的「說明卡」同步 ----
+  const BRIEF = {
+    freeze: {
+      title: '一二三木頭人',
+      lead: '10 回合・做對指令得分，鬼轉身還在動要倒扣',
+      say: '綠燈的時候，看大螢幕的指令，用手機做對就得分。鬼一轉身就要停手，還在動會被扣分。指令有加減法、選顏色、點幾下、搖手機，看清楚再動。',
+      rules: [
+        { ic: '🟢', h: '綠燈：照做', d: '大螢幕出指令，用手機做對就得 1 分' },
+        { ic: '🔴', h: '紅燈：不要動', d: '鬼一轉身就停手，還在動倒扣 1 分' },
+        { ic: '🎲', h: '指令會換', d: '加減法、選顏色、點幾下、搖手機——不會連續重複' },
+      ],
+    },
+    ski: {
+      title: '滑雪下坡',
+      lead: '30 秒比距離・手機平放拿好，螢幕朝上',
+      say: '手機平放拿好。連點畫面加速，左右傾斜閃開樹木。看到藍色跳台，就把手機往上抬，跳中了會衝很快。三十秒，看誰滑最遠。',
+      rules: [
+        { ic: '👆', h: '連點加速', d: '點越快越快，但連點有速度上限' },
+        { ic: '📱', h: '左右傾斜轉向', d: '把手機往左右倒，閃開樹和石頭' },
+        { ic: '⛷️', h: '看到跳台往上抬', d: '藍色跳台是唯一的加速來源，跳中了會衝一段' },
+      ],
+    },
+  };
+  let briefOpen = false;
+  const readySet = new Set();
+  sock.on('ready', (m) => { readySet.add(m.clientId); renderBrief(); });
+
+  // 語音解說：用系統 TTS，中文女聲優先。沒有中文語音就安靜跳過，不擋流程。
+  // getVoices() 第一次常常回空陣列（語音清單是非同步載入的），
+  // 所以先暖機、並在 voiceschanged 時補抓一次
+  let voices = [];
+  function loadVoices() { try { voices = speechSynthesis.getVoices() || []; } catch (e) {} }
+  if ('speechSynthesis' in window) {
+    loadVoices();
+    speechSynthesis.addEventListener?.('voiceschanged', loadVoices);
+  }
+  function speak(text) {
+    if (!('speechSynthesis' in window)) return;
+    try {
+      if (!voices.length) loadVoices();
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      const zh = voices.filter((v) => /^zh/i.test(v.lang));
+      // 優先台灣中文，其次任何中文；找不到就交給瀏覽器預設，不要因此不念
+      u.voice = zh.find((v) => /zh[-_]TW/i.test(v.lang)) || zh[0] || null;
+      u.lang = u.voice?.lang || 'zh-TW';
+      u.rate = 0.95; u.pitch = 1.02;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+  function renderBrief() {
+    if (!briefOpen) return;
+    const list = roster.filter((c) => c.connected);
+    const n = list.filter((c) => readySet.has(c.clientId)).length;
+    $('#briefReadyN').textContent = `${n} / ${list.length} 人已就緒`;
+    $('#briefBar').style.width = (list.length ? n / list.length * 100 : 0) + '%';
+    $('#briefList').innerHTML = list.map((c) =>
+      `<span class="rchip${readySet.has(c.clientId) ? ' ok' : ''}">${esc(c.name)}${readySet.has(c.clientId) ? ' ✓' : ''}</span>`).join('');
+  }
+  function openBrief() {
+    const g = GAMES[pickedGame], b = BRIEF[g.key];
+    briefOpen = true;
+    readySet.clear();
+    $('#briefTitle').textContent = b.title;
+    $('#briefLead').textContent = b.lead;
+    $('#briefRules').innerHTML = b.rules.map((r) =>
+      `<div class="rule"><div class="ic">${r.ic}</div><div class="h">${r.h}</div><div class="d">${r.d}</div></div>`).join('');
+    $('#brief').classList.add('on');
+    renderBrief();
+    // 先把手機切到這一關，大家才能在說明期間設好感應器
+    sock.send({ type: 'stage', stage: g.key });
+    setActiveBtn(g.key);
+    speak(b.say);
+  }
+  function closeBrief() {
+    briefOpen = false;
+    $('#brief').classList.remove('on');
+    try { speechSynthesis.cancel(); } catch (e) {}
+  }
+  $('#briefSay').addEventListener('click', () => speak(BRIEF[GAMES[pickedGame].key].say));
+  $('#briefCancel').addEventListener('click', closeBrief);
+  $('#briefGo').addEventListener('click', () => {
+    closeBrief();
     SFX.go();
     if (GAMES[pickedGame].key === 'ski') $('#skiStartBtn').click();
     else $('#freezeStartBtn').click();
+  });
+
+  $('#gStart').addEventListener('click', () => {
+    SFX.init();                       // AudioContext 必須由使用者手勢啟動
+    showQR(false);                    // 開場自動收起放大的 QR
+    openBrief();
   });
   $('#gStop').addEventListener('click', () => {
     FZ.running = false;
@@ -504,7 +699,7 @@
       let sc = '–';
       if (curStage === 'ski') {
         const p = SKI.players.get(c.clientId);
-        if (p) sc = (p.final != null ? p.final : Math.round((p.wy - COURSE.START_Y) / WORLD_PER_M)) + 'm';
+        if (p) sc = (p.final != null ? p.final : Math.round((p.wy - COURSE.START_Y) / WPM())) + 'm';
       } else {
         const st = FZ.players.find((p) => p.clientId === c.clientId);
         if (st) sc = st.progress + (st.violations ? ' ✗' + st.violations : '');
@@ -514,23 +709,28 @@
     }).join('');
   }
   function renderCenter() {
-    const t = $('#bcTitle'), sub = $('#bcSub');
     const n = roster.filter((c) => c.connected).length;
     const skiLive = SKI.race && (hostClock.serverNow() ?? Date.now()) < SKI.race.startAt + SKI.race.duration + 2000;
-    if (FZ.running || skiLive) { t.textContent = ''; sub.textContent = ''; return; }
-    if (curStage === 'ski' && SKI.rankText) { t.textContent = '🏁 結果'; sub.textContent = SKI.rankText; return; }
-    if (!n) { t.textContent = '掃 QR 加入'; sub.textContent = '手機掃左下角的 QR code'; }
-    else { t.textContent = n + ' 人已加入'; sub.textContent = '按「開始 ' + GAMES[pickedGame].label + '」'; }
+    let title = '', sub = '';
+    if (FZ.running || skiLive) { /* 比賽中：中央淨空 */ }
+    else if (curStage === 'ski' && SKI.rankText) { title = '🏁 結果'; sub = SKI.rankText; }
+    else if (!n) { title = '掃 QR 加入'; sub = '手機掃左下角的 QR code'; }
+    else { title = n + ' 人已加入'; sub = '按「開始 ' + GAMES[pickedGame].label + '」'; }
+    $('#bcTitle').textContent = title;
+    $('#bcSub').textContent = sub;
+    $('#bigCenter').classList.toggle('has', !!(title || sub));
   }
   // 大廳時把加入卡放大置中，開場後縮回左下（真正的派對遊戲都這樣做）
   function updateShell() {
     const playing = FZ.running || !!(SKI.race && (hostClock.serverNow() ?? Date.now()) < SKI.race.startAt + SKI.race.duration + 2500);
     $('#gStart').style.display = playing ? 'none' : '';
     $('#gStop').style.display = playing ? '' : 'none';
+    $('#gamePick').style.display = playing ? 'none' : 'flex';
+    document.body.classList.toggle('playing', playing);
     $('#joinCard').style.transform = playing ? 'scale(.62)' : 'scale(1)';
     $('#joinCard').style.opacity = playing ? '.75' : '1';
     $('#joinCard').style.transformOrigin = 'left bottom';
-    renderPlayerStrip(); renderCenter();
+    renderPlayerStrip(); renderCenter(); renderBrief();
   }
   setInterval(updateShell, 400);
 
@@ -601,7 +801,8 @@
   function sceneLoop() {
     if (curStage === 'ski') { lastItems = []; skiDraw(); }
     else if (curStage === 'freeze') freezeDraw();
-    else { fctx.fillStyle = '#0a0f1c'; fctx.fillRect(0, 0, FW, FH); lastItems = []; }
+    else if (GAMES[pickedGame].key === 'ski') { lastItems = []; skiIdle(); }
+    else freezeDraw();                       // 大廳＝選中遊戲的待機畫面，別留一整片黑
     requestAnimationFrame(sceneLoop);
   }
   requestAnimationFrame(sceneLoop);
@@ -636,6 +837,13 @@
 
     // 頂部 HUD
     const cmdEl = $('#hudCmd'), bar = $('#hudBar').firstElementChild;
+    if (curStage !== 'ski' && curStage !== 'freeze' && !FZ.running) {
+      $('#hudRound').textContent = GAMES[pickedGame].label;   // 大廳：顯示選中的遊戲
+      cmdEl.textContent = ''; cmdEl.classList.remove('red'); bar.style.width = '0%';
+      chantEl.classList.remove('show');
+      requestAnimationFrame(updateOverlay);
+      return;
+    }
     if (curStage === 'ski') {
       const r = SKI.race;
       const now2 = hostClock.serverNow() ?? Date.now();
@@ -656,7 +864,7 @@
       requestAnimationFrame(updateOverlay);
       return;
     }
-    $('#hudRound').textContent = 'ROUND ' + String(FZ.round).padStart(2, '0') + '/10';
+    $('#hudRound').textContent = FZ.running ? 'ROUND ' + String(FZ.round).padStart(2, '0') + '/10' : '一二三木頭人';
     if (!FZ.running) { cmdEl.textContent = ''; cmdEl.classList.remove('red'); }
     else if (FZ.green) { cmdEl.textContent = FZ.cmd ? FZ.cmd.label : ''; cmdEl.classList.remove('red'); }
     else { cmdEl.textContent = '不要動！'; cmdEl.classList.add('red'); }
@@ -827,7 +1035,8 @@
   // ================= 遊戲二：滑雪下坡（分割畫面） =================
   // 每格一個獨立視野，全部寫進同一張 ImageData 再一次 putImageData。
   // 實測：1 格與 8 格同樣 4.3ms —— 分割數不是成本，總像素才是。
-  const SKI_DUR = 30000, WORLD_PER_M = 11;
+  const SKI_DUR = 30000;
+  const WPM = () => COURSE.WORLD_PER_M;   // 單一來源在 course.js，兩端不能各寫一份
   const SKI = { race: null, obs: [], players: new Map(), img: null, rankText: '' };
 
   $('#skiStartBtn').addEventListener('click', () => {
@@ -844,9 +1053,11 @@
   });
   sock.on('skiRun', (m) => {
     let p = SKI.players.get(m.clientId);
-    if (!p) { p = { name: m.name, dispX: m.x, dispY: m.wy }; SKI.players.set(m.clientId, p); }
+    if (!p) { p = { name: m.name, dispX: m.x, dispY: m.wy, hits: 0, jumps: 0 }; SKI.players.set(m.clientId, p); }
+    if (m.hits > (p.hits || 0)) p.shake = 1;        // 撞到就抖一下那一格
+    if (m.jumps > (p.jumps || 0)) p.flash = 1;      // 上跳台就閃一下
     Object.assign(p, { name: m.name, x: m.x, wy: m.wy, speed: m.speed, vx: m.vx,
-                       air: m.air, rot: m.rot, jumps: m.jumps, hits: m.hits, cap: m.cap,
+                       air: m.air, airMax: m.airMax, rot: m.rot, jumps: m.jumps, hits: m.hits,
                        at: performance.now(), uplinkMs: m.uplinkMs });
   });
   sock.on('skiDone', (m) => {
@@ -885,6 +1096,69 @@
   }
   let layoutT = 1, layoutFrom = skiLayout(1), layoutTo = skiLayout(1);
 
+  // 賽道物件的畫法（大廳待機與比賽共用同一份）
+  function drawCourseItem(o, pr, sc) {
+    if (sc > 3) {                          // 落地陰影，不然全部像浮在雪上
+      fctx.fillStyle = 'rgba(70,100,140,.28)';
+      fctx.beginPath();
+      fctx.ellipse(pr.sx, pr.sy, sc * (o.ramp ? .8 : .42), sc * .14, 0, 0, Math.PI * 2);
+      fctx.fill();
+    }
+    if (o.ramp) {
+      // 跳台：由近而遠收縮的坡面＋抬高的起跳唇＋兩支旗子。
+      // 雪地上唯一的暗色塊＝一眼看得到（明度對比，不靠色相；風格聖經 §3）
+      const w2 = sc * 1.5, deck = sc * .5, lip = sc * .34;
+      const nx = w2 / 2, fx = w2 * .3, fy = pr.sy - deck;
+      fctx.fillStyle = '#33507d';            // 坡面
+      fctx.beginPath();
+      fctx.moveTo(pr.sx - nx, pr.sy); fctx.lineTo(pr.sx + nx, pr.sy);
+      fctx.lineTo(pr.sx + fx, fy); fctx.lineTo(pr.sx - fx, fy);
+      fctx.closePath(); fctx.fill();
+      fctx.fillStyle = '#4a6ea8';            // 唇：立起來的那一面
+      fctx.fillRect(pr.sx - fx, fy - lip, fx * 2, lip);
+      fctx.fillStyle = '#eaf4ff';            // 起跳邊緣的亮線
+      fctx.fillRect(pr.sx - fx, fy - lip - Math.max(1, sc * .1), fx * 2, Math.max(1, sc * .1));
+      fctx.fillStyle = '#e8604c';            // 旗子：遠遠就認得出來
+      for (const sgn of [-1, 1]) {
+        fctx.fillRect(pr.sx + sgn * nx - Math.max(1, sc * .05), pr.sy - sc * .8, Math.max(1, sc * .07), sc * .8);
+        fctx.fillRect(pr.sx + sgn * nx, pr.sy - sc * .8, sgn * sc * .26, sc * .22);
+      }
+    } else if (o.rock) {
+      fctx.fillStyle = '#5b6470'; fctx.fillRect(pr.sx - sc * .45, pr.sy - sc * .5, sc * .9, sc * .5);
+      fctx.fillStyle = '#79838f'; fctx.fillRect(pr.sx - sc * .3, pr.sy - sc * .45, sc * .45, sc * .18);
+    } else {
+      fctx.fillStyle = '#4a3526'; fctx.fillRect(pr.sx - sc * .09, pr.sy - sc * .5, sc * .18, sc * .5);
+      for (let k = 0; k < 3; k++) {
+        const w2 = sc * (.72 - k * .19);
+        fctx.fillStyle = k === 0 ? '#1f5c38' : '#2c7a48';
+        fctx.fillRect(pr.sx - w2 / 2, pr.sy - sc * (.85 + k * .42), w2, sc * .5);
+      }
+    }
+  }
+
+  // 大廳待機：一格全螢幕的雪坡自己往前捲，看起來像遊戲在等你，不是當掉了
+  let idleObs = null;
+  function skiIdle() {
+    if (!idleObs) idleObs = COURSE.build(20260829);
+    if (!SKI.img || SKI.img.width !== FW) SKI.img = fctx.createImageData(FW, FH);
+    const img = SKI.img, d0 = img.data;
+    for (let i = 0; i < d0.length; i += 4) { d0[i] = 6; d0[i + 1] = 9; d0[i + 2] = 15; d0[i + 3] = 255; }
+    const wy = COURSE.START_Y + (performance.now() / 1000) * 7 * COURSE.WORLD_PER_M;
+    const camX = Math.sin(performance.now() / 3400) * 90;
+    const vp = { x: 0, y: 0, w: FW, h: FH, horizon: Math.round(FH * 0.34),
+                 scroll: wy - COURSE.START_Y, camX, f: 90 };
+    MODE7.renderInto(img, FW, SKI.world, vp);
+    fctx.putImageData(img, 0, 0);
+    const from = COURSE.advance(idleObs, 0, wy);
+    for (let i = from; i < idleObs.length && idleObs[i].wy < wy + 2600; i++) {
+      const o = idleObs[i];
+      const pr = MODE7.project(vp, o.wx, o.wy - COURSE.START_Y);
+      if (!pr || pr.sy < vp.horizon || pr.sy > FH + 40) continue;
+      drawCourseItem(o, pr, Math.max(1, pr.k * 46));
+    }
+    lastItems = [];
+  }
+
   function skiDraw(t) {
     const list = roster.filter((c) => c.connected);
     const n = Math.max(1, Math.min(8, list.length));
@@ -912,16 +1186,19 @@
       let wy = COURSE.START_Y, x = 0, speed = 0, air = 0, rot = 0;
       if (p) {
         const lag = Math.min(0.6, (performance.now() - p.at) / 1000);
-        wy = p.final != null ? p.wy : p.wy + p.speed * WORLD_PER_M * lag;
+        wy = p.final != null ? p.wy : p.wy + p.speed * WPM() * lag;
         x = Math.max(-COURSE.HALF_W, Math.min(COURSE.HALF_W, p.x + p.vx * lag));
         speed = p.speed; air = p.air; rot = p.rot;
         p.dispX += (x - p.dispX) * 0.35;       // 平滑，避免 10Hz 的階梯感
         p.dispY += (wy - p.dispY) * 0.35;
         x = p.dispX; wy = p.dispY;
       }
+      // 速度越快 f 越小＝視野越廣，畫面兩側的東西掃得更兇，這是最省力的速度感
+      const sp01 = Math.max(0, Math.min(1, speed / 20));
       const vp = { x: Math.round(v.x), y: Math.round(v.y), w: vw, h: vh,
-                   horizon: Math.round(vh * 0.34), scroll: wy - COURSE.START_Y, camX: x, f: 90,
-                   c, p, speed, air, rot, idx: i };
+                   horizon: Math.round(vh * 0.34), scroll: wy - COURSE.START_Y, camX: x,
+                   f: 94 - sp01 * 16,
+                   c, p, speed, air, rot, sp01, idx: i };
       MODE7.renderInto(img, FW, SKI.world, vp);
       vps.push(vp);
     });
@@ -941,18 +1218,26 @@
       for (const o of near) {
         const pr = MODE7.project(vp, o.wx, o.wy - COURSE.START_Y);
         if (!pr || pr.sy < vp.y + vp.horizon || pr.sy > vp.y + vp.h + 40) continue;
-        const sc = Math.max(1, pr.k * 46);
-        if (o.rock) {
-          fctx.fillStyle = '#5b6470'; fctx.fillRect(pr.sx - sc * .45, pr.sy - sc * .5, sc * .9, sc * .5);
-          fctx.fillStyle = '#79838f'; fctx.fillRect(pr.sx - sc * .3, pr.sy - sc * .45, sc * .45, sc * .18);
-        } else {
-          fctx.fillStyle = '#4a3526'; fctx.fillRect(pr.sx - sc * .09, pr.sy - sc * .5, sc * .18, sc * .5);
-          for (let k = 0; k < 3; k++) {
-            const w2 = sc * (.72 - k * .19);
-            fctx.fillStyle = k === 0 ? '#1f5c38' : '#2c7a48';
-            fctx.fillRect(pr.sx - w2 / 2, pr.sy - sc * (.85 + k * .42), w2, sc * .5);
-          }
+        drawCourseItem(o, pr, Math.max(1, pr.k * 46));
+      }
+      // 速度線：從消失點往外掃的短白條，只在夠快時出現
+      if (vp.sp01 > 0.35) {
+        const cx = vp.x + vp.w / 2, cy = vp.y + vp.horizon;
+        const n = Math.round(4 + vp.sp01 * 8);
+        fctx.globalAlpha = (vp.sp01 - 0.35) / 0.65 * 0.5;
+        fctx.strokeStyle = '#ffffff'; fctx.lineWidth = 1;
+        for (let k = 0; k < n; k++) {
+          const ph = ((performance.now() / 260) + k / n) % 1;   // 由中心往外加速展開
+          const r0 = Math.pow(ph, 2.2) * vp.w * .95;
+          if (r0 < vp.w * .12) continue;
+          const ang = (k / n) * Math.PI * 2 + k * 1.7;
+          const dx = Math.cos(ang), dy = Math.sin(ang) * .55;
+          fctx.beginPath();
+          fctx.moveTo(cx + dx * r0, cy + dy * r0);
+          fctx.lineTo(cx + dx * (r0 + vp.w * .1), cy + dy * (r0 + vp.w * .1));
+          fctx.stroke();
         }
+        fctx.globalAlpha = 1;
       }
       // 玩家角色固定在畫面下方中央，轉向靠傾身（左右側身）
       if (vp.p) {
@@ -960,8 +1245,30 @@
         const dir = lean < -.35 ? 'left' : lean > .35 ? 'right' : 'back';
         const frame = Math.floor(performance.now() / 110) % 4;
         const scale = Math.max(.40, (vp.h / 216) * 0.9);          // 角色高度約佔格高 27%
-        const feetY = vp.y + vp.h * 0.90 - (vp.air > 0 ? vp.air * vp.h * 0.30 : 0);
-        CHARA.drawSki(fctx, vp.idx, dir, frame, vp.x + vp.w / 2 + lean * vp.w * .06, feetY, scale, vp.rot || 0);
+        // 滯空高度用拋物線，落地才有重量感；airMax 讓小跳與跳台的高度差得出來
+        const am = vp.p.airMax || 0.42;
+        const arc = vp.air > 0 ? Math.sin(Math.PI * (1 - vp.air / am)) * (0.16 + am * 0.26) : 0;
+        const sh = vp.p.shake || 0;
+        const jx = sh > 0 ? (Math.random() - .5) * 6 * sh : 0;
+        const jy = sh > 0 ? (Math.random() - .5) * 5 * sh : 0;
+        const feetY = vp.y + vp.h * (0.90 - arc) + jy;
+        const cx0 = vp.x + vp.w / 2 + lean * vp.w * .06 + jx;
+        const gy = vp.y + vp.h * 0.90 + jy;                  // 影子留在地面，跳起來才看得出高度
+        fctx.fillStyle = `rgba(70,100,140,${0.3 - arc * 0.5})`;
+        fctx.beginPath();
+        fctx.ellipse(cx0, gy, 15 * scale, 4 * scale, 0, 0, Math.PI * 2);
+        fctx.fill();
+        CHARA.drawSki(fctx, vp.idx, dir, frame, cx0, feetY, scale, vp.rot || 0);
+        if (vp.p.flash > 0) {                                    // 上跳台：整格閃一下紫光
+          fctx.fillStyle = `rgba(168,85,247,${vp.p.flash * .35})`;
+          fctx.fillRect(vp.x, vp.y, vp.w, vp.h);
+          vp.p.flash = Math.max(0, vp.p.flash - 0.06);
+        }
+        if (sh > 0) {
+          fctx.fillStyle = `rgba(239,68,68,${sh * .28})`;
+          fctx.fillRect(vp.x, vp.y, vp.w, vp.h);
+          vp.p.shake = Math.max(0, sh - 0.05);
+        }
       }
       fctx.restore();
     }
