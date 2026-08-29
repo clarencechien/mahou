@@ -189,7 +189,8 @@
     </div>
     <div id="playerStrip" class="ovl"></div>
     <div id="gameCtl" class="ovl">
-      <button class="go" id="gStart">開始木頭人</button>
+      <span id="gamePick" style="display:flex; gap:6px; pointer-events:auto"></span>
+      <button class="go" id="gStart">開始 木頭人</button>
       <button id="gStop" style="background:#7f1d1d; display:none">停止</button>
     </div>
   </div>
@@ -255,9 +256,9 @@
 </div>
 
 <div class="panel" id="skiPanel" style="display:none">
-  <h2>遊戲二：滑雪下坡 — 30 秒 <span id="skiTimerLbl" style="color:#7dd3fc"></span></h2>
+  <h2>遊戲二：滑雪下坡 — 30 秒比距離 <span id="skiTimerLbl" style="color:#7dd3fc"></span></h2>
   <button id="skiStartBtn" style="background:#2563eb; margin-bottom:10px">開始</button>
-  <canvas id="skiCanvas" width="960" height="430" style="width:100%; border-radius:10px; background:#eaf3fb"></canvas>
+  <p style="color:#64748b; font-size:.88rem">畫面在「遊戲」分頁的分割視野；這裡只放控制與結果。</p>
   <div id="skiResults" style="margin-top:8px; font-size:.95rem"></div>
 </div>
 
@@ -267,6 +268,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="/engine/chara.js"></script>
+<script src="/engine/course.js"></script>
 <script src="/engine/sfx.js"></script>
 <script src="/engine/mode7.js"></script>
 <script src="/shared.js"></script>
@@ -471,34 +473,58 @@
   document.addEventListener('fullscreenchange', () => setTimeout(fitCanvas, 60));
 
   // 遊戲檢視的開始鈕＝管理檢視那顆的同義詞
+  // 遊戲選擇：大螢幕上直接切，不用回管理分頁
+  const GAMES = [{ key: 'freeze', label: '木頭人' }, { key: 'ski', label: '滑雪下坡' }];
+  let pickedGame = 0;
+  function renderGamePick() {
+    $('#gamePick').innerHTML = GAMES.map((g, i) =>
+      `<button data-g="${i}" class="${i === pickedGame ? 'go' : ''}">${g.label}</button>`).join('');
+    $('#gamePick').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+      pickedGame = +b.dataset.g; renderGamePick();
+      $('#gStart').textContent = '開始 ' + GAMES[pickedGame].label;
+    }));
+  }
+  renderGamePick();
   $('#gStart').addEventListener('click', () => {
     SFX.init();                       // AudioContext 必須由使用者手勢啟動
     showQR(false);                    // 開場自動收起放大的 QR
     SFX.go();
-    $('#freezeStartBtn').click();
+    if (GAMES[pickedGame].key === 'ski') $('#skiStartBtn').click();
+    else $('#freezeStartBtn').click();
   });
-  $('#gStop').addEventListener('click', () => { FZ.running = false; sock.send({ type: 'freezeEnd' }); });
+  $('#gStop').addEventListener('click', () => {
+    FZ.running = false;
+    sock.send({ type: curStage === 'ski' ? 'skiEnd' : 'freezeEnd' });
+  });
 
   function renderPlayerStrip() {
     const list = roster.filter((c) => c.connected || FZ.players.some((p) => p.clientId === c.clientId));
     $('#playerStrip').innerHTML = list.map((c, i) => {
-      const st = FZ.players.find((p) => p.clientId === c.clientId);
       const col = CHARA.PLAYERS[i % 8].accent1;
+      let sc = '–';
+      if (curStage === 'ski') {
+        const p = SKI.players.get(c.clientId);
+        if (p) sc = (p.final != null ? p.final : Math.round((p.wy - COURSE.START_Y) / WORLD_PER_M)) + 'm';
+      } else {
+        const st = FZ.players.find((p) => p.clientId === c.clientId);
+        if (st) sc = st.progress + (st.violations ? ' ✗' + st.violations : '');
+      }
       return `<div class="pchip${c.connected ? '' : ' off'}"><i style="background:${col}"></i>` +
-        `<span class="nm">${esc(c.name)}</span>` +
-        `<span class="sc">${st ? st.progress + (st.violations ? ' ✗' + st.violations : '') : '–'}</span></div>`;
+        `<span class="nm">${esc(c.name)}</span><span class="sc">${sc}</span></div>`;
     }).join('');
   }
   function renderCenter() {
     const t = $('#bcTitle'), sub = $('#bcSub');
     const n = roster.filter((c) => c.connected).length;
-    if (FZ.running) { t.textContent = ''; sub.textContent = ''; return; }
+    const skiLive = SKI.race && (hostClock.serverNow() ?? Date.now()) < SKI.race.startAt + SKI.race.duration + 2000;
+    if (FZ.running || skiLive) { t.textContent = ''; sub.textContent = ''; return; }
+    if (curStage === 'ski' && SKI.rankText) { t.textContent = '🏁 結果'; sub.textContent = SKI.rankText; return; }
     if (!n) { t.textContent = '掃 QR 加入'; sub.textContent = '手機掃左下角的 QR code'; }
-    else { t.textContent = n + ' 人已加入'; sub.textContent = '按「開始木頭人」'; }
+    else { t.textContent = n + ' 人已加入'; sub.textContent = '按「開始 ' + GAMES[pickedGame].label + '」'; }
   }
   // 大廳時把加入卡放大置中，開場後縮回左下（真正的派對遊戲都這樣做）
   function updateShell() {
-    const playing = FZ.running;
+    const playing = FZ.running || !!(SKI.race && (hostClock.serverNow() ?? Date.now()) < SKI.race.startAt + SKI.race.duration + 2500);
     $('#gStart').style.display = playing ? 'none' : '';
     $('#gStop').style.display = playing ? '' : 'none';
     $('#joinCard').style.transform = playing ? 'scale(.62)' : 'scale(1)';
@@ -564,9 +590,21 @@
     }
     // 名牌與 HUD 全部交給 DOM（canvas 只畫像素場景，文字才不會被放大糊掉）
     lastItems = items;
-    requestAnimationFrame(freezeDraw);
   }
-  requestAnimationFrame(freezeDraw);
+
+  // 總調度：依關卡選渲染器，兩個遊戲共用同一個 canvas
+  let curStage = 'lobby';
+  const oldSetActive = setActiveBtn;
+  setActiveBtn = function (st) { curStage = st; oldSetActive(st); };
+  sock.on('stage', (m) => { curStage = m.stage; oldSetActive(m.stage); });
+
+  function sceneLoop() {
+    if (curStage === 'ski') { lastItems = []; skiDraw(); }
+    else if (curStage === 'freeze') freezeDraw();
+    else { fctx.fillStyle = '#0a0f1c'; fctx.fillRect(0, 0, FW, FH); lastItems = []; }
+    requestAnimationFrame(sceneLoop);
+  }
+  requestAnimationFrame(sceneLoop);
 
   // ---------------- DOM 疊層：名牌 / HUD / 一二三木頭人 ----------------
   const CHANT = ['一', '二', '三', '木頭人！'];
@@ -597,12 +635,31 @@
     for (let i = lastItems.length; i < tagPool.length; i++) tagPool[i].style.display = 'none';
 
     // 頂部 HUD
+    const cmdEl = $('#hudCmd'), bar = $('#hudBar').firstElementChild;
+    if (curStage === 'ski') {
+      const r = SKI.race;
+      const now2 = hostClock.serverNow() ?? Date.now();
+      if (r) {
+        const pre = r.startAt - now2;
+        const remain = r.startAt + r.duration - now2;
+        $('#hudRound').textContent = '滑雪 30 秒比距離';
+        cmdEl.textContent = pre > 0 ? '準備… ' + Math.ceil(pre / 1000)
+          : remain > 0 ? Math.ceil(remain / 1000) + ' 秒' : '結束！';
+        // 時間到就自動收單：留 1.2 秒等最後一批 skiDone 進來再要排名
+        if (remain < -1200 && !r.ended) { r.ended = true; sock.send({ type: 'skiEnd' }); }
+        cmdEl.classList.toggle('red', remain > 0 && remain < 5500);
+        bar.style.width = (r.duration ? Math.max(0, Math.min(1, remain / r.duration)) * 100 : 0) + '%';
+        bar.style.background = '#38bdf8';
+      } else { $('#hudRound').textContent = '滑雪下坡'; cmdEl.textContent = ''; bar.style.width = '0%'; }
+      chantEl.classList.remove('show');
+      lastGreen = null;
+      requestAnimationFrame(updateOverlay);
+      return;
+    }
     $('#hudRound').textContent = 'ROUND ' + String(FZ.round).padStart(2, '0') + '/10';
-    const cmdEl = $('#hudCmd');
     if (!FZ.running) { cmdEl.textContent = ''; cmdEl.classList.remove('red'); }
     else if (FZ.green) { cmdEl.textContent = FZ.cmd ? FZ.cmd.label : ''; cmdEl.classList.remove('red'); }
     else { cmdEl.textContent = '不要動！'; cmdEl.classList.add('red'); }
-    const bar = $('#hudBar').firstElementChild;
     if (FZ.running) {
       const left = Math.max(0, Math.min(1, (FZ.phaseEnd - performance.now()) / FZ.phaseLen));
       bar.style.width = (left * 100) + '%';
@@ -767,107 +824,155 @@
     cg = null;
   }
 
-  // ================= 遊戲二：滑雪下坡 =================
-  // 10Hz 上報 → 60fps 插值（外插 + 追趕），鏡頭跟著領先者
-  const skiPlayers = new Map(); // clientId -> {name, dist, speed, atMs(perf), disp, final}
-  let skiRace = null; // {startAt, duration}
+  // ================= 遊戲二：滑雪下坡（分割畫面） =================
+  // 每格一個獨立視野，全部寫進同一張 ImageData 再一次 putImageData。
+  // 實測：1 格與 8 格同樣 4.3ms —— 分割數不是成本，總像素才是。
+  const SKI_DUR = 30000, WORLD_PER_M = 11;
+  const SKI = { race: null, obs: [], players: new Map(), img: null, rankText: '' };
+
   $('#skiStartBtn').addEventListener('click', () => {
+    SFX.init(); showQR(false); SFX.go();
     sock.send({ type: 'stage', stage: 'ski' });
     setActiveBtn('ski');
-    skiPlayers.clear();
-    $('#skiResults').textContent = '';
-    sock.send({ type: 'skiStart', duration: 30000 });
+    SKI.players.clear(); SKI.rankText = ''; $('#skiResults').textContent = '';
+    sock.send({ type: 'skiStart', duration: SKI_DUR });
   });
   sock.on('skiStart', (m) => {
-    skiRace = { startAt: m.startAt, duration: m.duration };
-    requestAnimationFrame(skiDraw);
+    SKI.race = { startAt: m.startAt, duration: m.duration, seed: m.seed };
+    SKI.obs = COURSE.build(m.seed);
+    SKI.players.clear();
   });
   sock.on('skiRun', (m) => {
-    const p = skiPlayers.get(m.clientId) || { name: m.name, dist: 0, speed: 0, disp: 0, final: null };
-    p.name = m.name; p.dist = m.distance; p.speed = m.speed; p.atMs = performance.now();
-    skiPlayers.set(m.clientId, p);
+    let p = SKI.players.get(m.clientId);
+    if (!p) { p = { name: m.name, dispX: m.x, dispY: m.wy }; SKI.players.set(m.clientId, p); }
+    Object.assign(p, { name: m.name, x: m.x, wy: m.wy, speed: m.speed, vx: m.vx,
+                       air: m.air, rot: m.rot, jumps: m.jumps, hits: m.hits, cap: m.cap,
+                       at: performance.now(), uplinkMs: m.uplinkMs });
   });
   sock.on('skiDone', (m) => {
-    const p = skiPlayers.get(m.clientId);
-    if (p) { p.final = m.distance; p.dist = m.distance; p.speed = 0; }
-    const done = [...skiPlayers.values()].filter((x) => x.final != null);
-    if (done.length === skiPlayers.size) {
-      const rank = done.sort((a, b) => b.final - a.final);
-      $('#skiResults').innerHTML = '🏁 ' + rank.map((p, i) => `${i + 1}. <b>${esc(p.name)}</b> ${p.final.toFixed(1)}m`).join(' · ');
-    }
+    const p = SKI.players.get(m.clientId);
+    if (p) { p.final = m.dist; p.speed = 0; }
   });
-  function skiDraw() {
-    const cv = $('#skiCanvas'), ctx = cv.getContext('2d');
-    const W = cv.width, H = cv.height;
-    ctx.clearRect(0, 0, W, H);
-    const now = hostClock.serverNow() ?? Date.now();
-    if (!skiRace) return;
-    const elapsed = now - skiRace.startAt;
-    $('#skiTimerLbl').textContent = elapsed < 0 ? `倒數 ${Math.ceil(-elapsed / 1000)}` :
-      elapsed < skiRace.duration ? `剩 ${Math.ceil((skiRace.duration - elapsed) / 1000)} 秒` : '結束';
-    const ids = [...skiPlayers.keys()];
-    const laneW = W / Math.max(ids.length, 1);
-    // 插值：目標 = 最後上報距離 + 速度外插，顯示值朝目標追趕
-    let lead = 0;
-    for (const p of skiPlayers.values()) {
-      const ext = p.final != null ? p.final : p.dist + (p.speed || 0) * Math.min((performance.now() - (p.atMs || 0)) / 1000, 1);
-      p.disp += (ext - p.disp) * 0.12;
-      lead = Math.max(lead, p.disp);
+  sock.on('skiEnd', (m) => {
+    SFX.win();
+    const rank = m.rank || [];
+    $('#skiResults').innerHTML = '🏁 ' + rank.map((r, i) =>
+      `${i + 1}. <b>${esc(r.name)}</b> ${r.dist}m（跳 ${r.jumps}・撞 ${r.hits}）`).join(' · ');
+    // 大螢幕只放前三，名字太多會擠爆 HUD
+    SKI.rankText = rank.slice(0, 3).map((r, i) => `${'🥇🥈🥉'.slice(i * 2, i * 2 + 2)} ${r.name} ${r.dist}m`).join('　');
+    SKI.race = null;
+    updateShell();                    // 立刻換回「開始」並把成績打到畫面中央
+  });
+
+  // 版面：1 全螢幕 → 2 直切兩欄 → 3-4 用 2×2 → 5-8 用 4×2（空位純黑）
+  function skiLayout(n) {
+    if (n <= 1) return [{ x: 0, y: 0, w: FW, h: FH }];
+    if (n === 2) return [0, 1].map((i) => ({ x: i * (FW / 2), y: 0, w: FW / 2, h: FH }));
+    if (n <= 4) return [0, 1, 2, 3].map((i) => ({ x: (i % 2) * (FW / 2), y: ((i / 2) | 0) * (FH / 2), w: FW / 2, h: FH / 2 }));
+    return [...Array(8).keys()].map((i) => ({ x: (i % 4) * (FW / 4), y: ((i / 4) | 0) * (FH / 2), w: FW / 4, h: FH / 2 }));
+  }
+  // 版面切換做插值，加入時分割線慢慢長出來而不是瞬間跳格
+  let curLayout = skiLayout(1), targetN = 1;
+  function lerpLayout(a, b, t) {
+    const n = Math.max(a.length, b.length);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const A = a[Math.min(i, a.length - 1)], B = b[Math.min(i, b.length - 1)];
+      out.push({ x: A.x + (B.x - A.x) * t, y: A.y + (B.y - A.y) * t,
+                 w: A.w + (B.w - A.w) * t, h: A.h + (B.h - A.h) * t, live: i < b.length });
     }
-    const SPAN = 90; // 畫面涵蓋 90m
-    const cam = Math.max(0, lead - SPAN * 0.75); // 領先者在 75% 高度
-    const y = (d) => ((d - cam) / SPAN) * H;
-    // 雪道背景：淡藍雪地 + 樹
-    ctx.fillStyle = '#f4f9fe'; ctx.fillRect(0, 0, W, H);
-    ctx.font = '16px serif';
-    for (let d = Math.floor(cam / 15) * 15; d < cam + SPAN + 15; d += 15) {
-      const ty = y(d);
-      ctx.fillStyle = '#9fc3e0';
-      for (let i = 0; i <= ids.length; i++) {
-        ctx.fillText('🌲', i * laneW - 8 + (d % 30 ? 6 : -6), ty);
+    return out;
+  }
+  let layoutT = 1, layoutFrom = skiLayout(1), layoutTo = skiLayout(1);
+
+  function skiDraw(t) {
+    const list = roster.filter((c) => c.connected);
+    const n = Math.max(1, Math.min(8, list.length));
+    if (n !== targetN) {                       // 有人加入／離開：啟動 0.45 秒過渡
+      layoutFrom = curLayout.map((v) => ({ ...v }));
+      layoutTo = skiLayout(n); targetN = n; layoutT = 0;
+    }
+    if (layoutT < 1) layoutT = Math.min(1, layoutT + 1 / 27);
+    curLayout = lerpLayout(layoutFrom, layoutTo, layoutT < 1 ? layoutT * layoutT * (3 - 2 * layoutT) : 1);
+
+    if (!SKI.img || SKI.img.width !== FW) SKI.img = fctx.createImageData(FW, FH);
+    const img = SKI.img;
+    // 沒玩家的格子＝純黑。ImageData 清 0 會是透明而非黑，要把 alpha 補滿
+    const d0 = img.data;
+    for (let i = 0; i < d0.length; i += 4) { d0[i] = 6; d0[i + 1] = 9; d0[i + 2] = 15; d0[i + 3] = 255; }
+    const now = hostClock.serverNow() ?? Date.now();   // host 端只有 hostClock
+
+    const vps = [];
+    curLayout.forEach((v, i) => {
+      const vw = Math.max(4, Math.round(v.w)), vh = Math.max(4, Math.round(v.h));
+      const c = list[i];
+      if (!c) return;
+      const p = SKI.players.get(c.clientId);
+      // 外推：用最後回報的速度補掉傳輸延遲，大螢幕上的位置才會跟手感同步
+      let wy = COURSE.START_Y, x = 0, speed = 0, air = 0, rot = 0;
+      if (p) {
+        const lag = Math.min(0.6, (performance.now() - p.at) / 1000);
+        wy = p.final != null ? p.wy : p.wy + p.speed * WORLD_PER_M * lag;
+        x = Math.max(-COURSE.HALF_W, Math.min(COURSE.HALF_W, p.x + p.vx * lag));
+        speed = p.speed; air = p.air; rot = p.rot;
+        p.dispX += (x - p.dispX) * 0.35;       // 平滑，避免 10Hz 的階梯感
+        p.dispY += (wy - p.dispY) * 0.35;
+        x = p.dispX; wy = p.dispY;
       }
-      ctx.fillStyle = '#c5d9ea';
-      ctx.fillText(d + 'm', 6, ty - 4);
-    }
-    // 分道線 + 玩家
-    ids.forEach((id, i) => {
-      const p = skiPlayers.get(id);
-      ctx.strokeStyle = '#dde9f3';
-      ctx.beginPath(); ctx.moveTo(i * laneW, 0); ctx.lineTo(i * laneW, H); ctx.stroke();
-      const cx = i * laneW + laneW / 2;
-      const sy = Math.min(y(p.disp), H - 24);
-      const sway = Math.sin(performance.now() / 180 + i) * Math.min(p.speed || 0, 6) * 1.2;
-      ctx.font = '30px serif';
-      ctx.fillText('⛷️', cx - 15 + sway, sy);
-      ctx.font = 'bold 14px sans-serif'; ctx.fillStyle = '#1b2733'; ctx.textAlign = 'center';
-      ctx.fillText(`${p.name} ${p.disp.toFixed(0)}m`, cx, 22);
-      ctx.textAlign = 'start';
+      const vp = { x: Math.round(v.x), y: Math.round(v.y), w: vw, h: vh,
+                   horizon: Math.round(vh * 0.34), scroll: wy - COURSE.START_Y, camX: x, f: 90,
+                   c, p, speed, air, rot, idx: i };
+      MODE7.renderInto(img, FW, SKI.world, vp);
+      vps.push(vp);
     });
-    if (elapsed < skiRace.duration + 3000) requestAnimationFrame(skiDraw);
-  }
+    fctx.putImageData(img, 0, 0);
 
-  // ---- 匯出：POC 唯一真正的交付物 ----
-  async function doExport() {
-    const res = await fetch(`/export/${roomId}`);
-    const blob = await res.blob();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `mahou-${roomId}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    // 障礙物與角色疊在上面（每格各自裁切）
+    for (const vp of vps) {
+      fctx.save();
+      fctx.beginPath(); fctx.rect(vp.x, vp.y, vp.w, vp.h); fctx.clip();
+      // 由遠到近畫障礙物
+      const near = [];
+      for (const o of SKI.obs) {
+        const d = o.wy - (vp.scroll + COURSE.START_Y);
+        if (d < -60 || d > 2600) continue;
+        near.push(o);
+      }
+      for (const o of near) {
+        const pr = MODE7.project(vp, o.wx, o.wy - COURSE.START_Y);
+        if (!pr || pr.sy < vp.y + vp.horizon || pr.sy > vp.y + vp.h + 40) continue;
+        const sc = Math.max(1, pr.k * 46);
+        if (o.rock) {
+          fctx.fillStyle = '#5b6470'; fctx.fillRect(pr.sx - sc * .45, pr.sy - sc * .5, sc * .9, sc * .5);
+          fctx.fillStyle = '#79838f'; fctx.fillRect(pr.sx - sc * .3, pr.sy - sc * .45, sc * .45, sc * .18);
+        } else {
+          fctx.fillStyle = '#4a3526'; fctx.fillRect(pr.sx - sc * .09, pr.sy - sc * .5, sc * .18, sc * .5);
+          for (let k = 0; k < 3; k++) {
+            const w2 = sc * (.72 - k * .19);
+            fctx.fillStyle = k === 0 ? '#1f5c38' : '#2c7a48';
+            fctx.fillRect(pr.sx - w2 / 2, pr.sy - sc * (.85 + k * .42), w2, sc * .5);
+          }
+        }
+      }
+      // 玩家角色固定在畫面下方中央，轉向靠傾身（左右側身）
+      if (vp.p) {
+        const lean = Math.max(-1, Math.min(1, (vp.p.vx || 0) / 180));
+        const dir = lean < -.35 ? 'left' : lean > .35 ? 'right' : 'back';
+        const frame = Math.floor(performance.now() / 110) % 4;
+        const scale = Math.max(.40, (vp.h / 216) * 0.9);          // 角色高度約佔格高 27%
+        const feetY = vp.y + vp.h * 0.90 - (vp.air > 0 ? vp.air * vp.h * 0.30 : 0);
+        CHARA.drawSki(fctx, vp.idx, dir, frame, vp.x + vp.w / 2 + lean * vp.w * .06, feetY, scale, vp.rot || 0);
+      }
+      fctx.restore();
+    }
+    // 所有格子都描框（含沒人的黑格），分割才讀得出來
+    fctx.strokeStyle = 'rgba(120,150,180,.35)'; fctx.lineWidth = 1;
+    for (const v of curLayout) {
+      fctx.strokeRect(Math.round(v.x) + .5, Math.round(v.y) + .5, Math.round(v.w) - 1, Math.round(v.h) - 1);
+    }
+    return vps;
   }
-  $('#exportBtn').addEventListener('click', doExport);
-
-  // ---- 結束房間（計費防呆）：先自動匯出一次，再踢掉所有連線讓 DO 休眠 ----
-  $('#endBtn').addEventListener('click', async () => {
-    if (!confirm('結束房間？會先自動匯出 JSON，然後踢掉所有人。')) return;
-    await doExport();
-    sock.send({ type: 'endRoom' });
-  });
-  sock.onEnded((reason) => {
-    $('#connState').textContent = `⏹ 房間已結束（${reason}）`;
-    document.querySelectorAll('button[data-stage], #endBtn').forEach((b) => (b.disabled = true));
-  });
+  SKI.world = MODE7.buildWorld('snow');
 
   // ---- 畫面 ----
   const fmt = (v, d = 1) => (v == null ? '–' : (+v).toFixed(d));

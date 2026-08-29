@@ -134,19 +134,29 @@
   <div class="card stat" id="colorStat"></div>
 </section>
 
-<!-- 遊戲二：滑雪下坡 -->
+<!-- 遊戲二：滑雪下坡（手機＝控制器，畫面在電視上） -->
 <section id="st-ski" class="stage">
   <button id="skiPermBtn">啟用感測器</button>
-  <div id="skiUI" style="display:none; flex-direction:column; gap:14px; flex:1">
-    <p class="hint" id="skiMsg">等主持人開始…</p>
-    <div class="big" style="font-size:2.2rem"><span id="skiDist">0</span><span style="font-size:1.1rem"> m</span></div>
-    <canvas id="skiView" style="flex:1; width:100%; border-radius:14px; background:#eaf3fb; min-height:180px"></canvas>
-    <div id="speedTrack"><div id="skiSpeedBar"></div></div>
-    <p class="hint">上下用力搖！搖越快滑越快 ⛷️</p>
-    <div class="card stat" id="skiStat"></div>
+  <div id="skiUI" style="display:none; flex-direction:column; gap:10px; flex:1">
+    <div id="skiCal" style="display:flex; flex-direction:column; gap:12px">
+      <p class="hint">把手機<b>平放在手上</b>，保持水平</p>
+      <div class="big" id="skiTiltNow" style="font-size:2rem">–</div>
+      <button id="skiZero" style="background:#374151">歸零校準</button>
+    </div>
+    <div id="skiPlay" style="display:none; flex-direction:column; gap:10px; flex:1">
+      <p class="hint" id="skiMsg">準備…</p>
+      <div class="big" style="font-size:2.6rem"><span id="skiDist">0</span><span style="font-size:1.1rem"> m</span></div>
+      <div id="speedTrack"><div id="skiSpeedBar"></div></div>
+      <div id="skiTiltBar" style="height:26px; background:#1f2937; border-radius:13px; position:relative">
+        <div id="skiTiltDot" style="position:absolute; top:3px; left:50%; width:20px; height:20px; margin-left:-10px; border-radius:50%; background:#38bdf8"></div>
+      </div>
+      <button id="skiJump" style="flex:1; font-size:2rem; border-radius:24px; background:#374151">點我跳躍</button>
+      <div class="card stat" id="skiStat"></div>
+    </div>
   </div>
 </section>
 
+<script src="/engine/course.js"></script>
 <script src="/shared.js"></script>
 <script>
 (function () {
@@ -405,6 +415,7 @@
       sock.send({ type: 'shake', count: shakeCount, params: { ...P }, tClientSend: clock.serverNow() });
     }, 300);
   }
+  window.__testShake = () => { shakeCount++; };   // 測試用：無感測器環境模擬搖動
   $('#shakeReset').addEventListener('pointerdown', () => {
     shakeCount = 0; $('#shakeCount').textContent = '0';
   });
@@ -586,109 +597,162 @@
     }
   });
 
-  // ---- 遊戲二：滑雪下坡 ----
-  // 搖動頻率(EMA α=0.3) → 速度，距離由 client 積分，每 200ms 上報（§6）
-  let ski = null, skiTimer = null;
+  // ---- 遊戲二：滑雪下坡（client 權威：手機跑完整物理）----
+  // 平放上下搖＝加速（衝刺後緩降）、左右傾＝轉向、點畫面＝跳躍。
+  // gamma 在劇烈搖動下會抖，所以走重低通＋死區——犧牲一點轉向反應換穩定。
+  const SKI = {
+    ACC_PER_SHAKE: 2.6, DECAY: 1.3, CAP_BASE: 9, CAP_STEP: 2.4, CAP_MAX: 20,
+    JUMPS_PER_LEVEL: 3, AIR_TIME: 0.82, HIT_MUL: 0.42, STUN: 0.55,
+    STEER: 210, TILT_DEAD: 3.5, TILT_RANGE: 26, TILT_EMA: 0.16, WORLD_PER_M: 11,
+  };
+  let ski = null, skiTimer = null, gammaRaw = 0, gammaZero = 0, gammaF = 0, orientOn = false;
+
+  function startOrient() {
+    if (orientOn) return;
+    orientOn = true;
+    addEventListener('deviceorientation', (e) => {
+      if (e.gamma == null) return;
+      gammaRaw = e.gamma;
+      gammaF += (gammaRaw - gammaF) * SKI.TILT_EMA;      // 重低通：搖動時 gamma 會亂跳
+    });
+  }
+  function tiltNorm() {
+    const g = gammaF - gammaZero;
+    const s2 = Math.sign(g), a = Math.abs(g);
+    if (a < SKI.TILT_DEAD) return 0;
+    return s2 * Math.min(1, (a - SKI.TILT_DEAD) / SKI.TILT_RANGE);
+  }
+
   function setupSkiStage() {
-    if (motionOn) { $('#skiPermBtn').style.display = 'none'; $('#skiUI').style.display = 'flex'; }
+    if (motionOn) { $('#skiPermBtn').style.display = 'none'; $('#skiUI').style.display = 'flex'; startOrient(); }
     else { $('#skiPermBtn').style.display = ''; $('#skiUI').style.display = 'none'; }
   }
   $('#skiPermBtn').addEventListener('click', async () => {
-    if (!(await ensureMotion())) {
-      $('#skiPermBtn').textContent = '權限被拒 — 關閉分頁重開再試';
-      $('#skiMsg').textContent = deniedHint;
-      $('#skiUI').style.display = 'flex';
-      return;
-    }
+    if (!(await ensureMotion())) { $('#skiPermBtn').textContent = '權限被拒 — 關閉分頁重開再試'; return; }
     setupSkiStage();
   });
+  $('#skiZero').addEventListener('click', () => {
+    gammaZero = gammaF;
+    $('#skiMsg').textContent = '已歸零，等主持人開始';
+    $('#skiCal').style.display = 'none';
+    $('#skiPlay').style.display = 'flex';
+  });
+  // 校準畫面即時顯示傾斜，讓人知道感測器活著
+  setInterval(() => {
+    if (stage !== 'ski' || !motionOn) return;
+    if ($('#skiCal').style.display !== 'none') $('#skiTiltNow').textContent = (gammaF - gammaZero).toFixed(0) + '°';
+  }, 100);
+
   sock.on('skiStart', (m) => {
-    ski = { startAt: m.startAt, duration: m.duration, dist: 0, ema: 0, speedNow: 0, done: false, tick: 0 };
-    $('#skiDist').textContent = '0';
+    if (gammaZero === 0 && gammaF !== 0) gammaZero = gammaF;   // 沒按歸零就用當下姿勢
+    $('#skiCal').style.display = 'none';
+    $('#skiPlay').style.display = 'flex';
+    ski = {
+      startAt: m.startAt, duration: m.duration, obs: COURSE.build(m.seed), scan: 0,
+      x: 0, wy: COURSE.START_Y, vx: 0, speed: 0, boost: 0, cap: SKI.CAP_BASE,
+      air: 0, rot: 0, stun: 0, jumps: 0, hits: 0, airStart: 0, cleanAir: true,
+      shakeBase: shakeCount, done: false, tick: 0, last: performance.now(),
+    };
     $('#skiStat').textContent = '';
     clearInterval(skiTimer);
-    skiTimer = setInterval(skiTick, 100);
-    startSkiView();
+    skiTimer = setInterval(skiTick, 1000 / 60);
   });
 
-  // 手機端第一人稱視覺：滑雪者固定在下方，樹迎面刷過，速度感由捲動速率與速度線呈現
-  let skiWorld = 0, skiViewOn = false;
-  function startSkiView() {
-    if (skiViewOn) return;
-    skiViewOn = true;
-    const cv = $('#skiView');
-    const loop = () => {
-      if (!ski || (ski.done && skiViewOn)) { skiViewOn = false; return; }
-      const dpr = Math.min(devicePixelRatio || 1, 2);
-      const W = cv.clientWidth * dpr, H = cv.clientHeight * dpr;
-      if (cv.width !== W) { cv.width = W; cv.height = H; }
-      const ctx = cv.getContext('2d');
-      const sp = ski.speedNow || 0;
-      skiWorld += sp * dpr * 1.1; // 速度→捲動
-      ctx.fillStyle = '#eaf3fb'; ctx.fillRect(0, 0, W, H);
-      // 速度線（快的時候才出現）
-      if (sp > 4) {
-        ctx.strokeStyle = 'rgba(120,160,200,' + Math.min((sp - 4) / 10, 0.5) + ')';
-        ctx.lineWidth = 2 * dpr;
-        for (let i = 0; i < 6; i++) {
-          const x = ((i * 173 + 37) % W);
-          const y = (skiWorld * 2.2 + i * 331) % (H + 60) - 30;
-          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 22 * dpr); ctx.stroke();
-        }
-      }
-      // 樹：固定世界間距，回收時換 x 位置
-      ctx.font = 30 * dpr + 'px serif';
-      const gap = 90 * dpr, span = H + gap * 2;
-      for (let i = 0; i < Math.ceil(span / gap); i++) {
-        const wy = i * gap;
-        const cycle = Math.floor((skiWorld + wy) / span);
-        const sy = (skiWorld + wy) % span - gap;
-        const r = Math.abs(Math.sin(i * 7919 + cycle * 104729));
-        ctx.fillText('🌲', 10 + r * (W - 50), sy);
-      }
-      // 滑雪者固定下方，隨速度左右擺
-      const sway = Math.sin(performance.now() / 160) * Math.min(sp, 8) * 2 * dpr;
-      ctx.font = 40 * dpr + 'px serif';
-      ctx.fillText('⛷️', W / 2 - 20 * dpr + sway, H - 14 * dpr);
-      requestAnimationFrame(loop);
-    };
-    requestAnimationFrame(loop);
-  }
+  $('#skiJump').addEventListener('pointerdown', () => {
+    if (!ski || ski.done || ski.air > 0 || ski.stun > 0) return;
+    const now = clock.serverNow() ?? Date.now();
+    if (now < ski.startAt) return;
+    ski.air = SKI.AIR_TIME; ski.airStart = SKI.AIR_TIME; ski.cleanAir = true;
+    navigator.vibrate?.(20);
+  });
+
   function skiTick() {
     if (!ski) return;
+    const nowP = performance.now();
+    const dt = Math.min(0.05, (nowP - ski.last) / 1000);
+    ski.last = nowP;
     const now = clock.serverNow() ?? Date.now();
+
     if (now < ski.startAt) {
-      $('#skiMsg').textContent = `準備… ${Math.ceil((ski.startAt - now) / 1000)}`;
+      $('#skiMsg').textContent = '準備… ' + Math.ceil((ski.startAt - now) / 1000);
       return;
     }
     const remain = ski.startAt + ski.duration - now;
     if (remain <= 0) {
       if (!ski.done) {
         ski.done = true;
-        sock.send({ type: 'skiDone', distance: Math.round(ski.dist * 10) / 10 });
+        const dist = Math.round((ski.wy - COURSE.START_Y) / SKI.WORLD_PER_M);
+        sock.send({ type: 'skiDone', dist, jumps: ski.jumps, hits: ski.hits });
         $('#skiMsg').textContent = '結束！';
-        $('#skiStat').innerHTML = `你滑了 <b>${ski.dist.toFixed(1)} m</b>`;
+        $('#skiStat').innerHTML = `滑了 <b>${dist} m</b>・跳躍 ${ski.jumps}・撞到 ${ski.hits}`;
         $('#skiSpeedBar').style.width = '0%';
         clearInterval(skiTimer);
       }
       return;
     }
-    $('#skiMsg').textContent = `剩 ${Math.ceil(remain / 1000)} 秒`;
-    // 最近 1 秒的搖動次數 → EMA
-    const t = performance.now();
-    let n = 0;
-    for (let i = shakeTimes.length - 1; i >= 0 && shakeTimes[i] > t - 1000; i--) n++;
-    ski.ema = 0.3 * n + 0.7 * ski.ema;
-    // 封頂 12：第一輪實測 10 太容易貼頂（27/30 秒滿速），抹平了玩家差距
-    const speed = Math.min(ski.ema * 1.6, 12);
-    ski.speedNow = speed;
-    ski.dist += speed * 0.1;
-    $('#skiDist').textContent = ski.dist.toFixed(0);
-    $('#skiSpeedBar').style.width = (speed / 12) * 100 + '%';
-    if (++ski.tick % 2 === 0) {
-      sock.send({ type: 'skiRun', speed: Math.round(speed * 100) / 100, distance: Math.round(ski.dist * 10) / 10, shakeRate: Math.round(ski.ema * 10) / 10, tClientSend: clock.serverNow() });
+    $('#skiMsg').textContent = '剩 ' + Math.ceil(remain / 1000) + ' 秒';
+
+    // 加速：每次搖動給一份 boost，boost 按比例緩降 → 平衡點 ≈ ACC×搖動頻率÷DECAY，
+    // 所以速度跟「持續搖多快」掛勾（約 4-5 下/秒才頂到上限），停手約 0.5 秒掉一半。
+    const newShakes = shakeCount - ski.shakeBase;
+    ski.shakeBase = shakeCount;
+    ski.boost = Math.min(ski.cap, ski.boost + newShakes * SKI.ACC_PER_SHAKE);
+    ski.boost = Math.max(0, ski.boost - ski.boost * SKI.DECAY * dt * (ski.stun > 0 ? 5 : 1));
+    ski.speed += (ski.boost - ski.speed) * Math.min(1, dt * 5);
+
+    // 轉向：空中轉向力減半（比較難修正，跳躍才有風險）
+    const t = tiltNorm();
+    ski.vx = t * SKI.STEER * (ski.air > 0 ? 0.5 : 1);
+    ski.x = Math.max(-COURSE.HALF_W, Math.min(COURSE.HALF_W, ski.x + ski.vx * dt));
+
+    // 前進 ＋ 跳躍
+    ski.wy += ski.speed * SKI.WORLD_PER_M * dt;
+    if (ski.stun > 0) ski.stun -= dt;
+    if (ski.air > 0) {
+      ski.air -= dt;
+      ski.rot = (1 - ski.air / ski.airStart) * Math.PI * 2;     // 滯空一圈
+      if (ski.air <= 0) {
+        ski.air = 0; ski.rot = 0;
+        if (ski.cleanAir) {
+          ski.jumps++;
+          ski.cap = Math.min(SKI.CAP_MAX, SKI.CAP_BASE + Math.floor(ski.jumps / SKI.JUMPS_PER_LEVEL) * SKI.CAP_STEP);
+          navigator.vibrate?.(35);
+        }
+      }
+    }
+
+    // 碰撞
+    ski.scan = COURSE.advance(ski.obs, ski.scan, ski.wy);
+    const hit = COURSE.hitAt(ski.obs, ski.scan, ski.x, ski.wy, ski.air);
+    if (hit >= 0 && ski.stun <= 0) {
+      ski.hits++; ski.boost *= SKI.HIT_MUL; ski.speed *= SKI.HIT_MUL;
+      ski.stun = SKI.STUN; ski.cleanAir = false;
+      ski.obs[hit].wy = -1e9;                                   // 同一棵只撞一次
+      navigator.vibrate?.([50, 30, 50]);
+    }
+
+    // 畫面回饋
+    $('#skiDist').textContent = Math.round((ski.wy - COURSE.START_Y) / SKI.WORLD_PER_M);
+    $('#skiSpeedBar').style.width = Math.min(100, (ski.speed / SKI.CAP_MAX) * 100) + '%';
+    $('#skiSpeedBar').style.background = ski.stun > 0 ? '#ef4444' : (ski.speed > ski.cap * .9 ? '#f2c14e' : '#38bdf8');
+    $('#skiTiltDot').style.left = (50 + t * 44) + '%';
+    $('#skiJump').textContent = ski.air > 0 ? '空中！' : (ski.stun > 0 ? '撞到了' : '點我跳躍');
+    $('#skiStat').innerHTML = `速度上限 <b>${ski.cap.toFixed(1)}</b>・跳躍 ${ski.jumps}・撞到 ${ski.hits}`;
+
+    // 10Hz 上報（host 會用 speed/vx 外推補掉延遲）
+    if (++ski.tick % 6 === 0) {
+      sock.send({ type: 'skiRun', x: Math.round(ski.x), wy: Math.round(ski.wy),
+                  speed: +ski.speed.toFixed(2), vx: Math.round(ski.vx), air: +ski.air.toFixed(2),
+                  rot: +ski.rot.toFixed(2), jumps: ski.jumps, hits: ski.hits,
+                  cap: +ski.cap.toFixed(1), tClient: clock.serverNow() });
     }
   }
+
+  sock.on('skiEnd', (m) => {
+    clearInterval(skiTimer); ski = null;
+    if (m.rank) $('#skiStat').innerHTML = m.rank.map((r, i) => `${i + 1}. ${r.name} ${r.dist}m`).join('<br>');
+  });
+
 })();
 </script>
 </body>
