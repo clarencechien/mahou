@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>名畫變色龍 — 原型</title>
+<link rel="icon" href="data:,">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif; background: #14141c; color: #e8e6e0; padding: 16px; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 1.05rem; color: #9a958c; font-weight: 600; margin-bottom: 12px; letter-spacing: .02em; }
+  .ctl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  button, select { font-size: .92rem; padding: 8px 14px; border-radius: 8px; border: none; background: #262630; color: #e8e6e0; cursor: pointer; font-family: inherit; }
+  button.on { background: #8a6a3a; color: #fff; }
+  button:hover { background: #33333f; }
+  button.on:hover { background: #9a7742; }
+  label { font-size: .85rem; color: #9a958c; display: flex; align-items: center; gap: 7px; }
+  input[type=range] { width: 120px; }
+  #stage { background: #000; border-radius: 8px; overflow: hidden; line-height: 0; }
+  canvas { display: block; width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+  .readout { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; font-family: ui-monospace, monospace; font-size: .82rem; color: #8b877e; }
+  .readout b { color: #d8c9a8; font-weight: 500; }
+  .notes { margin-top: 20px; font-size: .87rem; color: #8b877e; line-height: 1.8; max-width: 74ch; }
+  .notes h2 { font-size: .95rem; color: #c9bfae; margin: 16px 0 6px; font-weight: 600; }
+  .notes code { background: #262630; padding: 1px 6px; border-radius: 4px; font-size: .9em; }
+  .notes b { color: #d8c9a8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>名畫變色龍 — 大螢幕原型（#6 找不同）</h1>
+<div class="ctl">
+  <button data-p="0" class="on">星夜</button>
+  <button data-p="1">神奈川沖浪裏</button>
+  <button data-p="2">吶喊</button>
+  <button data-p="3">睡蓮</button>
+  <button id="revealBtn" style="margin-left:12px">顯示答案</button>
+  <label>偽裝強度 <input type="range" id="camo" min="0" max="100" value="72"><b id="camoV" style="color:#d8c9a8">72%</b></label>
+  <label>藏幾隻 <input type="range" id="cnt" min="1" max="10" value="5" style="width:80px"><b id="cntV" style="color:#d8c9a8">5</b></label>
+  <button id="reshuffle">重新藏</button>
+</div>
+<div id="stage"><canvas id="cv"></canvas></div>
+<div class="readout">
+  <span>畫作重繪 <b id="mPaint">–</b></span>
+  <span>每幀 <b id="mFrame">–</b></span>
+  <span>內部解析度 <b>320×180</b></span>
+  <span>調色盤 <b id="mPal">–</b> 色</span>
+</div>
+
+<div class="notes">
+  <h2>這頁在證明什麼</h2>
+  名畫用<b>程序化向量描述</b>畫進 320×180 的像素緩衝區（多邊形掃描線填色 ＋ Bayer 4×4 有序抖動漸層），畫完快取成一張點陣圖；每幀只做「貼上底圖 ＋ 畫變色龍 ＋ 畫游標」。所以<b>畫作再複雜都不影響每幀成本</b>——右上的兩個數字就是在量這件事。
+  <h2>變色龍怎麼藏</h2>
+  小人放好位置後，<b>從底圖取樣它腳下的顏色</b>，把身體色朝那個顏色內插（偽裝強度滑桿控制內插比例）。所以同一張畫、同一個位置，難度可以連續調整——這正是家宴需要的：讓阿嬤玩 40%、讓小孩玩 90%。公平的「破綻」是<b>眨眼</b>：每隻小人會隨機眨眼，眼睛那兩格會閃一下深色，這是唯一保證能被看見的線索。
+  <h2>把難度做成可量測的</h2>
+  偽裝強度直接對應「小人與背景的色差」。之前顏色反應那一輪已經量到<b>跨螢幕 ΔE &lt; 40 就等於亂猜</b>——同一把尺可以套用在這裡：把偽裝強度換算成 ΔE，就知道題目落在「看得出來」還是「猜的」哪一區，不用靠感覺調參。
+</div>
+</div>
+
+<script>
+(function () {
+  const W = 320, H = 180;                       // 內部解析度：畫完再整數倍放大
+  const cv = document.getElementById('cv');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d', { alpha: false });
+  ctx.imageSmoothingEnabled = false;
+
+  // ---------- 像素緩衝區 ----------
+  const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  // 色相偏移：暗部往冷色（藍紫）走、亮部往暖色（黃）走，比單純加減亮度立體得多
+  const shade = (c, amt) => amt < 0
+    ? [c[0] * (1 + amt), c[1] * (1 + amt * .88), c[2] * (1 + amt * .62)]
+    : [c[0] + (255 - c[0]) * amt, c[1] + (255 - c[1]) * amt * .92, c[2] + (255 - c[2]) * amt * .6];
+
+  function Buf(w, h) { this.w = w; this.h = h; this.d = new Uint8ClampedArray(w * h * 4); }
+  Buf.prototype.set = function (x, y, c) {
+    x |= 0; y |= 0;
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return;
+    const i = (y * this.w + x) * 4;
+    this.d[i] = c[0]; this.d[i + 1] = c[1]; this.d[i + 2] = c[2]; this.d[i + 3] = 255;
+  };
+  Buf.prototype.get = function (x, y) {
+    x = Math.max(0, Math.min(this.w - 1, x | 0)); y = Math.max(0, Math.min(this.h - 1, y | 0));
+    const i = (y * this.w + x) * 4;
+    return [this.d[i], this.d[i + 1], this.d[i + 2]];
+  };
+  Buf.prototype.rect = function (x, y, w, h, c) {
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) this.set(x + i, y + j, c);
+  };
+
+  // Bayer 4×4 有序抖動：低解析度下畫漸層的關鍵，比線性漸層更有「畫」的顆粒
+  const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+  const ss = (t) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
+  // 把混合值推向 0 或 1：色塊變成實心、抖動只留在交界 → 看起來像筆觸而不是雜訊
+  const punch = (v, k) => ss((v - 0.5) * (k || 3) + 0.5);
+  const bayer = (x, y) => (BAYER[y & 3][x & 3] + 0.5) / 16;
+  // mixFn(x,y) 回 0..1，決定該點取 cA 還是 cB
+  function ditherArea(b, x0, y0, w, h, cA, cB, mixFn) {
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+      const x = x0 + i, y = y0 + j;
+      const col = mixFn(x, y) > bayer(x, y) ? cB : cA;
+      if (col) b.set(x, y, col);
+    }
+  }
+  // 多邊形掃描線填色：讓我能用少量控制點描出畫作的構圖
+  function poly(b, pts, colFn) {
+    let minY = 1e9, maxY = -1e9;
+    for (const p of pts) { if (p[1] < minY) minY = p[1]; if (p[1] > maxY) maxY = p[1]; }
+    minY = Math.max(0, Math.floor(minY)); maxY = Math.min(b.h - 1, Math.ceil(maxY));
+    for (let y = minY; y <= maxY; y++) {
+      const xs = [];
+      for (let i = 0, n = pts.length; i < n; i++) {
+        const a = pts[i], c = pts[(i + 1) % n];
+        if ((a[1] <= y && c[1] > y) || (c[1] <= y && a[1] > y)) {
+          xs.push(a[0] + (y - a[1]) / (c[1] - a[1]) * (c[0] - a[0]));
+        }
+      }
+      xs.sort((p, q) => p - q);
+      for (let k = 0; k + 1 < xs.length; k += 2) {
+        for (let x = Math.floor(xs[k]); x <= Math.ceil(xs[k + 1]); x++) {
+          const col = colFn(x, y);
+          if (col) b.set(x, y, col);
+        }
+      }
+    }
+  }
+  function ellip(b, cx, cy, rx, ry, colFn) {
+    for (let y = Math.floor(cy - ry); y <= cy + ry; y++)
+      for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
+        const d = Math.hypot((x - cx) / rx, (y - cy) / ry);
+        if (d <= 1) { const c = colFn(x, y, d); if (c) b.set(x, y, c); }
+      }
+  }
+  // 沿著一條路徑做出有厚度的帶狀多邊形（大浪的捲曲就是一條變粗變細的帶子）
+  function ribbon(pts) {
+    const L = [], R = [], N = 90;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N * (pts.length - 1), k = Math.min(pts.length - 2, Math.floor(t)), f = t - k;
+      const a = pts[k], c = pts[k + 1];
+      const x = a[0] + (c[0] - a[0]) * f, y = a[1] + (c[1] - a[1]) * f, w = a[2] + (c[2] - a[2]) * f;
+      const dx = c[0] - a[0], dy = c[1] - a[1], len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len;
+      L.push([x + nx * w / 2, y + ny * w / 2]);
+      R.push([x - nx * w / 2, y - ny * w / 2]);
+    }
+    return L.concat(R.reverse());
+  }
+  function disc(b, cx, cy, r, colFn) {
+    for (let y = Math.floor(cy - r); y <= cy + r; y++)
+      for (let x = Math.floor(cx - r); x <= cx + r; x++) {
+        const d = Math.hypot(x - cx, y - cy);
+        if (d <= r) { const c = colFn(x, y, d / r); if (c) b.set(x, y, c); }
+      }
+  }
+
+  // ---------- 四張名畫 ----------
+  // 每張都是「受限調色盤 ＋ 少量控制點」；顏色取自原作的主要色域
+  const PAINTINGS = [
+    {
+      name: '星夜', artist: '梵谷 1889',
+      pal: ['#0b1030', '#16265e', '#24479b', '#3f74c8', '#7ba7de', '#c9dcf2', '#f2d24e', '#fff2b8', '#0c1a13', '#1d3a26', '#0a1220', '#e8a83c'],
+      draw(b, P) {
+        const [nav, ind, blu, brt, pale, wht, star, glow, cyp1, cyp2, vil, win] = P.map(hex);
+        // 天空：夜藍漸層 ＋ 兩層漩渦（sin 疊 sin 做出流動感）
+        ditherArea(b, 0, 0, W, H, nav, ind, (x, y) => 0.15 + y / H * 0.6);
+        // 梵谷的天空是「流動的筆觸」，不是雜訊——用明確的波浪帶與螺旋畫出來
+        for (let k = 0; k < 8; k++) {
+          const y0 = H * (0.06 + k * 0.088), amp = H * (0.035 + (k % 3) * 0.022);
+          const fr = 0.020 + (k % 2) * 0.008, ph = k * 1.9;
+          const pts = [];
+          for (let i = 0; i <= 12; i++) {
+            const x = -14 + (W + 28) * i / 12;
+            pts.push([x, y0 + Math.sin(x * fr + ph) * amp, 6 + Math.sin(i * .8 + k) * 3.5]);
+          }
+          const c1 = k % 3 === 0 ? brt : blu;
+          poly(b, ribbon(pts), (x, y) => punch(.62 + Math.sin(x * .3 + y * .2) * .3, 2) > bayer(x, y) ? c1 : null);
+        }
+        for (const [cxn, cyn, rr, turns, col] of [[.40, .34, 46, 2.4, brt], [.66, .50, 26, 2.0, blu]]) {
+          const sp = [];
+          for (let i = 0; i <= 44; i++) {
+            const t = i / 44, ang = t * Math.PI * turns + 0.7, r = 7 + t * rr;
+            sp.push([W * cxn + Math.cos(ang) * r * 1.22, H * cyn + Math.sin(ang) * r * 0.78, 9.5 - t * 4.5]);
+          }
+          poly(b, ribbon(sp), (x, y) => punch(.7 + Math.sin(x * .35 + y * .25) * .28, 2) > bayer(x, y) ? col : null);
+        }
+        ditherArea(b, 0, Math.round(H * .58), W, Math.round(H * .22), null, ind, (x, y) => punch((y / H - .58) * 3.4, 2.4));
+        // 星星與月亮：中心實心，外圈用抖動做出暈光
+        const stars = [[.07,.13,7],[.19,.31,6],[.30,.09,5],[.44,.24,6],[.57,.11,5],[.69,.29,6],[.93,.42,5],[.80,.15,4]];
+        for (const [nx, ny, r] of stars) {
+          const cx = nx * W, cy = ny * H;
+          disc(b, cx, cy, r * 2.6, (x, y, t) => (1 - t) * 0.55 > bayer(x, y) ? mixc(brt, star, (1 - t) * .7) : null);
+          disc(b, cx, cy, r * 0.62, () => star);
+          disc(b, cx, cy, r * 0.3, () => glow);
+        }
+        const mx = 0.875 * W, my = 0.14 * H;
+        disc(b, mx, my, 15, (x, y, t) => (1 - t) * 0.6 > bayer(x, y) ? mixc(brt, star, (1 - t) * .8) : null);
+        disc(b, mx, my, 8, () => star);
+        disc(b, mx - 3.5, my - 1.5, 6.4, (x, y) => (Math.hypot(x - mx, y - my) < 8) ? mixc(blu, brt, .4) : null);
+        // 遠山與村莊
+        poly(b, [[0, H * .74], [W * .2, H * .70], [W * .45, H * .76], [W * .7, H * .69], [W, H * .75], [W, H], [0, H]],
+          (x, y) => mixc(ind, nav, Math.min(1, (y / H - .68) * 2.2)));
+        poly(b, [[0, H * .84], [W, H * .80], [W, H], [0, H]], () => vil);
+        const houses = [[.10,.86,26,16],[.20,.88,18,13],[.30,.85,22,18],[.42,.87,16,12],[.56,.86,24,15],[.70,.88,20,12],[.84,.86,26,14]];
+        for (const [nx, ny, w, h] of houses) {
+          const x = nx * W, y = ny * H;
+          b.rect(x, y, w, h, shade(vil, -0.25));
+          poly(b, [[x - 2, y], [x + w / 2, y - 6], [x + w + 2, y]], () => shade(vil, -0.45));
+          for (let k = 0; k < Math.floor(w / 9); k++) b.rect(x + 4 + k * 9, y + 4, 3, 3, k % 2 ? win : star);
+        }
+        // 教堂尖塔
+        poly(b, [[W * .497, H * .70], [W * .509, H * .70], [W * .509, H * .90], [W * .497, H * .90]], () => shade(vil, -.5));
+        poly(b, [[W * .491, H * .705], [W * .503, H * .645], [W * .515, H * .705]], () => shade(vil, -.55));
+        // 絲柏：左側火焰狀剪影，內部加亮色紋理
+        const cyp = [];
+        for (let i = 0; i <= 22; i++) {
+          const t = i / 22, y = H * (1.02 - t * 1.0);
+          cyp.push([W * (0.075 + Math.sin(t * 7.5) * 0.032 + t * 0.016) + (1 - t) * 26, y]);
+        }
+        for (let i = 22; i >= 0; i--) {
+          const t = i / 22, y = H * (1.02 - t * 1.0);
+          cyp.push([W * (0.075 + Math.sin(t * 6.1 + 2.4) * 0.03 - t * 0.016) - (1 - t) * 26, y]);
+        }
+        poly(b, cyp, (x, y) => (Math.sin(x * 0.8 + y * 0.32) * 0.5 + 0.5) > 0.68 ? cyp2 : cyp1);
+      },
+    },
+    {
+      name: '神奈川沖浪裏', artist: '葛飾北齋 1831',
+      pal: ['#e9e0c8', '#c4b696', '#8fa3a8', '#0d2f52', '#1a5a86', '#4b93b8', '#a9cfdd', '#f2f6f7', '#20242a', '#f7f7f5', '#5b6b7a', '#dcd2b4'],
+      draw(b, P) {
+        const [sky1, sky2, hazy, deep, mid, lite, pale, foam, dark, snow, rock, sand] = P.map(hex);
+        ditherArea(b, 0, 0, W, H, sky1, sky2, (x, y) => 0.55 - y / H * 0.75);
+        ditherArea(b, 0, 0, W, Math.round(H * .45), sky2, hazy, (x, y) => Math.max(0, .5 - y / H * 1.5 + Math.sin(x * .05) * .12));
+        // 富士山
+        ditherArea(b, 0, Math.round(H * .68), W, Math.round(H * .32), pale, lite, (x, y) => punch((y / H - .68) * 2.4, 3));
+        // 富士山：放在右側，才不會被大浪整個蓋掉
+        poly(b, [[W * .70, H * .70], [W * .805, H * .44], [W * .91, H * .70]], (x, y) => mixc(rock, hazy, (y / H - .44) * 1.7));
+        poly(b, [[W * .762, H * .555], [W * .805, H * .44], [W * .848, H * .555], [W * .822, H * .525], [W * .805, H * .565], [W * .786, H * .525]], () => snow);
+        // 大浪：一條由粗變細的帶子，末端自然收攏成捲
+        const path = [[W * -.02, H * .96, 30], [W * .10, H * .76, 34], [W * .21, H * .48, 34],
+                      [W * .31, H * .25, 30], [W * .42, H * .15, 25], [W * .53, H * .19, 20],
+                      [W * .61, H * .31, 15], [W * .645, H * .44, 10], [W * .615, H * .53, 5]];
+        const curlX = W * .30, curlY = H * .92;
+        const stripe = (x, y) => {
+          const r = Math.hypot(x - curlX, (y - curlY) * 1.15);
+          const n = (Math.sin(r * .13) * .5 + .5);
+          return n > .74 ? lite : n > .40 ? mid : deep;
+        };
+        // 水牆本體：沿外緣往下封到畫面底部，讓浪有重量
+        const body = [];
+        for (let i = 0; i <= 5; i++) {
+          const a = path[i], c = path[Math.min(path.length - 1, i + 1)];
+          const dx = c[0] - a[0], dy = c[1] - a[1], len = Math.hypot(dx, dy) || 1;
+          body.push([a[0] - (-dy / len) * a[2] / 2, a[1] - (dx / len) * a[2] / 2]);
+        }
+        body.push([W * .50, H * .40], [W * .46, H * 1.05], [-14, H * 1.05]);
+        poly(b, body, stripe);
+        poly(b, ribbon(path), (x, y) => {
+          return stripe(x, y);                                       // 條紋順著捲曲的半徑走
+        });
+        // 浪頭泡沫爪：長在帶子的外緣
+        for (let i = 0; i < 10; i++) {
+          const t = 3 + i * 0.42, k = Math.min(path.length - 2, Math.floor(t)), f = t - k;
+          if (k + 1 >= path.length) break;
+          const a = path[k], c = path[k + 1];
+          const bx = a[0] + (c[0] - a[0]) * f, by = a[1] + (c[1] - a[1]) * f, wdt = a[2] + (c[2] - a[2]) * f;
+          const dx = c[0] - a[0], dy = c[1] - a[1], len = Math.hypot(dx, dy) || 1;
+          const nx = -dy / len, ny = dx / len;
+          const ox = bx - nx * wdt / 2, oy = by - ny * wdt / 2;      // 減號＝外緣
+          const L = 8 + Math.sin(i * 2.3) * 5;
+          poly(b, [[ox - 4, oy - 3], [ox - nx * L - 2, oy - ny * L], [ox - nx * L + 3, oy - ny * L + 2], [ox + 4, oy + 3]], () => foam);
+          disc(b, ox - nx * L, oy - ny * L, 2.4, () => foam);
+        }
+        for (let i = 0; i < 150; i++) {                      // 泡沫飛沫
+          const t = 1.2 + (i * 37 % 100) / 100 * 6, k = Math.min(path.length - 2, Math.floor(t)), f = t - k;
+          const a = path[k], c = path[k + 1];
+          const bx = a[0] + (c[0] - a[0]) * f, by = a[1] + (c[1] - a[1]) * f, wdt = a[2] + (c[2] - a[2]) * f;
+          const dx = c[0] - a[0], dy = c[1] - a[1], len = Math.hypot(dx, dy) || 1;
+          const off = wdt / 2 + 2 + (i * 13 % 17);
+          if ((i * 7 % 11) > 5) b.set(bx - (-dy / len) * off, by - (dx / len) * off, foam);
+        }
+        // 前景浪 ＋ 小舟
+        poly(b, [[W * .58, H], [W * .66, H * .84], [W * .82, H * .79], [W, H * .86], [W, H]],
+          (x, y) => (Math.sin(x * .07 + y * .06) * .5 + .5) > .55 ? mid : deep);
+        for (const [bx, by, s] of [[W * .40, H * .86, 1], [W * .70, H * .93, .85]]) {
+          poly(b, [[bx - 22 * s, by], [bx + 22 * s, by - 3 * s], [bx + 17 * s, by + 5 * s], [bx - 17 * s, by + 5 * s]], () => dark);
+          for (let k = -3; k <= 3; k++) b.rect(bx + k * 5 * s, by - 6 * s, 1, 5 * s, shade(dark, .35));
+        }
+      },
+    },
+    {
+      name: '吶喊', artist: '孟克 1893',
+      pal: ['#f0a838', '#e2662c', '#b8342a', '#7a2438', '#1d3350', '#2f5d7c', '#12203a', '#d9bf94', '#8a6a3e', '#4a3826', '#1a1420', '#c98f4a'],
+      draw(b, P) {
+        const [yel, org, red, wine, navy, teal, dnavy, skin, wood, dwood, robe, rail] = P.map(hex);
+        // 天空：水平波狀色帶（用 y 加上 sin(x) 位移做出扭動）
+        const bands = [[0, .14, red, wine], [.14, .28, org, red], [.28, .40, yel, org], [.40, .50, org, red]];
+        for (const [a, c, cA, cB] of bands) {
+          ditherArea(b, 0, Math.round(H * a) - 2, W, Math.round(H * (c - a)) + 4, cA, cB, (x, y) => {
+            const wv = Math.sin(x * .035 + y * .05) * 9 + Math.sin(x * .012) * 7;
+            return (y - H * a + wv) / (H * (c - a)) ;
+          });
+        }
+        ditherArea(b, 0, Math.round(H * .48), W, Math.round(H * .34), teal, navy, (x, y) => {
+          const wv = Math.sin(x * .03 + 1.4) * 8;
+          return (y - H * .48 + wv) / (H * .34) + .15;
+        });
+        ditherArea(b, 0, Math.round(H * .62), W, Math.round(H * .38), navy, dnavy, (x, y) => (y / H - .62) * 2.2 + Math.sin(x * .04) * .12);
+        // 橋：斜向木板 ＋ 欄杆
+        poly(b, [[0, H * .70], [W, H * .40], [W, H * .56], [0, H * .92]], (x, y) => {
+          const t = x / W, top = H * (.70 - t * .30);
+          return (Math.sin((y - top) * .5) * .5 + .5) > .55 ? wood : dwood;
+        });
+        poly(b, [[0, H * .70], [W, H * .40], [W, H * .435], [0, H * .745]], () => rail);
+        for (let i = 0; i < 26; i++) {
+          const t = i / 26, x = t * W, y = H * (.70 - t * .30);
+          poly(b, [[x, y - H * .13], [x + 3, y - H * .13], [x + 3, y + 4], [x, y + 4]], () => shade(rail, -.35));
+        }
+        // 遠處兩個人影
+        for (const [nx, s] of [[.74, 1], [.83, .9]]) {
+          const x = nx * W, y = H * (.70 - nx * .30);
+          poly(b, [[x - 5 * s, y], [x + 5 * s, y], [x + 3 * s, y - 26 * s], [x - 3 * s, y - 26 * s]], () => robe);
+          disc(b, x, y - 30 * s, 4.5 * s, () => shade(robe, .12));
+        }
+        // 主角：波浪袍 ＋ 骷髏臉 ＋ 雙手捧頰
+        const fx = W * .26, fy = H * .62;
+        const rp = [];
+        for (let i = 0; i <= 16; i++) {
+          const t = i / 16;
+          rp.push([fx + 12 + Math.sin(t * 5.5) * 5 + t * 9, fy - 34 + t * 74]);
+        }
+        for (let i = 16; i >= 0; i--) {
+          const t = i / 16;
+          rp.push([fx - 12 + Math.sin(t * 4.8 + 2) * 5 - t * 9, fy - 34 + t * 74]);
+        }
+        poly(b, rp, (x, y) => (Math.sin(x * .22 + Math.sin(y * .13) * 2.4) * .5 + .5) > .66 ? shade(robe, .14) : robe);
+        disc(b, fx, fy - 44, 15, (x, y, t) => mixc(skin, shade(skin, -.3), t * .8));   // 頭
+        disc(b, fx - 5, fy - 47, 3.2, () => shade(robe, .1));                          // 眼
+        disc(b, fx + 5, fy - 47, 3.2, () => shade(robe, .1));
+        disc(b, fx, fy - 36, 3.6, () => shade(robe, -.15));                            // 嘴
+        disc(b, fx - 14, fy - 36, 4.2, () => mixc(skin, shade(skin, -.2), .35));       // 手捧著臉頰
+        disc(b, fx + 14, fy - 36, 4.2, () => mixc(skin, shade(skin, -.2), .35));
+        b.rect(fx - 17, fy - 33, 5, 7, mixc(skin, shade(skin, -.28), .45));
+        b.rect(fx + 12, fy - 33, 5, 7, mixc(skin, shade(skin, -.28), .45));
+      },
+    },
+    {
+      name: '睡蓮', artist: '莫內 1906',
+      pal: ['#1c3a4a', '#2f6a72', '#4d9a86', '#7cbf95', '#bcd9b0', '#e8dfa8', '#d97a9a', '#f2b8cc', '#5a4a7a', '#8a7ab0', '#2a5560', '#f7ead0'],
+      draw(b, P) {
+        const [deep, teal, grn, lgrn, pale, cream, pink, lpink, vio, lvio, mid, hi] = P.map(hex);
+        ditherArea(b, 0, 0, W, H, deep, teal, (x, y) => 0.2 + y / H * 0.55 + Math.sin(x * .02) * .1);
+        // 水面倒影：垂直筆觸
+        for (let i = 0; i < 220; i++) {
+          const x = (i * 53) % W, y0 = ((i * 97) % H);
+          const len = 6 + (i % 14);
+          const col = [vio, lvio, mid, teal, grn][i % 5];
+          for (let j = 0; j < len; j++) if (((i + j) % 3) !== 0) b.set(x, y0 + j, col);
+        }
+        ditherArea(b, 0, 0, W, Math.round(H * .42), teal, vio, (x, y) => Math.max(0, .5 - y / H * 1.1 + Math.sin(x * .03 + 1) * .18));
+        ditherArea(b, 0, Math.round(H * .55), W, Math.round(H * .45), teal, grn, (x, y) => (y / H - .55) * 1.3 + Math.sin(x * .025) * .15);
+        // 睡蓮葉：近大遠小
+        const pads = [];
+        for (let i = 0; i < 34; i++) {
+          const ny = 0.16 + Math.pow((i * 37 % 100) / 100, 1.3) * 0.82;
+          pads.push({ x: ((i * 71) % 100) / 100 * W, y: ny * H, r: 3 + Math.pow(ny, 2.1) * 21 });
+        }
+        pads.sort((a, c) => a.y - c.y);
+        for (const p of pads) {
+          const ry = p.r * 0.46;                                  // 斜看的水面：葉子是壓扁的橢圓
+          ellip(b, p.x, p.y + ry * .5, p.r, ry, () => shade(deep, -.22));
+          ellip(b, p.x, p.y, p.r, ry, (x, y, t) => {
+            const n = Math.sin(x * .55 + y * .8) * .5 + .5;
+            return mixc(t > .8 ? shade(grn, -.2) : grn, lgrn, punch(n * .6 * (1 - t * .45), 2.2));
+          });
+          if (p.r > 11) {                                         // 有花的只有大葉子
+            ellip(b, p.x + p.r * .16, p.y - ry * .2, p.r * .3, ry * .42, () => lpink);
+            ellip(b, p.x + p.r * .16, p.y - ry * .2, p.r * .15, ry * .22, () => cream);
+            b.set(p.x + p.r * .16, p.y - ry * .2, pink);
+          }
+        }
+        for (let i = 0; i < 60; i++) {                    // 水面反光
+          const x = (i * 131) % W, y = (i * 71) % H;
+          if (bayer(x, y) < .35) b.set(x, y, mixc(pale, hi, .5));
+        }
+      },
+    },
+  ];
+
+  // ---------- 變色龍小人 ----------
+  // 7×9：換調色盤就是不同的人。眨眼是唯一保證看得見的破綻
+  const CHAM = ['..ooo..', '.ohhho.', '.oefeo.', '..fff..', '.obbbo.', 'obbbbbo', '.obbbo.', '..b.b..', '..s.s..'];
+  let paintBuf = null, paintCv = null, cur = 0, reveal = false, camo = 0.72, hideN = 5, seed = 1;
+  let chams = [];
+
+  function rnd() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+
+  function placeChams() {
+    chams = [];
+    for (let i = 0; i < hideN; i++) {
+      let x, y, tries = 0;
+      do {
+        x = 14 + rnd() * (W - 34); y = 12 + rnd() * (H - 34); tries++;
+      } while (tries < 20 && chams.some((c) => Math.hypot(c.x - x, c.y - y) < 26));
+      // 取樣腳下的底圖顏色 → 偽裝基準
+      const s1 = paintBuf.get(x + 3, y + 4), s2 = paintBuf.get(x + 3, y + 8), s3 = paintBuf.get(x, y);
+      const local = [(s1[0] + s2[0] + s3[0]) / 3, (s1[1] + s2[1] + s3[1]) / 3, (s1[2] + s2[2] + s3[2]) / 3];
+      chams.push({
+        x: Math.round(x), y: Math.round(y), local,
+        base: [40 + rnd() * 180, 40 + rnd() * 180, 40 + rnd() * 180],
+        blinkAt: rnd() * 3, blinkEvery: 2.2 + rnd() * 2.6,
+        found: false,
+      });
+    }
+  }
+
+  function renderPainting() {
+    const t0 = performance.now();
+    const P = PAINTINGS[cur];
+    paintBuf = new Buf(W, H);
+    P.draw(paintBuf, P.pal);
+    paintCv = document.createElement('canvas');
+    paintCv.width = W; paintCv.height = H;
+    const pc = paintCv.getContext('2d');
+    const img = pc.createImageData(W, H);
+    img.data.set(paintBuf.d);
+    pc.putImageData(img, 0, 0);
+    document.getElementById('mPaint').textContent = (performance.now() - t0).toFixed(1) + ' ms';
+    document.getElementById('mPal').textContent = P.pal.length;
+    placeChams();
+  }
+
+  function drawCham(c, t) {
+    // 身體色 = 自身色 朝 底圖色 內插；camo=1 幾乎完全融入
+    const body = mixc(c.base, c.local, camo);
+    const hair = shade(body, -0.22), out = shade(body, -0.34), shoe = shade(body, -0.4);
+    const face = mixc(shade(body, 0.16), c.local, camo * 0.8);
+    // 眨眼：睜眼時眼睛用對比色 → 這是玩家唯一公平的線索
+    const phase = ((t - c.blinkAt) % c.blinkEvery) / c.blinkEvery;
+    const open = phase > 0.06;
+    const eye = open ? shade(body, -0.62) : face;
+    const pal = { o: out, h: hair, f: face, e: eye, b: body, s: shoe };
+    for (let r = 0; r < CHAM.length; r++) {
+      const row = CHAM[r];
+      for (let i = 0; i < row.length; i++) {
+        const ch = row[i];
+        if (ch === '.' || !pal[ch]) continue;
+        const col = pal[ch];
+        ctx.fillStyle = 'rgb(' + (col[0] | 0) + ',' + (col[1] | 0) + ',' + (col[2] | 0) + ')';
+        ctx.fillRect(c.x + i, c.y + r, 1, 1);
+      }
+    }
+    if (reveal || c.found) {
+      ctx.strokeStyle = c.found ? '#6fcb9b' : '#ff5a5a';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(c.x - 2.5, c.y - 2.5, 12, 14);
+    }
+  }
+
+  const CURSOR = ['#e8604c', '#4fb36b', '#5b8fe0', '#f2c14e'];
+  let frameCost = [];
+  function loop(now) {
+    const t0 = performance.now(), t = now / 1000;
+    ctx.drawImage(paintCv, 0, 0);                       // 底圖已快取：每幀只是一次 blit
+    for (const c of chams) drawCham(c, t);
+    // 玩家印章游標
+    for (let p = 0; p < 3; p++) {
+      const cx = W / 2 + Math.sin(t * (0.55 + p * .21) + p * 2.2) * 128;
+      const cy = H / 2 + Math.cos(t * (0.44 + p * .17) + p) * 64;
+      ctx.strokeStyle = CURSOR[p]; ctx.lineWidth = 1;
+      ctx.strokeRect((cx - 8) | 0 + .5, (cy - 8) | 0 + .5, 16, 16);
+      ctx.fillStyle = CURSOR[p]; ctx.fillRect(cx | 0, cy | 0, 1, 1);
+      const sp = (t * (0.42 + p * .11) + p * 0.5) % 1;
+      if (sp < 0.14) {
+        const e = sp / 0.14, r = 8 + e * 14;
+        ctx.globalAlpha = 1 - e;
+        ctx.strokeRect((cx - r) | 0 + .5, (cy - r) | 0 + .5, r * 2, r * 2);
+        ctx.globalAlpha = 1;
+      }
+    }
+    // HUD：標題牌與計時
+    const P = PAINTINGS[cur];
+    ctx.fillStyle = 'rgba(12,10,8,.82)'; ctx.fillRect(0, 0, W, 15);
+    ctx.font = 'bold 10px "Noto Sans TC",sans-serif'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#e8c98a'; ctx.fillText(P.name, 6, 8);
+    ctx.fillStyle = '#8b8378'; ctx.font = '8px "Noto Sans TC",sans-serif';
+    ctx.fillText(P.artist, 8 + ctx.measureText(P.name).width * 1.6, 8);
+    const left = 20 - (t % 20);
+    ctx.font = 'bold 10px ui-monospace,monospace';
+    ctx.fillStyle = left < 5 ? '#ff6b5a' : '#e8e0d0';
+    ctx.fillText(left.toFixed(0) + 's', W - 20, 8);
+    ctx.fillStyle = 'rgba(12,10,8,.82)'; ctx.fillRect(0, H - 13, W, 13);
+    ctx.font = 'bold 9px "Noto Sans TC",sans-serif';
+    for (let p = 0; p < 3; p++) {
+      ctx.fillStyle = CURSOR[p]; ctx.fillRect(8 + p * 62, H - 10, 6, 6);
+      ctx.fillStyle = '#e8e0d0'; ctx.fillText(['甲 2', '乙 1', '丙 3'][p], 18 + p * 62, H - 6.5);
+    }
+    ctx.fillStyle = '#8b8378';
+    ctx.fillText('藏了 ' + hideN + ' 隻', W - 62, H - 6.5);
+    ctx.textBaseline = 'alphabetic';
+
+    frameCost.push(performance.now() - t0);
+    if (frameCost.length > 60) {
+      frameCost.sort((a, b) => a - b);
+      document.getElementById('mFrame').textContent = frameCost[30].toFixed(2) + ' ms';
+      frameCost = [];
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- UI ----------
+  document.querySelectorAll('button[data-p]').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('button[data-p]').forEach((x) => x.classList.toggle('on', x === b));
+    cur = +b.dataset.p; renderPainting();
+  }));
+  const rv = document.getElementById('revealBtn');
+  rv.addEventListener('click', () => { reveal = !reveal; rv.classList.toggle('on', reveal); });
+  document.getElementById('camo').addEventListener('input', (e) => {
+    camo = +e.target.value / 100; document.getElementById('camoV').textContent = e.target.value + '%';
+  });
+  document.getElementById('cnt').addEventListener('input', (e) => {
+    hideN = +e.target.value; document.getElementById('cntV').textContent = e.target.value; placeChams();
+  });
+  document.getElementById('reshuffle').addEventListener('click', () => { seed = (Date.now() % 100000) | 1; placeChams(); });
+
+  renderPainting();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
