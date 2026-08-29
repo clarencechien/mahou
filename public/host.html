@@ -153,6 +153,17 @@
   .nameTag b { font-family: ui-monospace, monospace; font-weight: 600; margin-left: 6px; color: #94a3b8; font-size: .82em; }
   .nameTag.bad { border-color: #ef4444; }
 
+  /* 分割畫面的格內名牌：10 格的時候右上角的分數條會蓋掉整欄，
+     所以比賽中改成每格自己掛一張，順便解決「哪一格是我」 */
+  .paneTag {
+    position: absolute; display: flex; align-items: baseline; gap: 6px;
+    background: rgba(6,10,20,.72); border-left: 3px solid #888; border-radius: 0 6px 6px 0;
+    padding: 2px 8px 2px 6px; font-size: .82rem; font-weight: 700; white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(0,0,0,.9); pointer-events: none;
+  }
+  .paneTag .d { font-family: ui-monospace, monospace; font-weight: 600; color: #cbd5e1; }
+  .paneTag .cb { color: #fda4af; font-weight: 800; }
+
   #joinCard { cursor: pointer; transition: transform .25s cubic-bezier(.2,1.2,.4,1), opacity .25s; }
   #joinCard .hintline { color: #64748b; font-size: .7rem; margin-top: 3px; }
   #qrBig {
@@ -864,7 +875,39 @@
   const chantSpans = [...chantEl.querySelectorAll('span')];
   let chantShown = -1, lastGreen = null;
 
-  const tagPool = [];
+  const tagPool = [], paneTagPool = [];
+  function hudBottom() {
+    const h = $('#hudTop').getBoundingClientRect(), w = $('#gameWrap').getBoundingClientRect();
+    return h.bottom - w.top;
+  }
+  // 每一格左上角掛一張名牌：名字、距離、連段。10 格時右上角的分數條會蓋掉整欄，
+  // 而且十格雪地長得一樣，沒有名牌根本認不出哪一格是自己。
+  function renderPaneTags(ox, oy, k) {
+    const wrap = $('#gameWrap');
+    const live = SKI.race || skiVps.some((v) => v.p);
+    let n = 0;
+    if (live) {
+      skiVps.forEach((vp) => {
+        if (!vp.c) return;
+        let el = paneTagPool[n];
+        if (!el) { el = document.createElement('div'); el.className = 'paneTag'; wrap.appendChild(el); paneTagPool[n] = el; }
+        n++;
+        el.style.display = '';
+        el.style.left = (ox + vp.x * k) + 'px';
+        // 第一排要讓開頂部 HUD，不然名字會被「滑雪 60 秒比距離」那條蓋掉
+        const top = oy + vp.y * k;
+        el.style.top = (vp.y < 4 ? Math.max(top, hudBottom() - oy + 6) : top + 4) + 'px';
+        el.style.borderLeftColor = CHARA.PLAYERS[vp.idx % 8].accent1;
+        const p = vp.p;
+        const dist = p ? (p.final != null ? p.final : Math.round((p.wy - COURSE.START_Y) / WPM())) : 0;
+        el.innerHTML = esc(vp.c.name) +
+          (p && p.combo > 1 ? `<span class="cb">${p.combo}連</span>` : '') +
+          `<span class="d">${dist}m</span>`;
+      });
+    }
+    for (let i = n; i < paneTagPool.length; i++) paneTagPool[i].style.display = 'none';
+    $('#playerStrip').style.display = live ? 'none' : '';   // 兩套記分板不要並存
+  }
   function updateOverlay() {
     const wrap = $('#gameWrap');
     const cr = fcv.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
@@ -888,6 +931,7 @@
     // 頂部 HUD
     const cmdEl = $('#hudCmd'), bar = $('#hudBar').firstElementChild;
     if (curStage !== 'ski' && curStage !== 'freeze' && !FZ.running) {
+      renderPaneTags(ox, oy, k);
       $('#hudRound').textContent = GAMES[pickedGame].label;   // 大廳：顯示選中的遊戲
       cmdEl.textContent = ''; cmdEl.classList.remove('red'); bar.style.width = '0%';
       chantEl.classList.remove('show');
@@ -897,6 +941,7 @@
     if (curStage === 'ski') {
       const r = SKI.race;
       const now2 = hostClock.serverNow() ?? Date.now();
+      renderPaneTags(ox, oy, k);
       if (r) {
         const pre = r.startAt - now2;
         const remain = r.startAt + r.duration - now2;
@@ -1156,11 +1201,20 @@
   });
 
   // 版面：1 全螢幕 → 2 直切兩欄 → 3-4 用 2×2 → 5-8 用 4×2（空位純黑）
+  // 版面：格子一律等分，空位純黑。9-12 人用 4×3，一格 96×72（1080p 電視上約 480×360）
+  const SKI_MAX = 12;
+  function grid(cols, rows) {
+    return [...Array(cols * rows).keys()].map((i) => ({
+      x: (i % cols) * (FW / cols), y: ((i / cols) | 0) * (FH / rows),
+      w: FW / cols, h: FH / rows,
+    }));
+  }
   function skiLayout(n) {
-    if (n <= 1) return [{ x: 0, y: 0, w: FW, h: FH }];
-    if (n === 2) return [0, 1].map((i) => ({ x: i * (FW / 2), y: 0, w: FW / 2, h: FH }));
-    if (n <= 4) return [0, 1, 2, 3].map((i) => ({ x: (i % 2) * (FW / 2), y: ((i / 2) | 0) * (FH / 2), w: FW / 2, h: FH / 2 }));
-    return [...Array(8).keys()].map((i) => ({ x: (i % 4) * (FW / 4), y: ((i / 4) | 0) * (FH / 2), w: FW / 4, h: FH / 2 }));
+    if (n <= 1) return grid(1, 1);
+    if (n === 2) return grid(2, 1);
+    if (n <= 4) return grid(2, 2);
+    if (n <= 8) return grid(4, 2);
+    return grid(4, 3);
   }
   // 版面切換做插值，加入時分割線慢慢長出來而不是瞬間跳格
   let curLayout = skiLayout(1), targetN = 1;
@@ -1254,14 +1308,15 @@
       const o = idleObs[i];
       const pr = MODE7.project(vp, o.wx, o.wy - COURSE.START_Y);
       if (!pr || pr.sy < vp.horizon || pr.sy > FH + 40) continue;
-      drawCourseItem(o, pr, Math.max(1, pr.k * 46));
+      drawCourseItem(o, pr, Math.max(1, Math.min(pr.k * 46, FH * 0.62)));
     }
     lastItems = [];
   }
 
+  let skiVps = [];
   function skiDraw(t) {
     const list = roster.filter((c) => c.connected);
-    const n = Math.max(1, Math.min(8, list.length));
+    const n = Math.max(1, Math.min(SKI_MAX, list.length));
     if (n !== targetN) {                       // 有人加入／離開：啟動 0.45 秒過渡
       layoutFrom = curLayout.map((v) => ({ ...v }));
       layoutTo = skiLayout(n); targetN = n; layoutT = 0;
@@ -1321,7 +1376,8 @@
       for (const o of near) {
         const pr = MODE7.project(vp, o.wx, o.wy - COURSE.START_Y);
         if (!pr || pr.sy < vp.y + vp.horizon || pr.sy > vp.y + vp.h + 40) continue;
-        drawCourseItem(o, pr, Math.max(1, pr.k * 46));
+        // 夾在格高以內：貼到臉上的樹如果照實畫，會變成一片比格子還大的綠方塊
+        drawCourseItem(o, pr, Math.max(1, Math.min(pr.k * 46, vp.h * 0.62)));
       }
       // 速度線：從消失點往外掃的短白條，只在夠快時出現
       if (vp.sp01 > 0.35) {
@@ -1347,10 +1403,12 @@
         const lean = Math.max(-1, Math.min(1, (vp.p.vx || 0) / 180));
         const dir = lean < -.35 ? 'left' : lean > .35 ? 'right' : 'back';
         const frame = Math.floor(performance.now() / 110) % 4;
-        const scale = Math.max(.40, (vp.h / 216) * 0.9);          // 角色高度約佔格高 27%
+        const scale = Math.max(.34, (vp.h / 216) * 0.9);          // 12 格時角色仍有 120 電視像素高
         // 滯空高度用拋物線，落地才有重量感；airMax 讓小跳與跳台的高度差得出來
         const am = vp.p.airMax || 0.42;
-        const arc = vp.air > 0 ? Math.sin(Math.PI * (1 - vp.air / am)) * (0.16 + am * 0.26) : 0;
+        // 弧高用格高的比例，格子小就等比壓低——不然 4×3 的時候人會飛出地面跑到天上
+        const arcK = Math.min(1, vp.h / 108);
+        const arc = vp.air > 0 ? Math.sin(Math.PI * (1 - vp.air / am)) * (0.16 + am * 0.26) * arcK : 0;
         const sh = vp.p.shake || 0;
         const jx = sh > 0 ? (Math.random() - .5) * 6 * sh : 0;
         const jy = sh > 0 ? (Math.random() - .5) * 5 * sh : 0;
@@ -1385,6 +1443,7 @@
     for (const v of curLayout) {
       fctx.strokeRect(Math.round(v.x) + .5, Math.round(v.y) + .5, Math.round(v.w) - 1, Math.round(v.h) - 1);
     }
+    skiVps = vps;
     return vps;
   }
   SKI.world = MODE7.buildWorld('snow');
