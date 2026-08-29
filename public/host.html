@@ -875,7 +875,7 @@
   const chantSpans = [...chantEl.querySelectorAll('span')];
   let chantShown = -1, lastGreen = null;
 
-  const tagPool = [], paneTagPool = [];
+  const tagPool = [], paneTagPool = [], headTagPool = [];
   function hudBottom() {
     const h = $('#hudTop').getBoundingClientRect(), w = $('#gameWrap').getBoundingClientRect();
     return h.bottom - w.top;
@@ -885,27 +885,43 @@
   function renderPaneTags(ox, oy, k) {
     const wrap = $('#gameWrap');
     const live = SKI.race || skiVps.some((v) => v.p);
-    let n = 0;
+    let n = 0, h = 0;
     if (live) {
       skiVps.forEach((vp) => {
         if (!vp.c) return;
+        const p = vp.p;
+        const dist = p ? (p.final != null ? p.final : Math.round((p.wy - COURSE.START_Y) / WPM())) : 0;
+
+        // 格子左上角：距離與連段（角色跳到畫面外時也還看得到狀態）
         let el = paneTagPool[n];
         if (!el) { el = document.createElement('div'); el.className = 'paneTag'; wrap.appendChild(el); paneTagPool[n] = el; }
         n++;
         el.style.display = '';
         el.style.left = (ox + vp.x * k) + 'px';
-        // 第一排要讓開頂部 HUD，不然名字會被「滑雪 60 秒比距離」那條蓋掉
+        // 第一排要讓開頂部 HUD，不然會被「滑雪 60 秒比距離」那條蓋掉
         const top = oy + vp.y * k;
         el.style.top = (vp.y < 4 ? Math.max(top, hudBottom() - oy + 6) : top + 4) + 'px';
         el.style.borderLeftColor = CHARA.PLAYERS[vp.idx % 8].accent1;
-        const p = vp.p;
-        const dist = p ? (p.final != null ? p.final : Math.round((p.wy - COURSE.START_Y) / WPM())) : 0;
         el.innerHTML = esc(vp.c.name) +
           (p && p.combo > 1 ? `<span class="cb">${p.combo}連</span>` : '') +
           `<span class="d">${dist}m</span>`;
+
+        // 頭頂名牌：跟遊戲一同一套 .nameTag。所有遊戲的角色頭上都要有名字，
+        // 不然大螢幕上一堆小人，沒人認得出哪個是自己。
+        if (vp.tagY == null) return;
+        let ht = headTagPool[h];
+        if (!ht) { ht = document.createElement('div'); ht.className = 'nameTag'; wrap.appendChild(ht); headTagPool[h] = ht; }
+        h++;
+        ht.style.display = '';
+        ht.style.left = (ox + vp.tagX * k) + 'px';
+        ht.style.top = (oy + (vp.tagY - 4) * k) + 'px';
+        ht.style.color = CHARA.PLAYERS[vp.idx % 8].accent2;
+        ht.classList.toggle('bad', !!(p && p.lv > 0));
+        ht.innerHTML = esc(vp.c.name) + (p && p.lv > 0 ? '<b>超加速</b>' : '');
       });
     }
     for (let i = n; i < paneTagPool.length; i++) paneTagPool[i].style.display = 'none';
+    for (let i = h; i < headTagPool.length; i++) headTagPool[i].style.display = 'none';
     $('#playerStrip').style.display = live ? 'none' : '';   // 兩套記分板不要並存
   }
   function updateOverlay() {
@@ -1398,42 +1414,48 @@
         }
         fctx.globalAlpha = 1;
       }
-      // 玩家角色固定在畫面下方中央，轉向靠傾身（左右側身）
-      if (vp.p) {
-        const lean = Math.max(-1, Math.min(1, (vp.p.vx || 0) / 180));
+      // 玩家角色固定在畫面下方中央，轉向靠傾身（左右側身）。
+      // 開賽前手機還沒回報，但角色與名牌要先站在那裡——倒數那幾秒正是大家在找
+      // 「哪一格是我」的時候。
+      {
+        const pp = vp.p || {};
+        const lean = Math.max(-1, Math.min(1, (pp.vx || 0) / 180));
         const dir = lean < -.35 ? 'left' : lean > .35 ? 'right' : 'back';
         const frame = Math.floor(performance.now() / 110) % 4;
         const scale = Math.max(.34, (vp.h / 216) * 0.9);          // 12 格時角色仍有 120 電視像素高
         // 滯空高度用拋物線，落地才有重量感；airMax 讓小跳與跳台的高度差得出來
-        const am = vp.p.airMax || 0.42;
+        const am = pp.airMax || 0.42;
         // 弧高用格高的比例，格子小就等比壓低——不然 4×3 的時候人會飛出地面跑到天上
         const arcK = Math.min(1, vp.h / 108);
         const arc = vp.air > 0 ? Math.sin(Math.PI * (1 - vp.air / am)) * (0.16 + am * 0.26) * arcK : 0;
-        const sh = vp.p.shake || 0;
+        const sh = pp.shake || 0;
         const jx = sh > 0 ? (Math.random() - .5) * 6 * sh : 0;
         const jy = sh > 0 ? (Math.random() - .5) * 5 * sh : 0;
         const feetY = vp.y + vp.h * (0.90 - arc) + jy;
         const cx0 = vp.x + vp.w / 2 + lean * vp.w * .06 + jx;
+        // 給 DOM 名牌用：精靈是 64 單位高（u=2），頭頂就是腳底往上一個身高
+        vp.tagX = cx0;
+        vp.tagY = feetY - 64 * scale;
         const gy = vp.y + vp.h * 0.90 + jy;                  // 影子留在地面，跳起來才看得出高度
         fctx.fillStyle = `rgba(70,100,140,${0.3 - arc * 0.5})`;
         fctx.beginPath();
         fctx.ellipse(cx0, gy, 15 * scale, 4 * scale, 0, 0, Math.PI * 2);
         fctx.fill();
         CHARA.drawSki(fctx, vp.idx, dir, frame, cx0, feetY, scale, vp.rot || 0);
-        if (vp.p.lv > 0) {                                       // 超加速：整格鑲一圈紅邊
+        if (pp.lv > 0) {                                         // 超加速：整格鑲一圈紅邊
           fctx.strokeStyle = `rgba(244,63,94,${.35 + .3 * Math.sin(performance.now() / 90)})`;
           fctx.lineWidth = 3;
           fctx.strokeRect(vp.x + 1.5, vp.y + 1.5, vp.w - 3, vp.h - 3);
         }
-        if (vp.p.flash > 0) {                                    // 上跳台：整格閃一下紫光
-          fctx.fillStyle = `rgba(168,85,247,${vp.p.flash * .35})`;
+        if (pp.flash > 0) {                                      // 上跳台：整格閃一下紫光
+          fctx.fillStyle = `rgba(168,85,247,${pp.flash * .35})`;
           fctx.fillRect(vp.x, vp.y, vp.w, vp.h);
-          vp.p.flash = Math.max(0, vp.p.flash - 0.06);
+          pp.flash = Math.max(0, pp.flash - 0.06);
         }
         if (sh > 0) {
           fctx.fillStyle = `rgba(239,68,68,${sh * .28})`;
           fctx.fillRect(vp.x, vp.y, vp.w, vp.h);
-          vp.p.shake = Math.max(0, sh - 0.05);
+          pp.shake = Math.max(0, sh - 0.05);
         }
       }
       fctx.restore();
