@@ -1,14 +1,23 @@
-# mahou — 家宴多人互動遊戲 POC（Phase 0）
+# mahou — 家宴多人互動遊戲
 
-**這不是在做遊戲，是在量數字。** 手機當手把、大螢幕當主畫面，量測 Cloudflare Workers + Durable Objects 架構在真實家用 wifi + 真實手機上的延遲天花板。
+手機當手把、電視當主畫面的 Kahoot 式派對遊戲。跑在 Cloudflare Workers + Durable Objects 上，**免費方案就能跑**（DO 已設定成 SQLite-backed）。無框架、無 build step，前端全部原生 DOM。
 
-Phase 0 的交付物是一份 **JSON 測試數據**，不是玩法。遊戲一～四（顏色反應、跑酷、接水、打地鼠）在數據出來之後才開工。
+目前有兩款可玩的遊戲，以及一整套 Phase 0 的網路量測工具。
+
+| | |
+|---|---|
+| **一二三木頭人** | 10 回合。綠燈時照大螢幕的指令用手機做對得分，鬼一轉身還在動就倒扣。指令有加減法、選顏色、點幾下、搖手機 |
+| **滑雪下坡** | 20–120 秒比距離。連點加速、傾斜轉向、抬起手機跳跳台，連三次跳台解鎖超加速。畫面依人數切成 1 / 2 / 2×2 / 4×2 / 4×3，最多 12 人同場 |
+
+規則、控制、所有調校常數與實測數字：**[`docs/games.md`](docs/games.md)**
+還沒實作的六款提案：[`docs/party-games-spec.md`](docs/party-games-spec.md)
+畫面風格規範：[`.claude/skills/pixel-fake3d/SKILL.md`](.claude/skills/pixel-fake3d/SKILL.md)
 
 ## 一鍵部署
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/clarencechien/mahou)
 
-按下去 → 登入 Cloudflare → 自動部署。**Free plan 可用**（Durable Object 已設定成 SQLite-backed）。
+按下去 → 登入 Cloudflare → 自動部署。
 
 > ⚠️ **按鈕的陷阱**：Deploy to Cloudflare 會把這個 repo 當模板**複製一份新 repo** 到你的 GitHub 帳號，CI 接在那份複製品上——之後 push 到本 repo 的 main **不會**觸發部署。要持續開發請改用下面的 Import a repository 連本尊，或在 Worker → Settings → Build 把 Git 連動改指回本 repo（自訂網域綁在 worker 上，不受影響）。注意：切完連動要再 push 一次才會觸發第一個新 build。
 
@@ -17,92 +26,124 @@ Phase 0 的交付物是一份 **JSON 測試數據**，不是玩法。遊戲一�
 - **Cloudflare Dashboard 連動**（自己開發用這個）：Dashboard → Workers & Pages → Create → Import a repository → 選這個 repo。它會讀 `wrangler.toml` 自動設好 DO binding 與靜態資源，之後 push 即部署。
 - **CLI**：`npm install && npx wrangler deploy`（本機開發用 `npx wrangler dev`，但感測器 API 需要 HTTPS，手機實測請直接用部署出來的 `*.workers.dev` 網址）。
 
-## 怎麼跑一輪測試（約 10 分鐘）
+## 現場怎麼跑
 
-1. 大螢幕（Chromebook）開 `https://<你的>.workers.dev/` → 自動進主控台，顯示 4 碼房號 + QR。
-2. 手機掃 QR → 填暱稱（兩字內）→ 加入。**從 LINE 掃到的內建瀏覽器會被擋下並提示改用外部瀏覽器**（感測器權限拿不到）。
-3. 加入後 client 自動對時（10 次 ping 取最小 RTT 的 offset），之後每 10 秒背景重測、記錄 offset 漂移。
-4. 主控台依序按關卡按鈕，所有手機同步切換畫面：
-   - **② Ping 測試**：手機顯示即時 RTT 大字＋紅黃綠燈（<40 綠 / 40–120 黃 / >120 紅），主控台看全員一覽。
-   - **③ 單點×10**：點 10 下，量上行/下行延遲分布（本機立即變色＝零延遲對照組）。
-   - **③ 狂點 3 秒**：3 秒內盡量點，量掉包率與 seq 斷號。
-   - **④ 搖動計數**：按「啟用感測器」（iOS 權限必須由手勢觸發）→ 搖 10 下。門檻/遲滯/不應期是畫面上的滑桿，可現場調參，最終值會記進遙測。**重點：同一人拿 Pixel 和平板各搖 10 下，比兩邊數出來差多少。**
-5. 遊戲（Stage 0 跑完後）：
-   - **🎨 顏色反應**：主控台按「開始 20 局」。大螢幕顯示目標色，手機四色塊（位置每局隨機打亂）點一樣的。ΔE 難度梯度 100→40→15→7 各 5 局；DO 判定對錯與名次（第 1 快 +5 分…），遙測記 `colorPick`（round/ΔE/tShow/tTap/reactionMs/uplinkMs）。
-   - **⛷️ 滑雪下坡**：30 秒，搖越快滑越快（搖動頻率 EMA→速度，距離 client 積分、伺服器只轉發——刻意的「完全信任 client」版本）。大螢幕每人一條雪道，10Hz 上報 60fps 插值。**觀察重點**：手腕高頻抖動能不能作弊贏、10Hz 插值順不順、30 秒後手機燙不燙。
-6. 主控台按 **「匯出 JSON」**。**這是唯一真正的交付物** — 遙測只存在 DO 記憶體，房間閒置被回收就沒了，測完立刻匯出。
+1. **電視／筆電**開 `https://<你的>.workers.dev/` → 主控台。按右上角 **⛶ 全螢幕**，頂列會在 2.6 秒後自己收起來，畫面只剩遊戲。
+2. **手機**掃畫面上的 QR（點一下 QR 可以放大給大家掃）→ 填暱稱（5 字內）→ 加入。
+   **從 LINE 掃到的內建瀏覽器會被擋下並提示改用外部瀏覽器**（感測器權限拿不到）。
+3. 頂列選遊戲 → 按 **「開始 ⟨遊戲⟩」**。**不會直接開打**，先出說明卡：
+   - 大螢幕顯示規則三條，並用系統語音念一次解說（可按「🔊 再念一次」）
+   - 同時所有手機切到準備畫面：要感測器權限 → 歸零校準 → **把每個動作試一遍**
+   - 說明卡上顯示「N / M 人已就緒」，大家都好了再按 **「開始遊戲」**
+4. 玩。中途可以按 **⚙︎ 手感** 開調校面板（見下）。
+5. 玩完到 **管理・測試** 分頁按 **「結束房間」** — 會先自動匯出 JSON，再踢掉所有人讓 DO 休眠。
 
-## 匯出數據格式
+### ⚙︎ 手感：現場可調的速度感
+
+滑雪的速度感還沒定案，四個旋鈕做成現場可調（記在主控這台電腦的 localStorage）：
+
+| 旋鈕 | 預設 | 生效 |
+|---|---|---|
+| 速度倍率 0.6–6.0× | 3.2× | 下一場 |
+| 地面密度 0.6–6.0× | 3.5× | 立刻 |
+| 廣角 0.6–1.6× | 1.0× | 立刻 |
+| 比賽長度 20–120 秒 | 60 秒 | 下一場 |
+
+**速度倍率會同時放大前進速度與障礙物間距** —— 每秒遇到的障礙物數量不變，但每個物件掃過畫面的時間變短，所以是「變快」而不是「變難」。調到滿意後按「複製設定」，把那行數字寫回 `public/host.html` 的 `TUNE_DEF`。
+
+## Phase 0：網路量測
+
+**這一段是「量數字」，不是玩法。** 交付物是一份 JSON。管理・測試分頁保留了完整的探針：
+
+- **② Ping 測試** — 即時 RTT 大字＋紅黃綠燈，主控台看全員一覽
+- **③ 單點×10 / 狂點 3 秒** — 上下行延遲分布、掉包率與 seq 斷號
+- **④ 搖動計數** — 門檻／遲滯／不應期是畫面上的滑桿，可現場調參。重點是同一人拿不同機器各搖 10 下，比兩邊數出來差多少
+- **DO 區域選單** — wnam / apac / weur A/B（hint 只在房間第一次建立時生效，換區域會開新房）
+- **匯出 JSON** — 遙測只存在 DO 記憶體，**房間閒置被回收就沒了，測完立刻匯出**
+
+### 已經量到的數字（台灣，2026-08）
+
+| 項目 | 實測 |
+|---|---|
+| RTT 地板 | **~150ms**（wifi 與 5G 皆然）—— 由 Cloudflare 入網點決定，不是家用 wifi |
+| 滑雪 10Hz 上報的上行延遲 | p50 90ms / p95 115ms |
+| 掉包率 | 0%（狂點 100 次 / 3 秒） |
+| 8 人同場 | DO p95 僅 +9ms |
+| 對時漂移 | <9ms/100s；網路切換跳 ±27ms 後 10 秒內回穩 |
+| 跨螢幕色差 | ΔE<40 玩家分不出 —— **任何判定都不能靠細微色差** |
+| 分割渲染 | 捲動雪地 Mode 7 在 1/2/4/8 格都是 4.3–4.4ms（分割數不是成本，總像素才是）；8 格比賽中 p50 16.5ms 維持 60fps |
+
+**兩條全平台鐵律**（因為 150ms 的地板拿不掉）：
+
+1. **判定用 client 時間戳**（`performance.now() + offset`，已對時到伺服器時間軸）。DO 只做排序、去重、廣播，不看封包到達時間。傳輸延遲因此不影響任何公平性判定。
+2. **本地先回饋**（0ms），網路結果後到再校正。
+
+### DO 落點診斷
+
+**RTT 地板由「Cloudflare 入網點」決定**：
+
+- HiNet 家用寬頻對這個 zone 在 **SJC（美西）入網** → DO 放美西 ~150ms；DO 放香港反而要繞一圈，~360ms
+- **中華 5G 在 SIN（新加坡）入網**（`/cdn-cgi/trace` 實測 `loc=TW colo=SIN`）→ 到 HKG DO ~155ms
+- 免費方案不進 TPE；治本方向是 zone 升 Pro/Business 再把 DO 切回 apac
+
+所以 `locationHint` 預設 **wnam**（跟著入網點）。診斷工具：`GET /whereami/<房號>` 回 `{doColo, edgeColo}`，主控台右上角顯示 `DO@XXX·邊緣@YYY`，兩個值都要寫進報告。
+
+### 假 client 壓力測試
+
+```bash
+node tools/fakeclients.mjs wss://<你的網域>/ws <房號> 8 30
+```
+
+8 個假 client 各以 300ms/shake + 100ms/tap 上報 30 秒。兩台實機同場開著，看實機延遲在 8 人負載下的增幅。
+
+### 匯出格式
 
 ```jsonc
 {
   "roomId": "ABCD",
-  "clients": [ { "clientId", "name", "device": { /* ua, screen, deviceMemory, motionEventRateHz, ... */ }, "sync" } ],
+  "clients": [ { "clientId", "name", "device": { /* ua, screen, motionEventRateHz, ... */ }, "sync" } ],
   "events": [
-    // type: join / syncResult / tap / spamSummary / shake / clientRecord / stage ...
-    // tap 事件含 tClientSend(伺服器時間軸) / tServerRecv / uplinkMs
-    // clientRecord(kind:tapRtt) 含 client 端算的 uplinkMs / downlinkMs — 上下行要分開看，家用 wifi 常不對稱
+    // join / syncResult / tap / spamSummary / shake / stage / ready
+    // freezeRound / freezeTurn / freezeAct（含 verdict）
+    // skiStart（含 seed 與 speedMul）/ skiRun / skiDone / skiEnd
   ]
 }
 ```
 
 所有 client 時間戳都已用 clock offset 換算到伺服器時間軸（offset = t1 − (t0+t2)/2，取 RTT 最小樣本）。
 
-## Phase 0 要填的驗收表
+## 計費防呆
 
-| 問題 | 數字 | 判斷 |
-|---|---|---|
-| 家用 wifi 下 RTT p50 / p95 | ___ / ___ ms | p95 > 200ms → 即時互動類全部出局 |
-| 上行 vs 下行是否對稱 | ___ | 差距大要調整上報策略 |
-| 五分鐘 clock offset 漂移 | ___ ms | > 20ms → 速度計分需要重新對時機制 |
-| 狂點模式掉包率 | ___ % | > 1% → 需要 seq 補償 |
-| Pixel vs 平板 搖動計數差異 | ___ % | > 15% → 必須做裝置校準 |
+這個 POC 用非 hibernation 的 WebSocket，**只要還有分頁連著，DO 就一直佔記憶體計費**；client 又有自動重連＋每 10 秒背景對時，忘記關的分頁會永遠戳著 DO。防呆有三層：
 
-（完整 12 項驗收表與遊戲一～四規格見 handoff 文件；其餘項目屬後續 phase。）
+- **閒置自動關房**：30 分鐘沒有真實互動（ping／背景對時不算）→ DO 踢掉所有連線後休眠
+- **最長壽命 6 小時**：無條件關房
+- **主控台「結束房間」鈕**：先自動匯出 JSON，再踢掉所有人。**每輪玩完建議按這顆**
+
+被關房的 client 會看到「房間已結束」且不再重連（WS close code 4000/4001）。房間沒有寫任何持久化儲存，所以連線清空後成本歸零。
 
 ## 專案結構
 
 ```
-worker/index.js    # Worker entry：路由 + DO binding（/ws/:room、/export/:room）
-worker/room.js     # RoomDO：房間狀態機、對時 pong、遙測收集（記憶體）、匯出
-public/host.html   # 主控台：QR、關卡控制、全員即席統計、匯出 JSON
-public/client.html # 手機端：onboarding 四關（加入/Ping/點擊/搖動）
-public/shared.js   # 對時、WS 封裝（自動重連）、遙測批次、裝置指紋
-wrangler.toml
+worker/index.js       # 路由 + DO binding（/ws/:room、/export/:room、/whereami/:room）
+worker/room.js        # RoomDO：房間狀態機、對時 pong、遊戲判定、遙測、匯出、計費防呆
+public/host.html      # 主控台：遊戲畫面 + 說明卡 + 手感調校 + 管理・測試分頁
+public/client.html    # 手機端：加入、Phase 0 探針、兩款遊戲的控制器
+public/shared.js      # 對時、WS 封裝（自動重連）、遙測批次、裝置指紋
+public/engine/
+  chara.js            #  程序化 32 單位角色（8 套玩家配色、滑雪板、可旋轉）
+  mode7.js            #  Mode 7 掃描線地面（草／雪／石／土）＋分割畫面渲染＋座標投影
+  course.js           #  滑雪賽道：種子生成、碰撞、跳台判定、路邊標竿
+  sfx.js              #  程序化 WebAudio 音效（零音檔）
+public/bench.html     # 分割渲染壓測
+public/game6.html     # 名畫變色龍原型
+tools/fakeclients.mjs # 假 client 壓力測試
 ```
 
-無框架、無 build step，前端全部原生 DOM。
+## 已知限制
 
-## DO 落點診斷（RTT 地板偏高先看這個）
-
-實測結論（台灣，2026-08）：**RTT 地板由「Cloudflare 入網點」決定，不是家用 wifi**。
-
-- HiNet 家用寬頻對這個 zone 在 **SJC（美西）入網**（免費方案的常見路由）→ DO 放美西 RTT ~150ms；DO 放香港反而要美西↔亞洲繞一圈，~360ms
-- **中華 5G 在 SIN（新加坡）入網**（`/cdn-cgi/trace` 實測 `loc=TW colo=SIN`）→ 到 HKG DO ~155ms；「全員行動網路 + apac 房」理論上可壓到 ~100ms，是免費方案下的最佳組合（開房請求要從行動網路發，DO 才會落 SIN）
-- 免費方案不進 TPE（HiNet 頻寬成本），治本方向：zone 升 Pro/Business 再把 DO 區域切回 apac
-
-因此 `locationHint` 預設 **wnam（跟著入網點）**，主控台有「DO 區域」選單可切 wnam/apac/weur 做 A/B——hint 只在房間**第一次建立**時生效，換區域會自動開新房。診斷工具：`GET /whereami/<房號>` 回 `{doColo, edgeColo}`，主控台右上角顯示 `DO@XXX·邊緣@YYY`，兩個值都要寫進報告。
-
-## 假 client 壓力測試（探針 D）
-
-```bash
-node tools/fakeclients.mjs wss://<你的網域>/ws <房號> 8 30
-```
-
-8 個假 client 各以 300ms/shake + 100ms/tap 上報 30 秒，同時量負載下 RTT。兩台實機同場開著，看實機延遲在 8 人負載下的增幅（§12 表）。
-
-## 計費防呆（DO 不會被忘記關的分頁養著）
-
-這個 POC 用非 hibernation 的 WebSocket，**只要還有分頁連著，DO 就一直佔記憶體計費**；client 又有自動重連＋每 10 秒背景對時，忘記關的分頁會永遠戳著 DO。防呆有三層：
-
-- **閒置自動關房**：30 分鐘沒有真實互動（ping／背景對時不算）→ DO 踢掉所有連線後休眠。中場休息太久被關到的話，重掃新房號即可。
-- **最長壽命 6 小時**：無條件關房。
-- **主控台「結束房間」鈕**：先自動匯出 JSON，再踢掉所有人。**每輪測完建議按這顆。**
-
-被關房的 client 會看到「房間已結束」且不再重連（WS close code 4000/4001）。房間沒有寫任何持久化儲存，所以連線清空後成本歸零。
-
-## 已知限制（要寫進報告）
-
-- **iOS 未驗證**：測試機隊全是 Chromium（Chromebook + 兩台 Android）。`DeviceMotionEvent.requestPermission()` 的 iOS 路徑已寫好但沒實機跑過；正式場合前要借一支 iPhone 驗證「權限跳得出來、不會白畫面」。
-- 遙測存 DO 記憶體，**閒置回收即消失**，測完立刻匯出。
-- `tShow` 類的顯示延遲含螢幕更新等系統性常數偏差，組間比較有效，絕對值不要拿去跟文獻比。
+- **手感未定案**：滑雪的速度、比賽長度都還在調，用 ⚙︎ 手感面板現場決定
+- **iOS 只驗過一部分**：感測器權限與連點防縮放已在 iPhone 上跑過；連點觸發雙擊縮放的修法只在模擬器驗過機制，Safari 本尊要再確認
+- **傾斜轉向在劇烈連點下的穩定度**：EMA α=0.16 重低通 ＋ 3.5° 死區，代價是轉向變鈍，真機還要再調
+- 遙測存 DO 記憶體，**閒置回收即消失**，測完立刻匯出
+- `tShow` 類的顯示延遲含螢幕更新等系統性常數偏差，組間比較有效，絕對值不要拿去跟文獻比
