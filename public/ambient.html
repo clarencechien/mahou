@@ -168,6 +168,12 @@
      沒有意義——根本沒有歌詞可看——整排收掉。
      濃淡拉到最低時連播放鈕都退場，真的只剩歌名；滑鼠移上去全部回來。 */
   body.m-mini #dockFoot { display: none; }
+  /* 歌名也墊一塊灰，跟歌詞同一個調子——濃淡拉到 0 之後它是畫面上唯一的東西，
+     壓在白照片上照樣要看得見。 */
+  body.m-mini #dockTitle b {
+    display: inline-block; padding: var(--lyrPad) 10px; border-radius: 8px;
+    background: rgba(30,35,44,.62);
+  }
   body.m-mini #dockHead .ico {
     opacity: clamp(0, calc(var(--dockA, .78) * 3), 1); transition: opacity .18s ease;
   }

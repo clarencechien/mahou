@@ -39,6 +39,22 @@
       "subtitle": "Jaa ne, Mata ne",
       "duration": 100,
       "lines": 18
+    },
+    {
+      "id": "our-table",
+      "title": "Our Table",
+      "titleZh": "我們的餐桌",
+      "subtitle": "Our Table",
+      "duration": 207.8,
+      "lines": 33
+    },
+    {
+      "id": "our-little-feast",
+      "title": "湖畔の家宴",
+      "titleZh": "湖畔的家宴",
+      "subtitle": "Our Little Feast",
+      "duration": 142.6,
+      "lines": 23
     }
   ]
 }

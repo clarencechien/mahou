@@ -17,9 +17,12 @@
     },
     {
       "id": 2,
-      "name": "歌單 2",
-      "note": "還沒設定",
-      "songs": []
+      "name": "湖畔家宴",
+      "note": "這場自己的兩首",
+      "songs": [
+        "our-little-feast",
+        "our-table"
+      ]
     },
     {
       "id": 3,

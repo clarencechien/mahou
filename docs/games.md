@@ -783,6 +783,44 @@ power = 0.18 + 點數×0.09 + 搖數×0.18
 
 `node tools/fetch-songs.mjs` 從本機的 family-feast clone（或線上站台）把歌詞與音檔抓進來。
 
+### 歌詞怎麼對時間
+
+新歌只有一份純文字歌詞（寫歌時那份），沒有時間軸。兩步：
+
+```bash
+# 1. 切句：把 [Section] 與空行分隔的文字檔轉成 songs/<id>.json 草稿
+node tools/lyrics-draft.mjs --id our-table --duration 207.8 \
+  --lyrics tools/lyrics/our-table.txt --audio music/Our_Table.mp3 \
+  --title "Our Table" --titleZh "我們的餐桌" --subtitle "Our Table"
+
+# 2. 對時間：跑 family-feast 那支（有驗證），cwd 要有 site/data/songs 與 site/assets
+gemini_key=... node ../family-feast/tools/align-lyrics.mjs our-table \
+  --models gemini-3.5-flash --spot 5
+```
+
+**第二步不要在這裡重寫一份。** family-feast 的 `align-lyrics.mjs` 已經帶著幾個
+踩出來的教訓，自己再寫一支只會比較差：
+
+| 教訓 | 做法 |
+|---|---|
+| 時間要用 **MM:SS** 問，不要問小數秒 | 問小數秒時模型會回超出歌長的數字（125 秒的歌回 149 秒，而且會重複發生） |
+| thinking token 會吃掉 `maxOutputTokens`，JSON 被截斷 | `thinkingConfig: { thinkingLevel: 'minimal' }`＋硬性 output 上限 |
+| 歌詞本來就有，不要叫模型聽寫 | 只請它「定位」既有的句子，日文演唱的轉錄錯誤率很高，多一層只是多一個誤差來源 |
+| 模型說了不算 | 寫進 JSON 前要過四關 |
+
+四關是：結構（每句剛好一次、索引齊全）、單調遞增且落在 `[0, duration]`、
+**靜音比對**（ffmpeg `silencedetect` 找出靜音區間，起唱點落在靜音裡就是錯的——
+這是唯一與模型無關的獨立訊號）、以及**抽查**（把該時間點往後 7 秒剪出來，
+單獨請模型聽寫，再用字元 bigram 比對是不是預期的那一句）。
+
+這兩首的實測：`gemini-3.5-flash`、thinking minimal、各抽查 5 句，
+**兩首都 5/5、沒有任何一句落在靜音裡**，兩首合計 12 次呼叫約 US$0.018。
+
+> ⚠️ **只跑一個模型的時候，agreement 欄位是沒有意義的。**
+> 那個統計是「兩個不同模型各聽一次再比對」用的，單模型跑出來必然是 0.0s，
+> 那不是證據。所以這兩首的 `timing.crossCheck` 直接寫明沒有跨模型比對，
+> 靠的是靜音檢查與抽查。要更保險就加 `--models gemini-3.5-flash,gemini-3.6-flash`。
+
 > ⚠️ **音檔要走 Worker 的 `/audio/`，不能直接吃靜態資源。**
 > Cloudflare 的 assets handler 不回 Range，而瀏覽器拿到不支援 Range 的音檔會把它
 > **當成這次載入不可跳轉**——點進度條完全沒反應，而且 `currentTime` 設了也不動。
@@ -796,7 +834,7 @@ power = 0.18 + 點數×0.09 + 搖數×0.18
 |---|---|---|
 | **舞台** | `S` | 全螢幕。照片鋪滿、歌名在左上、歌詞置中、控制列閒置 3.5 秒自動收起來 |
 | **Widget**（預設） | `W` | **畫面正下方的正中間**一張卡：歌名、進度、歌詞（置中）。歌詞可切「跟隨」或「完整」 |
-| **縮小** | `M` | 右下角一顆藥丸，**只剩歌名**跟播放鈕（實測 282×66px）。濃淡拉到 0 就真的只剩歌名 |
+| **縮小** | `M` | 右下角一顆藥丸，**只剩歌名**跟播放鈕（實測 302×66px）。濃淡拉到 0 就真的只剩歌名，歌名跟歌詞一樣墊一塊灰 |
 
 **預設是 widget**，不是舞台——它多半是開在旁邊一整場的東西，不該一進去就把整片螢幕吃掉。
 卡片擺**正下方的正中間**（不是右下角），歌詞也置中：位置跟電視字幕一樣落在視線中線上，
@@ -861,8 +899,10 @@ power = 0.18 + 點數×0.09 + 搖數×0.18
 
 `public/ambient/playlists.json` 一個檔決定全部，不用動 HTML：
 
-- **歌單 1「家宴原創」**＝family-feast 的五首（預設）。歌單 2、3 是空的占位，
-  填 song id 就會亮起來；空的按鈕是 disabled，按不下去。
+- **歌單 1「家宴原創」**＝family-feast 的五首（預設）。
+  **歌單 2「湖畔家宴」**＝這場自己的兩首：〈湖畔の家宴 / Our Little Feast〉（日／中，142.6s）
+  與〈Our Table〉（英／中，207.8s），都已經對好時間，跟隨歌詞照走。
+  歌單 3 是空的占位，填 song id 就會亮起來；空的按鈕是 disabled，按不下去。
 - **背景**兩套：「家宴相簿」180 張已經挑過的照片（預設），「十六湖」場地官網相簿 9 張。
   每 20 秒換一張，換歌也換一張，**每場開場先洗牌**——放好幾個小時，照原順序會一直看到同樣的開頭。
   下一張會先預抓，切換才不會空一拍。載不到的那張直接跳過，畫面不會空白。
