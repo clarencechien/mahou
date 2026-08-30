@@ -13,6 +13,8 @@
 | **砸罐子** | **第一人稱假 3D**，鏡頭不動、飛走的是物件（投影與 Mode 7 地面共用同一組世界座標）。雷射筆瞄哪就打哪：**先按「確定」把準心釘住**（陀螺儀會漂，不釘住球會跑掉），再連點或搖手機蓄力，搖一下＝點兩下的力。**「歡樂度」旋鈕**一次放大打飛力道、朝鏡頭飛的比例、碎片與震動。草捆／木桶／磚牆／鐵桶／炸彈各有 HP 與重量，砸壞什麼算誰的，炸彈連環爆。5 關 |
 
 規則、控制、所有調校常數與實測數字：**[`docs/games.md`](docs/games.md)**
+架構取捨（為什麼是 DO、不用它行不行、人數往上加先撞到什麼、真正的線上遊戲怎麼做）：
+**[`docs/architecture-do.md`](docs/architecture-do.md)**
 還沒實作的六款提案：[`docs/party-games-spec.md`](docs/party-games-spec.md)
 畫面風格規範：[`.claude/skills/pixel-fake3d/SKILL.md`](.claude/skills/pixel-fake3d/SKILL.md)
 
