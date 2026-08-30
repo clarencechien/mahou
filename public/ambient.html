@@ -25,14 +25,23 @@
 
   /* ---- 背景：兩層交叉淡入，配上很慢的推鏡 ---- */
   #bgWrap { position: fixed; inset: 0; z-index: 0; background: #05080f; }
-  .bg {
-    position: absolute; inset: 0; background-size: cover; background-position: center;
-    opacity: 0; transition: opacity 2.4s ease;
+  /* 一層背景其實是兩塊疊在一起：
+     .fill 是同一張圖放大模糊當底，.main 才是照片本體。
+     橫的用 cover 鋪滿；**直的一律 contain，不裁**——直式照片橫著切等於把人切掉。
+     左右空出來的地方就是 .fill，跟 widget 的底同一個調子（暗、糊、有照片的顏色）。 */
+  .bg { position: absolute; inset: 0; opacity: 0; transition: opacity 2.4s ease; }
+  .bg.on { opacity: 1; }
+  .bg i {
+    position: absolute; inset: 0; display: block; background-position: center; background-repeat: no-repeat;
     animation: drift 46s ease-in-out infinite alternate;
   }
-  .bg.on { opacity: 1; }
+  .bg .fill { background-size: cover; filter: blur(42px) brightness(.42) saturate(.85); transform: scale(1.2); animation: none; }
+  .bg .main { background-size: cover; }
+  .bg.fit .main { background-size: contain; }
+  .bg.fit .fill { display: block; }
+  .bg:not(.fit) .fill { display: none; }
   @keyframes drift { from { transform: scale(1.06) translate(0, 0); } to { transform: scale(1.14) translate(-1.5%, -1%); } }
-  @media (prefers-reduced-motion: reduce) { .bg { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .bg i { animation: none; } }
   /* 照片上要讀字，一定要壓一層：上下重、中間輕 */
   #veil {
     position: fixed; inset: 0; z-index: 1; pointer-events: none;
@@ -111,6 +120,16 @@
   #dockTrack { height: 3px; background: rgba(150,175,210,.18); }
   #dockTrack i { display: block; height: 100%; width: 0%; background: var(--accent); }
   #dockBody { max-height: 46vh; overflow-y: auto; padding: 12px 16px 14px; scrollbar-width: thin; }
+  /* widget 的跟隨模式只留當下那一句：它是背景，不是歌詞本。
+     不能用 visibility 或 opacity 藏——那些還是佔位子，卡片一樣是滿的高度。 */
+  body.m-widget.oneLine #dockBody { max-height: none; overflow: hidden; padding: 8px 16px 12px; }
+  body.m-widget.oneLine #dockBody .sec,
+  body.m-widget.oneLine #dockBody .ln:not(.cur) { display: none; }
+  body.m-widget.oneLine #dockBody .ln.cur { opacity: 1; }
+  body.m-widget.oneLine #dockBody:empty::after,
+  body.m-widget.oneLine #dockBody.blank::after {
+    content: '♪'; color: var(--dim); font-size: .9rem;
+  }
   #dockBody .ln { text-align: left; padding: 5px 0; }
   #dockBody .ln .jp { font-size: 1.02rem; line-height: 1.4; }
   #dockBody .ln .zh { font-size: .84rem; }
@@ -136,7 +155,10 @@
 </style>
 </head>
 <body class="m-stage">
-<div id="bgWrap"><div class="bg" id="bgA"></div><div class="bg" id="bgB"></div></div>
+<div id="bgWrap">
+  <div class="bg" id="bgA"><i class="fill"></i><i class="main"></i></div>
+  <div class="bg" id="bgB"><i class="fill"></i><i class="main"></i></div>
+</div>
 <div id="veil"></div>
 
 <div id="stage">
@@ -229,7 +251,12 @@
     const img = new Image();
     img.onload = () => {
       const next = layers[1 - layerTop];
-      next.style.backgroundImage = `url("${url}")`;
+      next.querySelector('.main').style.backgroundImage = `url("${url}")`;
+      next.querySelector('.fill').style.backgroundImage = `url("${url}")`;
+      // 比螢幕「瘦」的就別裁了——直式照片橫著切等於把人切掉。0.92 是給
+      // 幾乎方形的照片一點寬容，那種裁一點點反而比留兩條邊好看。
+      const shot = img.naturalWidth / img.naturalHeight;
+      next.classList.toggle('fit', shot < (innerWidth / innerHeight) * 0.92);
       next.classList.add('on');
       layers[layerTop].classList.remove('on');
       layerTop = 1 - layerTop;
@@ -318,6 +345,7 @@
       });
       const el = els[i];
       if (!el) return;
+      if (host === 1) $('#dockBody').classList.toggle('blank', i < 0);
       if (host === 0 && lyrMode === 'follow') {
         // 舞台的跟隨模式：整條歌詞平移，讓當下那句停在框的正中央
         const box = $('#lyrics'), inner = $('#lyricsInner');
@@ -378,15 +406,24 @@
   });
 
   // ---- 版面模式 ----
+  // 只動自己這三組 class。整串 className 蓋掉的話會順手把 idle 擦掉，
+  // 舞台模式收起來的控制列就會在切歌詞模式時自己彈回來。
+  function syncBody() {
+    const b = document.body;
+    ['stage', 'widget', 'mini'].forEach((m) => b.classList.toggle('m-' + m, mode === m));
+    b.classList.toggle('showRomaji', romaji);
+    b.classList.toggle('oneLine', lyrMode === 'follow');
+  }
   function setMode(m) {
     mode = m;
-    document.body.className = 'm-' + m + (romaji ? ' showRomaji' : '');
+    syncBody();
     $('#modeSeg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.m === m));
     store.set('mode', m);
     idlePoke();
   }
   function setLyrMode(l) {
     lyrMode = l;
+    syncBody();
     $('#lyrics').classList.toggle('all', l === 'all');
     // 完整模式是「你在讀歌詞」，自動捲動會把你正在看的那行拉走，所以關掉跟隨
     follow = l === 'follow';
@@ -398,7 +435,7 @@
   }
   function setRomaji(on) {
     romaji = on;
-    document.body.classList.toggle('showRomaji', on);
+    syncBody();
     $('#romaji').style.opacity = on ? 1 : .45;
     store.set('romaji', on ? '1' : '0');
   }
@@ -483,7 +520,7 @@
       `<button data-p="${i}" ${p.songs.length ? '' : 'disabled style="opacity:.35"'}>${esc(p.name)}</button>`).join('');
     $('#plSeg').querySelectorAll('button').forEach((b, i) => (b.onclick = () => setPlaylist(i)));
 
-    setMode(store.get('mode', 'stage'));
+    setMode(store.get('mode', 'widget'));   // 預設就是右下角那張小卡，不佔畫面
     setLyrMode(store.get('lyr', 'follow'));
     setRomaji(store.get('romaji', '0') === '1');
     au.volume = +store.get('vol', '0.7');

@@ -3,6 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<style>
+  /* 手把永遠是直的。
+     滑雪要左右傾斜手機，傾過頭系統就自動轉成橫向，版面整個翻掉。
+     Android Chrome 可以用 screen.orientation.lock() 真的鎖住（但要先進全螢幕）；
+     iOS Safari 根本沒有這個 API，網頁層鎖不了——所以退而求其次：把版面自己轉回去。
+     deviceorientation 的 gamma 是**裝置自己的軸**，不會因為畫面轉了就換意思，
+     所以傾斜操作完全不受影響，壞掉的只有版面，轉回來就對了。 */
+  body.rotfix {
+    position: fixed; top: 0; left: 0;
+    width: 100vh; height: 100vw;
+    transform-origin: top left;
+    transform: rotate(90deg) translateY(-100%);
+    overflow: hidden;
+  }
+  /* 系統往哪邊轉，我們就往哪邊轉回去（screen.orientation.angle 決定，見 rotFix） */
+  body.rotfix.rot-ccw { transform: rotate(-90deg) translateX(-100%); }
+  @supports (width: 100dvh) { body.rotfix { width: 100dvh; height: 100dvw; } }
+  #rotHint {
+    position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 99;
+    background: rgba(8,12,22,.9); border: 1px solid #334155; border-radius: 10px;
+    padding: 8px 14px; font-size: .8rem; color: #cbd5e1; display: none; white-space: nowrap;
+  }
+  body.rotfix #rotHint { display: block; }
+</style>
 <title>遊戲手把 — mahou</title>
 <link rel="icon" href="data:,">
 <style>
@@ -59,6 +83,7 @@
 </style>
 </head>
 <body>
+<div id="rotHint">已把畫面轉回直的・手機的旋轉鎖打開會更穩</div>
 <h1>遊戲手把 <span id="roomLabel"></span> <span id="connDot" class="light"></span></h1>
 
 <!-- in-app browser 阻擋（LINE / FB 掃碼會進內建瀏覽器，感測器權限拿不到） -->
@@ -348,6 +373,7 @@
     if (nk && nk.value.trim()) myName = nk.value.trim();
     sock.send({ type: 'join', clientId, name: myName, device });
   }
+  $('#joinBtn').addEventListener('click', () => { lockPortrait().then(rotFix); });
   $('#joinBtn').addEventListener('pointerdown', () => {
     const nk = $('#nick');
     if (nk && !nk.value.trim()) { $('#joinMsg').textContent = '先填暱稱'; return; }
@@ -769,6 +795,51 @@
     LIFT_TH: 6.0, LIFT_REFRACT: 320,
   };
   const WPM = () => COURSE.WORLD_PER_M;
+  // ---- 鎖直向 ----
+  // 先試真的鎖（Android Chrome，要全螢幕）；鎖不住就把版面轉回來。
+  // 兩條路都不動感應器：gamma 是裝置自己的軸，畫面轉不轉都一樣。
+  let orientLocked = false;
+  async function lockPortrait() {
+    if (orientLocked) return true;
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        // Android 要先進全螢幕才鎖得住；進不去就讓它丟例外，走下面的備援
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        }
+        await screen.orientation.lock('portrait');
+        orientLocked = true;
+        document.body.classList.remove('rotfix');
+        return true;
+      }
+    } catch (e) { /* iOS 一定走到這裡 */ }
+    return false;
+  }
+  // 系統把畫面轉了幾度（順時針）。轉回去就是 -angle，方向不能寫死：
+  // 手機往左倒跟往右倒是 90 跟 270，寫死一邊就會有一半的人看到上下顛倒。
+  function rotAngle() {
+    if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;
+    // iOS 舊版的 window.orientation 正負號跟標準相反
+    if (typeof window.orientation === 'number') return ((-window.orientation % 360) + 360) % 360;
+    return 90;
+  }
+  // 備援：橫的就把整個版面轉回直的
+  function rotFix() {
+    const b = document.body;
+    if (orientLocked) { b.classList.remove('rotfix', 'rot-ccw'); return; }
+    const landscape = innerWidth > innerHeight;
+    const phone = Math.min(innerWidth, innerHeight) < 620;   // 平板／桌機不要亂轉
+    const on = landscape && phone;
+    b.classList.toggle('rotfix', on);
+    b.classList.toggle('rot-ccw', on && rotAngle() !== 270);
+  }
+  addEventListener('resize', rotFix);
+  addEventListener('orientationchange', () => setTimeout(rotFix, 120));
+  screen.orientation?.addEventListener?.('change', () => setTimeout(rotFix, 120));
+  rotFix();
+  window.__rotState = () => ({ locked: orientLocked, angle: rotAngle(),
+    fix: document.body.classList.contains('rotfix'), ccw: document.body.classList.contains('rot-ccw') });
+
   let ski = null, skiTimer = null, gammaRaw = 0, gammaZero = 0, gammaF = 0, orientOn = false;
   let tapCount = 0, liftCount = 0, liftZ = 0, zBase = 9.8, lastLift = 0, liftPeak = 0;
 
@@ -1153,12 +1224,21 @@
   });
 
   // 觸控板：拖動移游標
+  // ⚠️ rotfix 時整個版面被 CSS 轉了 90 度，但 pointer 事件給的還是螢幕座標，
+  // getBoundingClientRect 拿到的也是轉過後的外框（寬高互換）。不換算的話
+  // 手指往右滑游標會往上跑——版面轉回來了，操作方向卻是壞的。
+  function padVec(dx, dy, r) {
+    const c = document.body.classList;
+    if (!c.contains('rotfix')) return [dx / r.width, dy / r.height];
+    // 轉過之後外框的寬高也跟著互換：r.width 其實是 pad 的高、r.height 是 pad 的寬
+    return c.contains('rot-ccw') ? [-dy / r.height, dx / r.width] : [dy / r.height, -dx / r.width];
+  }
   let padLast = null;
   $('#huntPad').addEventListener('pointerdown', (e) => { e.preventDefault(); padLast = [e.clientX, e.clientY]; });
   $('#huntPad').addEventListener('pointermove', (e) => {
     if (ptrMode !== 'pad' || !padLast) return;
-    const r = $('#huntPad').getBoundingClientRect();
-    ptrMove((e.clientX - padLast[0]) / r.width * PTR_PAD_SENS, (e.clientY - padLast[1]) / r.height * PTR_PAD_SENS);
+    const v = padVec(e.clientX - padLast[0], e.clientY - padLast[1], $('#huntPad').getBoundingClientRect());
+    ptrMove(v[0] * PTR_PAD_SENS, v[1] * PTR_PAD_SENS);
     padLast = [e.clientX, e.clientY];
   });
   addEventListener('pointerup', () => { padLast = null; });
@@ -1276,8 +1356,8 @@
   });
   $('#cansPad').addEventListener('pointermove', (e) => {
     if (ptrMode !== 'pad' || !cansPadLast) return;
-    const r = $('#cansPad').getBoundingClientRect();
-    ptrMove((e.clientX - cansPadLast[0]) / r.width * PTR_PAD_SENS, (e.clientY - cansPadLast[1]) / r.height * PTR_PAD_SENS);
+    const v = padVec(e.clientX - cansPadLast[0], e.clientY - cansPadLast[1], $('#cansPad').getBoundingClientRect());
+    ptrMove(v[0] * PTR_PAD_SENS, v[1] * PTR_PAD_SENS);
     cansPadLast = [e.clientX, e.clientY];
   });
   addEventListener('pointerup', () => { cansPadLast = null; });
