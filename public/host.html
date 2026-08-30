@@ -1712,9 +1712,12 @@
       }
       // 速度越快 f 越小＝視野越廣，畫面兩側的東西掃得更兇，這是最省力的速度感
       const sp01 = Math.max(0, Math.min(1, speed / 20));
+      // 超加速要看得出來是「換了一檔」，不能只有紅框閃一下：
+      // 視野再開、地面花紋再細＝每秒掃過的東西變多，這是最省力的速度感（風格聖經 §5）
+      const lv = p ? (p.lv | 0) : 0;
       const vp = { x: Math.round(v.x), y: Math.round(v.y), w: vw, h: vh,
                    horizon: Math.round(vh * 0.34), scroll: wy - COURSE.START_Y, camX: x,
-                   f: (94 - sp01 * 16) / TUNE.fov, tex: TUNE.tex,
+                   f: (94 - sp01 * 16 - lv * 5) / TUNE.fov, tex: TUNE.tex * (1 + lv * 0.22),
                    c, p, speed, air, rot, sp01, idx: i };
       MODE7.renderInto(img, FW, SKI.world, vp);
       vps.push(vp);
