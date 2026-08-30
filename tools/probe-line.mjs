@@ -5,7 +5,7 @@
 //
 // 對時間的抽查沒過的時候用這支逼近：在候選時間點各剪一段出來聽寫，
 // **開頭從句子中間開始就代表時間標晚了**（家宴筆記：寧可早，不要晚）。
-// B 版就是這樣抓出第 0 句晚了 5 秒的：7 秒是靜的、8 秒聽到「Even」。
+// Side B 就是這樣抓出第 0 句晚了 5 秒的：7 秒是靜的、8 秒聽到「Even」。
 // ffmpeg 借 family-feast 的 ffmpeg-static，這個 repo 不另外裝。
 import { readFileSync, rmSync } from 'fs';
 import { execFile } from 'child_process';
