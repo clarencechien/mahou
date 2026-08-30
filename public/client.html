@@ -761,6 +761,7 @@
   const SKI = {
     TAP_ACC: 2.4, DECAY: 1.0, TAP_CAP: 11, DRIFT: 4.0, HARD_CAP: 24,
     RAMP_SURGE: 7.0, SURGE_DECAY: 0.5, RAMP_AIR: 1.0, HOP_AIR: 0.5, ARM_S: 0.9,
+    ROLL_AIR: 0.3, ROLL_SURGE: 1.2,        // 沒抬手機直接輾過跳台：小彈一下，不是撞到
     COMBO_EVERY: 3, COMBO_CAP_STEP: 7, COMBO_SURGE: 6, COMBO_MAX_LV: 3,
     HIT_MUL: 0.45, STUN: 0.5,
     STEER: 260, TILT_DEAD: 3.5, TILT_RANGE: 26, TILT_EMA: 0.16,
@@ -857,7 +858,7 @@
     ski = {
       startAt: m.startAt, duration: m.duration, obs: COURSE.build(m.seed, m.speedMul || 1), scan: 0,
       x: 0, wy: COURSE.START_Y, vx: 0, speed: SKI.DRIFT, boost: 0, surge: 0,
-      air: 0, airMax: 0, rot: 0, stun: 0, arm: 0, armScored: false,
+      air: 0, airMax: 0, rot: 0, stun: 0, arm: 0, armScored: false, rolls: 0,
       jumps: 0, misses: 0, hits: 0, combo: 0, lv: 0, bestCombo: 0, superT: 0,
       tapBase: tapCount, liftBase: liftCount, done: false, tick: 0, last: performance.now(),
     };
@@ -957,11 +958,26 @@
     if (ski.stun > 0) ski.stun -= dt;
     if (ski.air > 0) {
       ski.air -= dt;
-      ski.rot = (1 - ski.air / ski.airMax) * Math.PI * 2;      // 滯空轉一圈
+      // 真跳台才轉一圈；輾過去的小彈只是離地，轉圈會看起來像被撞飛
+      ski.rot = ski.airMax <= SKI.ROLL_AIR ? 0 : (1 - ski.air / ski.airMax) * Math.PI * 2;
       if (ski.air <= 0) { ski.air = 0; ski.rot = 0; }
     }
 
     ski.scan = COURSE.advance(ski.obs, ski.scan, ski.wy);
+
+    // 沒抬手機就輾過跳台：小彈一下（0.3 秒滯空、一點點加速），不扣速度、不斷連段。
+    // 跳台是坡不是牆，輾過去該是「咚一下彈起來」，絕對不能有撞到的感覺。
+    if (ski.arm <= 0 && ski.air <= 0 && ski.stun <= 0) {
+      const ri = COURSE.rampAt(ski.obs, ski.scan, ski.x, ski.wy);
+      if (ri >= 0) {
+        ski.obs[ri].used = true;
+        ski.air = ski.airMax = SKI.ROLL_AIR;
+        ski.rolls = (ski.rolls || 0) + 1;
+        ski.surge = Math.min(comboCap(), ski.surge + SKI.ROLL_SURGE);
+        $('#skiPadTitle').textContent = '輾過跳台・下次抬手機';
+        navigator.vibrate?.(12);
+      }
+    }
 
     // 跳台結算：容忍期內壓到跳台就算跳成功
     if (ski.arm > 0) {
@@ -1027,7 +1043,7 @@
   window.__testLift = () => { liftCount++; };
   window.__testTilt = (deg) => { gammaF = deg; gammaZero = 0; };
   window.__skiState = () => (ski ? { x: Math.round(ski.x), wy: Math.round(ski.wy),
-    speed: +ski.speed.toFixed(1), jumps: ski.jumps, misses: ski.misses, hits: ski.hits,
+    speed: +ski.speed.toFixed(1), jumps: ski.jumps, misses: ski.misses, hits: ski.hits, rolls: ski.rolls,
     arm: +(ski.arm || 0).toFixed(2) } : null);
 
   sock.on('skiEnd', (m) => {

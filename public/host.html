@@ -467,6 +467,7 @@
             五種姿勢<br>會<b style="color:#b45309">眨眼睛</b>
           </div>
         </div>
+        <div id="briefLoad" style="display:none; color:#94a3b8; font-size:.85rem; margin-bottom:10px"></div>
         <div class="ready">
           <div style="font-weight:700; white-space:nowrap" id="briefReadyN">0 / 0 人已就緒</div>
           <div class="rbar"><i id="briefBar"></i></div>
@@ -907,6 +908,9 @@
     $('#briefBar').style.width = (list.length ? n / list.length * 100 : 0) + '%';
     $('#briefList').innerHTML = list.map((c) =>
       `<span class="rchip${readySet.has(c.clientId) ? ' ok' : ''}">${esc(c.name)}${readySet.has(c.clientId) ? ' ✓' : ''}</span>`).join('');
+    const ld = GAMES[pickedGame].key === 'hunt' ? huntLoadLine() : '';
+    $('#briefLoad').textContent = ld;
+    $('#briefLoad').style.display = ld ? '' : 'none';
   }
   function openBrief() {
     const g = GAMES[pickedGame], b = BRIEF[g.key];
@@ -1133,7 +1137,10 @@
   // 而且十格雪地長得一樣，沒有名牌根本認不出哪一格是自己。
   function renderPaneTags(ox, oy, k) {
     const wrap = $('#gameWrap');
-    const live = SKI.race || skiVps.some((v) => v.p);
+    // ⚠️ 一定要每一幀都跑到最後那三行「把沒用到的藏起來」。
+    // 以前只有滑雪與大廳那兩條分支會呼叫，變色龍／砸罐子的分支提早 return，
+    // 於是滑完雪切過去，格內名牌與頭頂名牌就整片留在畫面上不會消失。
+    const live = curStage === 'ski' && (SKI.race || skiVps.some((v) => v.p));
     let n = 0, h = 0;
     if (live) {
       skiVps.forEach((vp) => {
@@ -1193,11 +1200,12 @@
     });
     for (let i = lastItems.length; i < tagPool.length; i++) tagPool[i].style.display = 'none';
 
+    renderPaneTags(ox, oy, k);              // 每一幀都跑：沒用到的名牌要在這裡被藏起來
+
     // 頂部 HUD
     const cmdEl = $('#hudCmd'), bar = $('#hudBar').firstElementChild;
     const inGame = ['ski', 'freeze', 'hunt', 'cans'].includes(curStage);
     if (!inGame && !FZ.running) {
-      renderPaneTags(ox, oy, k);
       $('#hudRound').textContent = '';        // 大廳：選單上就寫著了，不重複
       cmdEl.textContent = ''; cmdEl.classList.remove('red'); bar.style.width = '0%';
       chantEl.classList.remove('show');
@@ -1252,7 +1260,6 @@
     if (curStage === 'ski') {
       const r = SKI.race;
       const now2 = hostClock.serverNow() ?? Date.now();
-      renderPaneTags(ox, oy, k);
       if (r) {
         const pre = r.startAt - now2;
         const remain = r.startAt + r.duration - now2;
@@ -1905,13 +1912,43 @@
   const huntBlock = () => Math.max(1, Math.min(16, TUNE.huntBlock | 0 || 3));
 
   // 預載名畫：說明卡打開時就開始抓，載不到用程序化抽象畫
-  let huntArtPool = [];
+  // 說明卡一開就把整場要用的畫全部抓下來，不是只抓第一張。
+  // 冷門畫作的縮圖 Commons 要現生，第一個人可能等好幾秒——說明卡的時間正好拿來等。
+  let huntArtPool = [], huntImgs = new Map(), huntLoadState = [];
   function huntPreload() {
     PAINT.setTheme(TUNE.huntTheme | 0);
     HUNT.img = null; HUNT.imgIdx = -1; HUNT.bg = null;      // 換主題要重畫底圖
     HUNT.totalRounds = huntRounds();
+    huntImgs.clear();
     huntArtPool = [...Array(PAINT.ARTS.length).keys()].sort(() => Math.random() - .5).slice(0, HUNT.totalRounds);
-    PAINT.load(huntArtPool[0], (img) => { HUNT.img = img; HUNT.imgIdx = huntArtPool[0]; });
+    huntLoadState = huntArtPool.map((i) => ({ name: PAINT.ARTS[i].name, state: 'loading' }));
+    // 照關卡順序、一次只抓兩張。全部一起發的話會塞爆瀏覽器的 6 條連線上限，
+    // 慢的那幾張互相卡住，結果是「一張都載不到」而不是「慢慢載到」。
+    huntPreloadSeq(++huntPreloadGen, 0);
+    huntPreloadSeq(huntPreloadGen, 1);
+    renderBrief();
+  }
+  let huntPreloadGen = 0;
+  function huntPreloadSeq(gen, k) {
+    if (gen !== huntPreloadGen || k >= huntArtPool.length) return;
+    const idx = huntArtPool[k];
+    PAINT.load(idx, (img, info) => {
+      if (gen !== huntPreloadGen) return;                    // 中途換過主題，這張不算數
+      huntLoadState[k] = { name: info.name, state: img ? 'ok' : 'fail', ms: info.ms, width: info.width };
+      if (img) huntImgs.set(idx, img);
+      feed(img ? `畫作就緒 ${info.name}（${info.width}px・${info.ms}ms）`
+               : `畫作載不到 ${info.name}（${info.ms}ms）→ 用程序化抽象畫`);
+      if (k === 0 && img) { HUNT.img = img; HUNT.imgIdx = idx; HUNT.bg = null; }
+      renderBrief();
+      huntPreloadSeq(gen, k + 2);
+    });
+  }
+  function huntLoadLine() {
+    if (!huntLoadState.length) return '';
+    const ok = huntLoadState.filter((x) => x.state === 'ok').length;
+    const fail = huntLoadState.filter((x) => x.state === 'fail');
+    return `畫作 ${ok}/${huntLoadState.length} 已就緒` +
+      (fail.length ? `・${fail.length} 張載不到（用抽象畫代替）` : '');
   }
   function huntStartGame() {
     HUNT.running = true; HUNT.round = 0; HUNT.rankText = ''; HUNT.stamps = []; HUNT.reveal = [];
@@ -1946,13 +1983,20 @@
       HUNT.bg = r.bg; HUNT.fit = r.fit;
       const meta = HUNT.img ? PAINT.ARTS[HUNT.imgIdx] : { name: '抽象 No.' + (m.seed % 97), meta: 'mahou 程序生成' };
       HUNT.artName = meta.name;
-      // 下一輪的畫先抓
-      const nextIdx = huntArtPool[HUNT.round % huntArtPool.length];
-      if (nextIdx != null) PAINT.load(nextIdx, (img) => { HUNT.img = img; HUNT.imgIdx = nextIdx; });
     };
-    if (HUNT.imgIdx === m.artIndex || HUNT.img) buildBg();
-    else PAINT.load(m.artIndex, (img) => { HUNT.img = img; HUNT.imgIdx = m.artIndex; buildBg(); });
-    if (!HUNT.bg) buildBg();
+    // 預載好的就直接用。原本寫成「HUNT.imgIdx 對得上 || 有任何圖就用」——
+    // 後半段會拿上一關的畫來畫這一關，關卡越後面越容易踩到。
+    const pre = huntImgs.get(m.artIndex);
+    if (pre) { HUNT.img = pre; HUNT.imgIdx = m.artIndex; buildBg(); }
+    else if (HUNT.imgIdx === m.artIndex && HUNT.img) buildBg();
+    else {
+      HUNT.img = null; HUNT.imgIdx = -1; buildBg();          // 先用抽象畫開場，載到再換
+      PAINT.load(m.artIndex, (img) => {
+        if (!img || HUNT.round !== m.round) return;
+        huntImgs.set(m.artIndex, img);
+        HUNT.img = img; HUNT.imgIdx = m.artIndex; buildBg();
+      });
+    }
     SFX.go();
   });
   sock.on('pointer', (m) => {
