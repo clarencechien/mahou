@@ -4,7 +4,9 @@
 (function () {
   const P = (window.PAINT = {});
 
-  const FILE = (f) => 'https://commons.wikimedia.org/wiki/Special:Redirect/file/' + encodeURIComponent(f) + '?width=1600';
+  // 可覆寫，測試時指到本機的假 Commons（含逐級退寬度的行為）
+  P.FILE = (f, w) => 'https://commons.wikimedia.org/wiki/Special:Redirect/file/' + encodeURIComponent(f) + '?width=' + (w || 1280);
+  const FILE = (f, w) => P.FILE(f, w);
   // 兩套主題各八張，全部是公有領域作品（Wikimedia 直連，載不到退程序化抽象畫）。
   // 挑選標準是「好不好藏人」：畫面要夠花、明度層次多，純色大背景的畫藏不住小人。
   P.THEMES = [
@@ -27,14 +29,14 @@
       // ⚠️ 吉伊卡哇／皮克敏／寶可夢這類還在版權內的角色不能放進來。
       key: 'toon', name: '卡通系',
       list: [
-        { name: '鳥獸戲畫・相撲', meta: '傳鳥羽僧正 · 12 世紀', file: 'Chouju sumo2.jpg' },
-        { name: '百鬼夜行繪卷', meta: '室町時代 · 付喪神', file: 'Hyakki-Yagyo-Emaki Tsukumogami 1.jpg' },
-        { name: '貓飼好五十三疋', meta: '歌川國芳 · 1848', file: 'Cats suggested as the fifty-three stations of the Tokaido.jpg' },
-        { name: '東海道五十三對', meta: '歌川國芳 · c.1845', file: 'Kuniyoshi Utagawa, The fifty three stations of the tokaido.jpg' },
-        { name: '相馬の古內裏', meta: '歌川國芳 · c.1844 · 骸骨', file: 'Takiyasha the Witch and the Skeleton Spectre, by Utagawa Kuniyoshi.jpg' },
-        { name: '人間樂園', meta: 'Hieronymus Bosch · c.1500', file: 'The Garden of earthly delights.jpg' },
-        { name: '夢', meta: 'Henri Rousseau · 1910', file: 'Henri Rousseau - Il sogno.jpg' },
-        { name: '尼德蘭箴言', meta: 'Pieter Bruegel · 1559', file: 'Pieter Bruegel the Elder - The Dutch Proverbs - Google Art Project.jpg' },
+        { name: '鳥獸戲畫・相撲', meta: '傳鳥羽僧正 · 12 世紀', file: 'Chouju_sumo2.jpg' },
+        { name: '百鬼夜行繪卷', meta: '室町時代 · 付喪神', file: 'Hyakki-Yagyo-Emaki_Tsukumogami_1.jpg' },
+        { name: '貓飼好五十三疋', meta: '歌川國芳 · 1848', file: 'Cats_suggested_as_the_fifty-three_stations_of_the_Tokaido.jpg' },
+        { name: '東海道五十三對', meta: '歌川國芳 · c.1845', file: 'Kuniyoshi_Utagawa,_The_fifty_three_stations_of_the_tokaido.jpg' },
+        { name: '相馬の古內裏', meta: '歌川國芳 · c.1844 · 骸骨', file: 'Takiyasha_the_Witch_and_the_Skeleton_Spectre,_by_Utagawa_Kuniyoshi.jpg' },
+        { name: '人間樂園', meta: 'Hieronymus Bosch · c.1500', file: 'The_Garden_of_earthly_delights.jpg' },
+        { name: '夢', meta: 'Henri Rousseau · 1910', file: 'Henri_Rousseau_-_Il_sogno.jpg' },
+        { name: '尼德蘭箴言', meta: 'Pieter Bruegel · 1559', file: 'Pieter_Bruegel_the_Elder_-_The_Dutch_Proverbs_-_Google_Art_Project.jpg' },
       ],
     },
   ];
@@ -42,15 +44,47 @@
   P.setTheme = function (i) { P.theme = ((i | 0) % P.THEMES.length + P.THEMES.length) % P.THEMES.length; P.ARTS = P.THEMES[P.theme].list; };
   P.ARTS = P.THEMES[0].list;
 
-  // 載入名畫（8 秒超時當失敗）。cb(img|null)
+  // 載入名畫。cb(img|null, info)
+  //
+  // 為什麼要退寬度重試：Commons 的縮圖是「有人要過才生成、之後才進 CDN」。
+  // 蒙娜麗莎那種名作 1600px 早就在快取裡，秒回；但卡通系那幾張冷門作品
+  // （鳥獸戲畫、國芳的貓）1600px 可能要現生，第一個人就會等很久。
+  // 原本 8 秒超時 → 整套卡通系在現場全部退成程序化抽象畫＝「沒有圖」。
+  // 所以逐級退寬度：1280 → 800，兩個都是 Commons 的標準縮圖尺寸（比較可能已在快取）。
+  // 也不再要 1600：畫布只有 960 寬，之後還要打成像素格，1280 已經綽綽有餘，
+  // 而且位元組少一半（實測布勒哲爾 1600px 1085KB → 1280px 480KB）。
+  const WIDTHS = [1280, 800];
+  P.LOAD_TIMEOUT = 10000;
   P.load = function (idx, cb) {
-    const img = new Image();
-    let done = false;
-    const finish = (ok) => { if (done) return; done = true; cb(ok ? img : null); };
-    const t = setTimeout(() => finish(false), 8000);
-    img.onload = () => { clearTimeout(t); finish(true); };
-    img.onerror = () => { clearTimeout(t); finish(false); };
-    img.src = FILE(P.ARTS[idx % P.ARTS.length].file);
+    const art = P.ARTS[idx % P.ARTS.length];
+    const t0 = (performance && performance.now) ? performance.now() : Date.now();
+    let step = 0;
+    const attempt = () => {
+      if (step >= WIDTHS.length) { cb(null, { name: art.name, ok: false, ms: Math.round(now() - t0) }); return; }
+      const w = WIDTHS[step++];
+      const img = new Image();
+      let done = false;
+      const finish = (ok) => {
+        if (done) return; done = true;
+        clearTimeout(t);
+        if (ok) cb(img, { name: art.name, ok: true, width: w, ms: Math.round(now() - t0) });
+        else attempt();
+      };
+      const t = setTimeout(() => {
+        // ⚠️ 超時一定要真的把這個請求收掉，不能只是不理它。
+        // 瀏覽器對同一個 host 只開 6 條連線，卡住的請求會一直佔著；
+        // 一次預載 8 張的話，六條全被卡死，連退寬度的重試都排不進去
+        //（症狀就是整套主題「一張都載不到」，而不是慢）。
+        img.onload = img.onerror = null;
+        img.src = '';
+        finish(false);
+      }, P.LOAD_TIMEOUT);
+      img.onload = () => finish(true);
+      img.onerror = () => finish(false);
+      img.src = FILE(art.file, w);
+    };
+    const now = () => ((performance && performance.now) ? performance.now() : Date.now());
+    attempt();
   };
 
   function mulberry32(seed) {
