@@ -299,17 +299,99 @@
     else { head(12, 6); rect(9, 10, 7, 11); line(9, 12, 8, 20, 3); line(16, 12, 17, 20, 3); line(11, 21, 11, 30, 3); line(14, 21, 14, 30, 3); }
     return cells;
   }
-  const POSE_CELLS = [0, 1, 2, 3, 4].map(buildPose);
-  const POSE_BOUNDS = POSE_CELLS.map((cells) => {
+  // ---- 第二套：芽芽人（大頭、頭上一根莖、大眼睛）----
+  //
+  // 為什麼是自己畫不是抄：皮克敏那幾隻是任天堂的角色，不能直接複製。
+  // 「頭上長芽的小人」本身是很廣的造型語彙，所以這裡自己組一套：
+  // 大圓頭＋一根莖＋葉／花苞／花＋細手細腳。
+  // 在畫上只有畫高 9–20%，真正認得出來的是**剪影**——莖跟大頭的輪廓
+  // 其實比原本方頭人更好認，這是玩法上的差別，不是純美術。
+  function buildSprout(kind) {
+    const cells = new Set();
+    const add = (x, y) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && x < LW && y >= 0 && y < LH) cells.add(x + ',' + y); };
+    const rect = (x, y, w, h) => { for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) add(xx, yy); };
+    const ell = (cx, cy, rx, ry) => {
+      for (let y = Math.ceil(cy - ry); y <= cy + ry; y++)
+        for (let x = Math.ceil(cx - rx); x <= cx + rx; x++) {
+          const dx = (x - cx) / rx, dy = (y - cy) / ry;
+          if (dx * dx + dy * dy <= 1.02) add(x, y);
+        }
+    };
+    const line = (x0, y0, x1, y1, t = 2) => {
+      const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+      let err = dx - dy, x = x0, y = y0;
+      while (true) {
+        const h = Math.floor(t / 2);
+        for (let oy = -h; oy <= h; oy++) for (let ox = -h; ox <= h; ox++) add(x + ox, y + oy);
+        if (x === x1 && y === y1) break;
+        const e2 = 2 * err;
+        if (e2 > -dy) { err -= dy; x += sx; }
+        if (e2 < dx) { err += dx; y += sy; }
+      }
+    };
+    // 剪影只有這三段撐得住縮小：**一顆蛋形身體 ＋ 一根長莖 ＋ 四肢細棍**。
+    // 前兩版都栽在「頭跟身體分兩顆橢圓」——縮到畫上就是一坨保齡球瓶，
+    // 而且腰間那點凹陷第一個被吃掉。頭身合成一顆反而更像，也更耐縮。
+    ell(11.5, 15, 4.8, 6);            // 蛋形身體：y 9–21，寬 9.6
+    rect(11, 4, 2, 6);                // 莖：細細一根，比身體高一半才看得出來
+    // 頭上的裝飾：葉／花苞／花。五種姿勢配三種頂，剪影才不會五隻長一樣
+    if (kind === 0 || kind === 3) {                       // 葉子：偏一邊，剪影最好認
+      ell(15.4, 2.2, 3.8, 1.9);
+      line(12, 4, 13, 3, 1);
+    } else if (kind === 1 || kind === 4) {                // 花苞
+      ell(11.5, 2.2, 2.6, 2.4);
+    } else {                                              // 花：四片
+      for (const [ox, oy] of [[-2.6, .4], [2.6, .4], [0, -2.1], [0, 2.3]]) ell(11.5 + ox, 2.2 + oy, 1.8, 1.6);
+    }
+    // 四肢是細棍，而且要從身體輪廓**外面**收尾，縮小之後才留得住
+    if (kind === 0) {                                     // 站著，手垂在身側
+      line(8, 16, 5, 21, 2); line(15, 16, 18, 21, 2);
+      line(10, 20, 9, 31, 2); line(13, 20, 14, 31, 2);
+    } else if (kind === 1) {                              // 雙手舉高
+      line(8, 15, 4, 8, 2); line(15, 15, 19, 8, 2);
+      line(10, 20, 9, 31, 2); line(13, 20, 14, 31, 2);
+    } else if (kind === 2) {                              // 單手舉（招手）
+      line(8, 15, 4, 8, 2); line(15, 16, 18, 21, 2);
+      line(10, 20, 9, 31, 2); line(13, 20, 14, 31, 2);
+    } else if (kind === 3) {                              // 手腳張開
+      line(8, 14, 1, 10, 2); line(15, 14, 22, 10, 2);
+      line(10, 20, 4, 31, 2); line(13, 20, 19, 31, 2);
+    } else {                                              // 走路：手腳一前一後
+      line(8, 16, 4, 20, 2); line(15, 15, 20, 12, 2);
+      line(10, 20, 5, 31, 2); line(13, 20, 17, 29, 2);
+    }
+    return cells;
+  }
+
+  function boundsOf(cells) {
     let minX = 99, minY = 99, maxX = -1, maxY = -1;
     for (const k of cells) {
       const [x, y] = k.split(',').map(Number);
       minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
     }
     return { minX, minY, maxX, maxY, w: maxX - minX + 1, h: maxY - minY + 1 };
-  });
-  const EYES = [[[12, 7], [15, 7]], [[11, 6], [14, 6]], [[11, 8], [14, 8]], [[11, 6], [14, 6]], [[11, 6], [14, 6]]];
-  P.POSE_BOUNDS = POSE_BOUNDS;
+  }
+  const IDX = [0, 1, 2, 3, 4];
+  const SETS = {
+    block: {
+      name: '方頭人',
+      cells: IDX.map(buildPose),
+      eyes: [[[12, 7], [15, 7]], [[11, 6], [14, 6]], [[11, 8], [14, 8]], [[11, 6], [14, 6]], [[11, 6], [14, 6]]],
+    },
+    sprout: {
+      name: '芽芽人',
+      cells: IDX.map(buildSprout),
+      // 大眼睛：位置一樣（身體是共用的），眼睛本身在 drawChameleon 放大
+      eyes: IDX.map(() => [[9, 13], [14, 13]]),   // 大眼睛在蛋形的上半，左右各一
+      eyeScale: 1.9,
+    },
+  };
+  for (const k of Object.keys(SETS)) SETS[k].bounds = SETS[k].cells.map(boundsOf);
+  P.CHARSETS = Object.keys(SETS).map((k) => ({ key: k, name: SETS[k].name }));
+  P.charset = 'block';
+  P.setCharset = function (k) { if (SETS[k]) P.charset = k; };
+  const SET = () => SETS[P.charset] || SETS.block;
+  Object.defineProperty(P, 'POSE_BOUNDS', { get: () => SET().bounds });
 
   function cellsPath(cells, px, py, u, ox = 0, oy = 0) {
     const p = new Path2D();
@@ -322,7 +404,8 @@
 
   // ch: {x,y(正規化), pose, blink}；opts: {hNorm, depth(0-1), edge(0-1), eyeSize, camoOffset}
   P.drawChameleon = function (ctx, bg, fit, ch, opts) {
-    const cells = POSE_CELLS[ch.pose], b = POSE_BOUNDS[ch.pose];
+    const S = SET();
+    const cells = S.cells[ch.pose], b = S.bounds[ch.pose];
     const targetH = opts.hNorm * fit.h;
     const u = targetH / b.h;
     const cx = fit.x + ch.x * fit.w, groundY = fit.y + ch.y * fit.h;
@@ -356,9 +439,9 @@
       ctx.save(); ctx.globalAlpha = opts.edge; ctx.globalCompositeOperation = 'screen';
       ctx.fillStyle = ch.pose % 2 ? '#d9ecff' : '#ffe7b0'; ctx.fill(body); ctx.restore();
     }
-    const eyeSize = opts.eyeSize ?? 3;
+    const eyeSize = Math.max(2, Math.round((opts.eyeSize ?? 3) * (S.eyeScale || 1)));
     ctx.save(); ctx.globalCompositeOperation = 'difference'; ctx.fillStyle = 'rgba(255,255,255,.88)';
-    for (const [ex, ey] of EYES[ch.pose]) {
+    for (const [ex, ey] of S.eyes[ch.pose]) {
       const X = Math.round(px + ex * u), Y = Math.round(py + ey * u);
       if (ch.blink) ctx.fillRect(X - Math.round(eyeSize * .55), Y, Math.max(2, eyeSize + 1), Math.max(1, Math.round(eyeSize * .28)));
       else { ctx.globalAlpha = .36; ctx.fillRect(X - Math.floor(eyeSize / 2), Y - Math.floor(eyeSize / 2), eyeSize, eyeSize); ctx.globalAlpha = 1; }
