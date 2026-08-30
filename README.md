@@ -185,6 +185,7 @@ tools/fetch-arts.mjs      # 把名畫抓下來縮到 1280 存進 public/arts/（
 tools/fetch-songs.mjs     # 背景模式的歌：從 family-feast 把歌詞與音檔抓進 public/ambient/
 tools/trim-white.mjs      # 量背景圖四邊的純白留白，把 trim 比例寫回 playlists.json
 tools/lyrics-draft.mjs    # 純文字歌詞 → songs/<id>.json 草稿（時間之後用 family-feast 的 align-lyrics.mjs 對）
+tools/probe-line.mjs      # 剪一小段出來聽寫，對時間抽查沒過時用來逼近真正的起唱點
 tools/lyrics/            # 新歌的純文字歌詞來源
 public/ambient/           # 背景模式：歌詞 JSON、音檔、相簿清單、歌單設定
 public/arts/              # 名畫本體，8 張 2.6MB。同源＝canvas 不會 tainted

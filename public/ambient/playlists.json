@@ -26,9 +26,12 @@
     },
     {
       "id": 3,
-      "name": "歌單 3",
-      "note": "還沒設定",
-      "songs": []
+      "name": "Our Table 兩版",
+      "note": "同一首歌詞，兩種編曲",
+      "songs": [
+        "our-table",
+        "our-table-b"
+      ]
     }
   ],
   "backdrops": [
