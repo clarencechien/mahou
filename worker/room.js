@@ -75,10 +75,19 @@ export class RoomDO {
 
   async fetch(req) {
     const url = new URL(req.url);
-    const m = url.pathname.match(/^\/(ws|export|whereami)\/([A-Za-z0-9]{4,8})$/);
+    const m = url.pathname.match(/^\/(ws|export|whereami|close)\/([A-Za-z0-9]{4,8})$/);
     if (!m) return new Response('Bad request', { status: 400 });
     this.roomId = m[2].toUpperCase();
 
+    if (m[1] === 'close') {
+      // 逃生鈕：不用開著那個房間的分頁，也能把它關掉。
+      // 回報關掉之前還有幾條連線——順便當成「這個房間到底還活著沒有」的檢查。
+      const live = this.hosts.size + [...this.clients.values()].filter((c) => c.connected).length;
+      const already = this.ended;
+      if (!already) this.endRoom('remote');
+      return new Response(JSON.stringify({ room: this.roomId, closed: !already, alreadyEnded: already, live }),
+        { headers: { 'content-type': 'application/json' } });
+    }
     if (m[1] === 'export') return this.export();
     if (m[1] === 'whereami') return this.whereami(req.headers.get('x-edge-colo'));
 

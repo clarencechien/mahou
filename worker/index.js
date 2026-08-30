@@ -1,7 +1,10 @@
 import { RoomDO } from './room.js';
 export { RoomDO };
 
-const ROOM_RE = /^\/(ws|export|whereami)\/([A-Za-z0-9]{4,8})$/;
+// close 是「逃生鈕」：不用開著那個房間的分頁也能把它關掉。
+// 房號本來就是進得去的憑證（掃 QR 就能加入），所以這裡不另外設密碼——
+// 能關掉一個自己知道房號的房間，比忘記關讓它繼續計費好。
+const ROOM_RE = /^\/(ws|export|whereami|close)\/([A-Za-z0-9]{4,8})$/;
 
 // 背景模式的音檔要走這裡，不能直接讓靜態資源服務。
 // Cloudflare 的 assets handler 不理 Range，而瀏覽器拿到不支援 Range 的音檔會

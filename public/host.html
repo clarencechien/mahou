@@ -540,6 +540,7 @@
             background:#1e293b; color:#f1f5f9; text-decoration:none; font-size:1rem">🎵 背景模式</a>
   <button class="export" id="exportBtn">匯出 JSON</button>
   <button id="endBtn" style="background:#7f1d1d">結束房間</button>
+  <button id="killBtn" style="background:#450a0a" title="關掉這台瀏覽器開過的所有房間">🚨 關掉所有房間</button>
 </div>
 
 <table>
@@ -702,6 +703,38 @@
     return true;
   }
   $('#exportBtn').addEventListener('click', doExport);
+
+  // ---- 逃生鈕：關掉這台瀏覽器開過的所有房間 ----
+  // 忘記按「結束房間」的分頁會一直戳著 DO，而 DO 是按存活時間計費的
+  // （128MB × 秒數）——一個忘記關的房間撐到 6 小時上限就吃掉免費方案
+  // 一天額度的兩成。閒置 30 分鐘會自動關，但「自動」跟「確定關掉了」是兩回事。
+  // 沒有地方可以列出所有 DO，所以自己記：每開一個房間就把房號存進 localStorage。
+  const ROOMS_KEY = 'mahou-rooms';
+  const roomLog = () => { try { return JSON.parse(localStorage.getItem(ROOMS_KEY) || '[]'); } catch (e) { return []; } };
+  function rememberRoom(id) {
+    try {
+      const list = roomLog().filter((r) => r !== id);
+      list.push(id);
+      localStorage.setItem(ROOMS_KEY, JSON.stringify(list.slice(-40)));
+    } catch (e) {}
+  }
+  rememberRoom(roomId);
+  $('#killBtn').addEventListener('click', async () => {
+    const rooms = roomLog();
+    if (!rooms.length) return alert('這台瀏覽器沒有開過房間的紀錄。');
+    if (!confirm(`關掉這台瀏覽器開過的 ${rooms.length} 個房間？\n（${rooms.join('、')}）\n包含現在這一間，所有人都會被踢掉。`)) return;
+    $('#killBtn').disabled = true;
+    const out = [];
+    for (const r of rooms) {
+      try {
+        const res = await fetch(`/close/${r}`, { method: 'POST' });
+        const j = await res.json();
+        out.push(`${r}：${j.alreadyEnded ? '早就關了' : `關掉了（當時還有 ${j.live} 條連線）`}`);
+      } catch (e) { out.push(`${r}：關不掉（${e.message}）`); }
+    }
+    $('#killBtn').disabled = false;
+    alert('全部處理完了：\n\n' + out.join('\n'));
+  });
 
   // ---- 結束房間（計費防呆）：先自動匯出一次，再踢掉所有連線讓 DO 休眠 ----
   $('#endBtn').addEventListener('click', async () => {
