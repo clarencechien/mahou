@@ -394,7 +394,21 @@
           <button class="themeBtn" data-t="0" style="flex:1; padding:8px 0; font-size:.84rem"></button>
           <button class="themeBtn" data-t="1" style="flex:1; padding:8px 0; font-size:.84rem"></button>
         </div>
-        <div class="d" id="tHuntThemeD">下一場生效。卡通系是戲畫／妖怪繪卷／國芳的貓這類公有領域作品。</div>
+        <div class="d" id="tHuntThemeD">下一場生效。</div>
+        <div id="customBox" style="display:none; margin-top:8px">
+          <div style="display:flex; gap:6px">
+            <button id="customPick" style="flex:1; padding:8px 0; font-size:.84rem">選圖片…</button>
+            <button id="customClear" style="padding:8px 12px; font-size:.84rem; background:#3f1d1d">清除</button>
+          </div>
+          <input type="file" id="customFiles" accept="image/*" multiple style="display:none">
+          <div class="d" id="customD">從這台電腦選圖片。<b style="color:#7dd3fc">只存在這台瀏覽器，不會上傳、不會進版本庫。</b>直式的手機桌布也可以——隨機裁切會自己挑一塊橫的。</div>
+        </div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>隨機裁切</span><b id="tvHuntCrop">60</b></div>
+        <input type="range" id="tHuntCrop" min="0" max="100" step="5" value="60">
+        <div class="d">每一關從畫裡挑一塊放大。0＝整張塞進去（直式的畫會留黑邊）。
+          拉高＝藏人的面積變大、同一張畫每關都不一樣。</div>
       </div>
       <div class="k">
         <div class="lab"><span>每場幾幅畫</span><b id="tvHuntRounds">8 幅</b></div>
@@ -854,7 +868,8 @@
     title: '名畫變色龍',
     lead: () => {
       const c = huntCountCurve(huntRounds(), huntMaxN());
-      return `${PAINT.THEMES[TUNE.huntTheme | 0].name}・${c.length} 幅畫・小人 ${c[0]} 隻加到 ${c[c.length - 1]} 隻`;
+      const th = PAINT.THEMES[TUNE.huntTheme | 0];
+      return `${th.name}${th.key === 'custom' && !th.list.length ? '（還沒選圖）' : ''}・${c.length} 幅畫・小人 ${c[0]} 隻加到 ${c[c.length - 1]} 隻`;
     },
     say: '畫裡躲了小人，長得就像螢幕上這五隻。第一關三隻，之後每一關會越來越多。現在就揮揮手機，電視上會出現你顏色的游標，先玩一下抓手感。找到小人就按蓋章，誰先蓋到就是誰的，蓋錯會被罰兩秒不能動。眼睛放亮，牠們會眨眼睛。',
     rules: [
@@ -1451,12 +1466,23 @@
   // ---- 手感旋鈕：定案速度前先讓人現場調 ----
   const TUNE_DEF = { speed: 3.2, tex: 3.5, fov: 1.0, dur: 60,
                      huntDiff: 1, huntSec: 45, huntTheme: 0, huntBlock: 3,
-                     huntRounds: 8, huntMax: 10,
+                     huntRounds: 8, huntMax: 10, huntCrop: 60,
                      huntSize: 0, huntDepth: 0, huntEdge: 0, huntBlink: 0,   // 0 = 照關卡曲線
                      cansRefill: 4.5, cansSec: 45, cansFun: 50 };
+  // 改預設值的時候把 TUNE_VER 加一：舊瀏覽器存的設定會蓋掉新預設，
+  // 之前就中過——像素大小預設早就改成 3 了，現場那台還是拿舊的 6 在跑，看起來像沒改到。
+  const TUNE_VER = 2;
   const TUNE = Object.assign({}, TUNE_DEF, (() => {
-    try { return JSON.parse(localStorage.getItem('mahou-tune') || '{}'); } catch (e) { return {}; }
+    try {
+      const st = JSON.parse(localStorage.getItem('mahou-tune') || '{}');
+      if ((st.ver | 0) < TUNE_VER) {                  // 版本落後：只留使用者自己拉過的滑雪三項
+        return { speed: st.speed, tex: st.tex, fov: st.fov, dur: st.dur };
+      }
+      return st;
+    } catch (e) { return {}; }
   })());
+  TUNE.ver = TUNE_VER;
+  for (const k of Object.keys(TUNE)) if (TUNE[k] == null) TUNE[k] = TUNE_DEF[k];
   TUNE.huntTheme = Math.max(0, Math.min(PAINT.THEMES.length - 1, TUNE.huntTheme | 0));
   function saveTune() { try { localStorage.setItem('mahou-tune', JSON.stringify(TUNE)); } catch (e) {} }
   function renderTune() {
@@ -1480,15 +1506,24 @@
     $('#tvHuntTheme').textContent = `${th.name}・${th.list.length} 張`;
     document.querySelectorAll('.themeBtn').forEach((b) => {
       const t = PAINT.THEMES[+b.dataset.t];
-      b.textContent = `${t.name}（${t.list.length}）`;
+      b.textContent = t.key === 'custom' ? `自訂（${t.list.length}）` : `${t.name}（${t.list.length}）`;
       b.style.background = (+b.dataset.t === (TUNE.huntTheme | 0)) ? '#334d7a' : '#1e293b';
     });
     const R = huntRounds(), MX = huntMaxN();
-    $('#tHuntRounds').max = th.list.length;
+    $('#tHuntRounds').max = Math.max(3, th.list.length || 8);
     $('#tHuntRounds').value = R; $('#tvHuntRounds').textContent = `${R} 幅`;
     $('#tHuntRoundsD').textContent = `一幅畫＝一關，${th.name}共 ${th.list.length} 張、每場隨機挑 ${R} 張。下一場生效。`;
     $('#tHuntMax').value = MX; $('#tvHuntMax').textContent = `${MX} 隻`;
     $('#tHuntMaxD').textContent = '每關的隻數：' + huntCountCurve(R, MX).join(' → ') + ' 隻';
+    $('#tHuntCrop').value = TUNE.huntCrop;
+    $('#tvHuntCrop').textContent = (TUNE.huntCrop | 0) === 0 ? '不裁切' : (TUNE.huntCrop | 0);
+    const isCustom = th.key === 'custom';
+    $('#customBox').style.display = isCustom ? '' : 'none';
+    if (isCustom) {
+      $('#customD').innerHTML = th.list.length
+        ? `已載入 <b style="color:#7dd3fc">${th.list.length}</b> 張，只存在這台瀏覽器。直式的圖也可以——隨機裁切會挑一塊橫的。`
+        : '還沒選圖片。<b style="color:#7dd3fc">只存在這台瀏覽器，不會上傳。</b>沒選就會用程序化抽象畫。';
+    }
   }
   document.querySelectorAll('.themeBtn').forEach((b) => {
     b.addEventListener('click', () => {
@@ -1498,12 +1533,12 @@
   });
   [['tSpeed', 'speed'], ['tTex', 'tex'], ['tFov', 'fov'], ['tDur', 'dur'],
    ['tHuntDiff', 'huntDiff'], ['tHuntSec', 'huntSec'], ['tHuntBlock', 'huntBlock'],
-   ['tHuntRounds', 'huntRounds'], ['tHuntMax', 'huntMax'],
+   ['tHuntRounds', 'huntRounds'], ['tHuntMax', 'huntMax'], ['tHuntCrop', 'huntCrop'],
    ['tHuntSize', 'huntSize'], ['tHuntDepth', 'huntDepth'], ['tHuntEdge', 'huntEdge'], ['tHuntBlink', 'huntBlink'],
    ['tCansRefill', 'cansRefill'], ['tCansSec', 'cansSec'], ['tCansFun', 'cansFun']].forEach(([id, key]) => {
     $('#' + id).addEventListener('input', (e) => {
       TUNE[key] = +e.target.value; saveTune(); renderTune();
-      if (key === 'huntBlock' && !HUNT.roundActive) huntIdleReset();   // 說明畫面即時看到粗細
+      if ((key === 'huntBlock' || key === 'huntCrop') && !HUNT.roundActive) huntIdleReset();   // 說明畫面即時預覽
     });
   });
   $('#tReset').addEventListener('click', () => { Object.assign(TUNE, TUNE_DEF); saveTune(); renderTune(); });
@@ -1879,7 +1914,9 @@
   // 10 隻是「一直有東西可以找、但收得完」的上限。
   function huntRounds() {
     const n = PAINT.THEMES[TUNE.huntTheme | 0].list.length;
-    return Math.max(3, Math.min(n, TUNE.huntRounds | 0 || n));
+    const want = TUNE.huntRounds | 0 || 8;
+    if (!n) return Math.max(3, Math.min(8, want));    // 自訂還沒選圖：整場用程序化抽象畫
+    return Math.max(3, Math.min(n, want));
   }
   function huntMaxN() { return Math.max(3, Math.min(10, TUNE.huntMax | 0 || 10)); }
   function huntCountCurve(rounds, maxN) {
@@ -1931,6 +1968,74 @@
     huntPreloadSeq(huntPreloadGen, 1);
     renderBrief();
   }
+  // ---- 自訂圖庫 ----
+  // 主持人自己選的圖片**只存在這台瀏覽器**：IndexedDB → objectURL → <img>。
+  // 不會上傳到 DO、不會進 git、不會進部署包。
+  // 有版權的素材（動畫角色、遊戲美術）就走這條，公開的 repo 與網址上不會有它們。
+  const ARTDB = { db: null };
+  function artDB() {
+    if (ARTDB.db) return Promise.resolve(ARTDB.db);
+    return new Promise((res, rej) => {
+      const q = indexedDB.open('mahou-arts', 1);
+      q.onupgradeneeded = () => q.result.createObjectStore('imgs', { keyPath: 'id', autoIncrement: true });
+      q.onsuccess = () => { ARTDB.db = q.result; res(q.result); };
+      q.onerror = () => rej(q.error);
+    });
+  }
+  async function artPut(files) {
+    const db = await artDB();
+    const tx = db.transaction('imgs', 'readwrite');
+    for (const f of files) tx.objectStore('imgs').add({ name: f.name, type: f.type, buf: await f.arrayBuffer() });
+    return new Promise((res) => { tx.oncomplete = res; });
+  }
+  async function artAll() {
+    const db = await artDB();
+    return new Promise((res) => {
+      const q = db.transaction('imgs').objectStore('imgs').getAll();
+      q.onsuccess = () => res(q.result || []);
+      q.onerror = () => res([]);
+    });
+  }
+  async function artClear() {
+    const db = await artDB();
+    return new Promise((res) => { const tx = db.transaction('imgs', 'readwrite'); tx.objectStore('imgs').clear(); tx.oncomplete = res; });
+  }
+  let customUrls = [];
+  async function loadCustomTheme() {
+    const th = PAINT.THEMES.find((t) => t.key === 'custom');
+    if (!th) return;
+    for (const u of customUrls) URL.revokeObjectURL(u);
+    customUrls = [];
+    let rows = [];
+    try { rows = await artAll(); } catch (e) { feed('自訂圖庫讀不到：' + e.message); }
+    th.list = rows.map((r, i) => {
+      const url = URL.createObjectURL(new Blob([r.buf], { type: r.type || 'image/jpeg' }));
+      customUrls.push(url);
+      return { name: (r.name || ('圖 ' + (i + 1))).replace(/\.[^.]+$/, '').slice(0, 14), meta: '自訂', file: 'custom-' + r.id, blob: url };
+    });
+    renderTune();
+    if (GAMES[pickedGame].key === 'hunt' && (TUNE.huntTheme | 0) === PAINT.THEMES.indexOf(th)) {
+      huntIdleReset();
+      if (briefOpen) huntPreload();
+    }
+  }
+  $('#customPick').addEventListener('click', () => $('#customFiles').click());
+  $('#customFiles').addEventListener('change', async (e) => {
+    const files = [...e.target.files].filter((f) => /^image\//.test(f.type));
+    e.target.value = '';
+    if (!files.length) return;
+    $('#customD').textContent = `讀取中… ${files.length} 張`;
+    await artPut(files);
+    await loadCustomTheme();
+    feed(`自訂圖庫加入 ${files.length} 張（只存在這台電腦）`);
+  });
+  $('#customClear').addEventListener('click', async () => {
+    if (!confirm('清空自訂圖庫？')) return;
+    await artClear();
+    await loadCustomTheme();
+  });
+  loadCustomTheme();
+
   let huntPreloadGen = 0;
   function huntPreloadSeq(gen, k) {
     if (gen !== huntPreloadGen || k >= huntArtPool.length) return;
@@ -1939,7 +2044,7 @@
       if (gen !== huntPreloadGen) return;                    // 中途換過主題，這張不算數
       huntLoadState[k] = { name: info.name, state: img ? 'ok' : 'fail', ms: info.ms, width: info.width };
       if (img) huntImgs.set(idx, img);
-      feed(img ? `畫作就緒 ${info.name}（${info.width}px・${info.ms}ms）`
+      feed(img ? `畫作就緒 ${info.name}（${info.src === 'local' ? '本機' : 'Wikimedia'}・${info.width}px・${info.ms}ms）`
                : `畫作載不到 ${info.name}（${info.ms}ms）→ 用程序化抽象畫`);
       if (k === 0 && img) { HUNT.img = img; HUNT.imgIdx = idx; HUNT.bg = null; }
       renderBrief();
@@ -1982,7 +2087,9 @@
     HUNT.roundEndSent = false;
     // 畫作：預載好就用，沒好／載失敗就程序化
     const buildBg = () => {
-      const r = PAINT.pixelize(HUNT.img, hcv.width, hcv.height, { block: huntBlock(), seed: m.seed });
+      // 裁切用回合種子抽，所以同一關重畫（例如現場拉像素大小）不會整張跳掉
+      const crop = HUNT.img ? PAINT.pickCrop(HUNT.img, hcv.width, hcv.height, m.seed, (TUNE.huntCrop | 0) / 100) : null;
+      const r = PAINT.pixelize(HUNT.img, hcv.width, hcv.height, { block: huntBlock(), seed: m.seed, crop });
       HUNT.bg = r.bg; HUNT.fit = r.fit;
       const meta = HUNT.img ? PAINT.ARTS[HUNT.imgIdx] : { name: '抽象 No.' + (m.seed % 97), meta: 'mahou 程序生成' };
       HUNT.artName = meta.name;
@@ -2133,7 +2240,9 @@
   function huntIdleReset() { HUNT.bg = null; HUNT.fit = null; }
   function huntEnsureBg() {
     if (HUNT.bg) return;
-    const r = PAINT.pixelize(HUNT.img, hcv.width, hcv.height, { block: huntBlock(), seed: 20260830 });
+    const seed = 20260830;
+    const crop = HUNT.img ? PAINT.pickCrop(HUNT.img, hcv.width, hcv.height, seed, (TUNE.huntCrop | 0) / 100) : null;
+    const r = PAINT.pixelize(HUNT.img, hcv.width, hcv.height, { block: huntBlock(), seed, crop });
     HUNT.bg = r.bg; HUNT.fit = r.fit;
   }
   function huntIdle() { huntEnsureBg(); hctx.drawImage(HUNT.bg, 0, 0); }

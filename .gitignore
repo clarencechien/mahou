@@ -1,3 +1,8 @@
 node_modules/
 .wrangler/
 .dev.vars
+
+# 自訂主題的圖片只存在瀏覽器的 IndexedDB，不該出現在版本庫裡。
+# 這幾條是防手滑：有版權的素材（動畫角色、遊戲美術）放這些資料夾也不會被 commit。
+public/arts-custom/
+tools/arts-src/
