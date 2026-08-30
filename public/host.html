@@ -96,6 +96,12 @@
   }
   body.fs.showbar .appbar { transform: none; }
   body.fs #gameWrap { height: 100vh; }
+  /* 全螢幕時頂列是浮層，滑出來會蓋住 HUD 的倒數——所以讓 HUD 跟畫面一起往下讓位。
+     頂列自己收起來之後又回到最上面，不會白白浪費一條黑帶。 */
+  body.fs.showbar #gameWrap { padding-top: calc(var(--hud) + var(--bar)); }
+  body.fs.showbar #hudTop { transform: translateY(var(--bar)); }
+  body.fs.showbar #playerStrip { transform: translateY(var(--bar)); }
+  body.fs.showbar #tune { top: calc(var(--hud) + var(--bar) + 14px); }
   body.fs #adminView { padding-top: 60px; }
   /* 全螢幕比賽中：只留分數與畫面，其餘淡出 */
   body.fs.playing #joinCard { opacity: 0; pointer-events: none; }
@@ -104,11 +110,16 @@
   .view.on { display: block; }
   #adminView { padding: 18px; }
 
-  /* ---- 遊戲檢視：畫面填滿，HUD 疊在上面 ---- */
+  /* ---- 遊戲檢視：畫面填滿，HUD 佔掉上面一條 ---- */
+  /* HUD 以前是疊在畫面上的，結果變色龍的畫最上緣被那條漸層蓋住。
+     現在改成 #gameWrap 的 padding-top：畫面被排在 HUD 底下，不會互相遮。 */
+  :root { --hud: 58px; --bar: 52px; }
   #gameView { padding: 0; }
   #gameWrap {
-    position: relative; width: 100%; height: calc(100vh - 52px);
+    position: relative; width: 100%; height: calc(100vh - var(--bar));
+    box-sizing: border-box; padding-top: var(--hud);
     background: #05080f; display: flex; align-items: center; justify-content: center; overflow: hidden;
+    transition: padding-top .22s ease;
   }
   #gameWrap:fullscreen { height: 100vh; }
   #gameCv { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
@@ -123,7 +134,7 @@
   #joinCard .qrbox img, #joinCard .qrbox canvas { display: block; width: 104px; height: 104px; }
   #joinCard .code { font-family: ui-monospace, monospace; font-size: 2.1rem; font-weight: 800; letter-spacing: .16em; color: #7dd3fc; }
   #joinCard .u { color: #64748b; font-size: .72rem; word-break: break-all; max-width: 180px; margin-top: 2px; }
-  #playerStrip { right: 20px; top: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 210px; }
+  #playerStrip { right: 20px; top: calc(var(--hud) + 12px); display: flex; flex-direction: column; gap: 6px; max-width: 210px; }
   .pchip {
     display: flex; align-items: center; gap: 8px; background: rgba(8,12,22,.8);
     border: 1px solid #24365a; border-radius: 8px; padding: 5px 10px; font-size: .88rem;
@@ -146,8 +157,10 @@
 
   /* HUD 一律用 DOM 文字：canvas 只畫像素場景，文字才會清晰 */
   #hudTop {
-    left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 16px;
-    padding: 12px 20px; background: linear-gradient(rgba(6,9,17,.92), rgba(6,9,17,.55) 78%, transparent);
+    left: 0; right: 0; top: 0; height: var(--hud); box-sizing: border-box;
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 20px; background: rgba(6,9,17,.92);
+    transition: transform .22s ease;
   }
   #hudRound { font-family: ui-monospace, monospace; font-size: .95rem; color: #94a3b8; letter-spacing: .06em; white-space: nowrap; }
   #hudCmd { flex: 1; text-align: center; font-size: 2.1rem; font-weight: 800; letter-spacing: .02em; text-shadow: 0 2px 12px rgba(0,0,0,.7); }
@@ -258,12 +271,25 @@
   #brief #briefCancel { background: transparent; color: #64748b; }
 
   /* ---- 手感調校：定案速度前的即時旋鈕，比賽中也能開 ---- */
+  /* 旋鈕越加越多，原本只釘 bottom 的話上面會被切掉整片看不到。
+     上下都貼齊、自己捲，右邊留一條細捲軸。 */
   #tune {
-    position: absolute; right: 20px; bottom: 20px; width: 300px; display: none;
-    background: rgba(8,12,22,.93); border: 1px solid #2b4066; border-radius: 14px;
-    padding: 14px 16px; z-index: 8; pointer-events: auto; backdrop-filter: blur(5px);
+    position: absolute; right: 20px; top: calc(var(--hud) + 14px); bottom: 20px;
+    width: 306px; display: none; overflow-y: auto; overscroll-behavior: contain;
+    background: rgba(8,12,22,.95); border: 1px solid #2b4066; border-radius: 14px;
+    padding: 14px 16px; z-index: 9; pointer-events: auto; backdrop-filter: blur(5px);
+    transition: top .22s ease;
   }
   #tune.on { display: block; }
+  #tune::-webkit-scrollbar { width: 8px; }
+  #tune::-webkit-scrollbar-thumb { background: #2b4066; border-radius: 4px; }
+  #tune h4 {
+    margin: 16px 0 8px; font-size: .78rem; color: #7dd3fc; letter-spacing: .1em;
+    border-top: 1px solid #24365a; padding-top: 12px;
+  }
+  #tune h4:first-of-type { margin-top: 8px; }
+  #tune .btns { position: sticky; bottom: -14px; background: rgba(8,12,22,.97);
+    padding: 10px 0 0; margin-top: 12px; }
   #tune h3 { margin: 0 0 4px; font-size: 1rem; }
   #tune .note { color: #64748b; font-size: .74rem; line-height: 1.5; margin-bottom: 12px; }
   #tune .k { margin-bottom: 12px; }
@@ -328,8 +354,9 @@
     </div>
     <div id="playerStrip" class="ovl"></div>
     <div id="tune">
-      <h3>滑雪手感調校</h3>
-      <div class="note">速度倍率下一場生效，其餘立刻生效。數字會記在這台電腦上。</div>
+      <h3>手感調校</h3>
+      <div class="note">除了標「下一場生效」的，其餘都立刻生效。數字會記在這台電腦上。</div>
+      <h4>⛷ 滑雪下坡</h4>
       <div class="k">
         <div class="lab"><span>速度倍率</span><b id="tvSpeed">3.2×</b></div>
         <input type="range" id="tSpeed" min="0.6" max="6" step="0.1" value="3.2">
@@ -350,7 +377,8 @@
         <input type="range" id="tFov" min="0.6" max="1.6" step="0.05" value="1">
         <div class="d">越廣角，兩側掃得越兇；太廣會像魚眼。</div>
       </div>
-      <div class="k" style="border-top:1px solid #24365a; padding-top:10px">
+      <h4>🎨 名畫變色龍</h4>
+      <div class="k">
         <div class="lab"><span>變色龍難度</span><b id="tvHuntDiff">1.0×</b></div>
         <input type="range" id="tHuntDiff" min="0.6" max="1.6" step="0.05" value="1">
         <div class="d">越高越難找（更小、更平、更少破綻）。長輩多就調低。</div>
@@ -363,47 +391,58 @@
       <div class="k">
         <div class="lab"><span>畫作主題</span><b id="tvHuntTheme">名畫系</b></div>
         <div style="display:flex; gap:6px; margin-top:2px">
-          <button class="themeBtn" data-t="0" style="flex:1; padding:8px 0; font-size:.84rem">名畫系</button>
-          <button class="themeBtn" data-t="1" style="flex:1; padding:8px 0; font-size:.84rem">卡通系</button>
+          <button class="themeBtn" data-t="0" style="flex:1; padding:8px 0; font-size:.84rem"></button>
+          <button class="themeBtn" data-t="1" style="flex:1; padding:8px 0; font-size:.84rem"></button>
         </div>
-        <div class="d">各 8 張。下一場生效。卡通系是戲畫／妖怪繪卷／國芳的貓這類公有領域作品。</div>
+        <div class="d" id="tHuntThemeD">下一場生效。卡通系是戲畫／妖怪繪卷／國芳的貓這類公有領域作品。</div>
       </div>
       <div class="k">
-        <div class="lab"><span>變色龍・像素大小</span><b id="tvHuntBlock">6 px</b></div>
-        <input type="range" id="tHuntBlock" min="2" max="16" step="1" value="6">
-        <div class="d">畫作被打成幾 px 一格。越大越糊、小人越好藏（但畫也越難認）。</div>
+        <div class="lab"><span>每場幾幅畫</span><b id="tvHuntRounds">8 幅</b></div>
+        <input type="range" id="tHuntRounds" min="3" max="8" step="1" value="8">
+        <div class="d" id="tHuntRoundsD">一幅畫＝一關。下一場生效。</div>
       </div>
       <div class="k">
-        <div class="lab"><span>變色龍・大小</span><b id="tvHuntSize">照曲線</b></div>
+        <div class="lab"><span>小人隻數上限</span><b id="tvHuntMax">10 隻</b></div>
+        <input type="range" id="tHuntMax" min="3" max="10" step="1" value="10">
+        <div class="d" id="tHuntMaxD">從 3 隻開始，最後一關加到這個數。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>像素大小</span><b id="tvHuntBlock">3 px</b></div>
+        <input type="range" id="tHuntBlock" min="1" max="16" step="1" value="3">
+        <div class="d">畫作被打成幾 px 一格。1＝幾乎原畫，越大越糊、小人越好藏（但畫也越難認）。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>小人大小</span><b id="tvHuntSize">照曲線</b></div>
         <input type="range" id="tHuntSize" min="0" max="0.26" step="0.005" value="0">
         <div class="d">佔畫高的比例。0＝照關卡曲線自己縮，拉開就整場固定。</div>
       </div>
       <div class="k">
-        <div class="lab"><span>變色龍・立體感</span><b id="tvHuntDepth">照曲線</b></div>
+        <div class="lab"><span>小人立體感</span><b id="tvHuntDepth">照曲線</b></div>
         <input type="range" id="tHuntDepth" min="0" max="1" step="0.02" value="0">
         <div class="d">投影＋邊緣亮暗條。越高越立體＝越好找。</div>
       </div>
       <div class="k">
-        <div class="lab"><span>變色龍・輪廓破綻</span><b id="tvHuntEdge">照曲線</b></div>
+        <div class="lab"><span>小人輪廓破綻</span><b id="tvHuntEdge">照曲線</b></div>
         <input type="range" id="tHuntEdge" min="0" max="0.5" step="0.01" value="0">
         <div class="d">身體整片微微發亮。長輩多就往上拉。</div>
       </div>
       <div class="k">
-        <div class="lab"><span>變色龍・眨眼間隔</span><b id="tvHuntBlink">照曲線</b></div>
+        <div class="lab"><span>眨眼間隔</span><b id="tvHuntBlink">照曲線</b></div>
         <input type="range" id="tHuntBlink" min="0" max="8" step="0.2" value="0">
         <div class="d">平均幾秒眨一次。眨眼是唯一的破綻，越短越好找。</div>
       </div>
-      <div class="k" style="border-top:1px solid #24365a; padding-top:10px">
-        <div class="lab"><span>砸罐子回充秒數</span><b id="tvCansRefill">4.5 秒</b></div>
+      <h4>🏺 砸罐子</h4>
+      <div class="k">
+        <div class="lab"><span>回充秒數</span><b id="tvCansRefill">4.5 秒</b></div>
         <input type="range" id="tCansRefill" min="2" max="8" step="0.5" value="4.5">
         <div class="d">每幾秒補一顆球。人多調長一點，畫面才不會亂成一團。</div>
       </div>
       <div class="k">
-        <div class="lab"><span>砸罐子每關秒數</span><b id="tvCansSec">45 秒</b></div>
+        <div class="lab"><span>每關秒數</span><b id="tvCansSec">45 秒</b></div>
         <input type="range" id="tCansSec" min="20" max="90" step="5" value="45">
       </div>
       <div class="k">
-        <div class="lab"><span>砸罐子・歡樂度</span><b id="tvCansFun">50</b></div>
+        <div class="lab"><span>歡樂度</span><b id="tvCansFun">50</b></div>
         <input type="range" id="tCansFun" min="0" max="100" step="5" value="50">
         <div class="d">一次放大打飛力道、朝鏡頭飛的比例、碎片、震動、定格與連鎖半徑。
           50＝原本的物理；拉到 100 是大亂鬥，每個人都像有超能力。立刻生效。</div>
@@ -812,11 +851,14 @@
   };
   BRIEF.hunt = {
     title: '名畫變色龍',
-    lead: () => `${PAINT.THEMES[TUNE.huntTheme | 0].name}・8 關・第一關只有 1 隻，最後一關 24 隻`,
-    say: '畫裡躲了小人，長得就像螢幕上這五隻。第一關只有一隻，之後每一關會越來越多，最後一關有二十四隻。現在就揮揮手機，電視上會出現你顏色的游標，先玩一下抓手感。找到小人就按蓋章，誰先蓋到就是誰的，蓋錯會被罰兩秒不能動。眼睛放亮，牠們會眨眼睛。',
+    lead: () => {
+      const c = huntCountCurve(huntRounds(), huntMaxN());
+      return `${PAINT.THEMES[TUNE.huntTheme | 0].name}・${c.length} 幅畫・小人 ${c[0]} 隻加到 ${c[c.length - 1]} 隻`;
+    },
+    say: '畫裡躲了小人，長得就像螢幕上這五隻。第一關三隻，之後每一關會越來越多。現在就揮揮手機，電視上會出現你顏色的游標，先玩一下抓手感。找到小人就按蓋章，誰先蓋到就是誰的，蓋錯會被罰兩秒不能動。眼睛放亮，牠們會眨眼睛。',
     rules: [
       { ic: '🔍', h: '找畫裡的小人', d: '牠們偽裝成畫的一部分，唯一的破綻是會眨眼睛' },
-      { ic: '📈', h: '每關越來越多', d: '1 → 2 → 3 → 5 → 8 → 12 → 17 → 24 隻，隻數多了體型才慢慢變小' },
+      { ic: '📈', h: '每關越來越多', d: () => huntCountCurve(huntRounds(), huntMaxN()).join(' → ') + ' 隻，隻數多了體型才慢慢變小' },
       { ic: '🖐', h: '雷射筆蓋章搶快', d: '揮手機移游標（會漂就按歸零）；誰先蓋到就是誰的，蓋錯罰 2 秒' },
     ],
   };
@@ -873,7 +915,7 @@
     $('#briefTitle').textContent = b.title;
     $('#briefLead').textContent = typeof b.lead === 'function' ? b.lead() : b.lead;
     $('#briefRules').innerHTML = b.rules.map((r) =>
-      `<div class="rule"><div class="ic">${r.ic}</div><div class="h">${r.h}</div><div class="d">${r.d}</div></div>`).join('');
+      `<div class="rule"><div class="ic">${r.ic}</div><div class="h">${r.h}</div><div class="d">${typeof r.d === 'function' ? r.d() : r.d}</div></div>`).join('');
     $('#briefShow').classList.toggle('on', g.key === 'hunt');
     if (g.key === 'hunt') drawBriefChams();
     $('#brief').classList.add('on');
@@ -996,7 +1038,10 @@
   // 畫面用整數倍放大填滿容器（風格聖經：禁止非整數倍）
   function fitCanvas() {
     const wrap = $('#gameWrap');
-    const k = Math.max(1, Math.floor(Math.min(wrap.clientWidth / FW, wrap.clientHeight / FH)));
+    // clientHeight 含 padding，而 HUD 那條就是 padding——不扣掉的話畫面會被推出下緣
+    const padT = parseFloat(getComputedStyle(wrap).paddingTop) || 0;
+    const availH = Math.max(80, wrap.clientHeight - padT);
+    const k = Math.max(1, Math.floor(Math.min(wrap.clientWidth / FW, availH / FH)));
     fcv.style.width = (FW * k) + 'px';
     fcv.style.height = (FH * k) + 'px';
   }
@@ -1398,7 +1443,8 @@
   // 實測：1 格與 8 格同樣 4.3ms —— 分割數不是成本，總像素才是。
   // ---- 手感旋鈕：定案速度前先讓人現場調 ----
   const TUNE_DEF = { speed: 3.2, tex: 3.5, fov: 1.0, dur: 60,
-                     huntDiff: 1, huntSec: 45, huntTheme: 0, huntBlock: 6,
+                     huntDiff: 1, huntSec: 45, huntTheme: 0, huntBlock: 3,
+                     huntRounds: 8, huntMax: 10,
                      huntSize: 0, huntDepth: 0, huntEdge: 0, huntBlink: 0,   // 0 = 照關卡曲線
                      cansRefill: 4.5, cansSec: 45, cansFun: 50 };
   const TUNE = Object.assign({}, TUNE_DEF, (() => {
@@ -1423,10 +1469,19 @@
     $('#tHuntDepth').value = TUNE.huntDepth; $('#tvHuntDepth').textContent = auto(TUNE.huntDepth, (v) => v.toFixed(2));
     $('#tHuntEdge').value = TUNE.huntEdge;   $('#tvHuntEdge').textContent = auto(TUNE.huntEdge, (v) => v.toFixed(2));
     $('#tHuntBlink').value = TUNE.huntBlink; $('#tvHuntBlink').textContent = auto(TUNE.huntBlink, (v) => v.toFixed(1) + ' 秒');
-    $('#tvHuntTheme').textContent = PAINT.THEMES[TUNE.huntTheme | 0].name;
+    const th = PAINT.THEMES[TUNE.huntTheme | 0];
+    $('#tvHuntTheme').textContent = `${th.name}・${th.list.length} 張`;
     document.querySelectorAll('.themeBtn').forEach((b) => {
+      const t = PAINT.THEMES[+b.dataset.t];
+      b.textContent = `${t.name}（${t.list.length}）`;
       b.style.background = (+b.dataset.t === (TUNE.huntTheme | 0)) ? '#334d7a' : '#1e293b';
     });
+    const R = huntRounds(), MX = huntMaxN();
+    $('#tHuntRounds').max = th.list.length;
+    $('#tHuntRounds').value = R; $('#tvHuntRounds').textContent = `${R} 幅`;
+    $('#tHuntRoundsD').textContent = `一幅畫＝一關，${th.name}共 ${th.list.length} 張、每場隨機挑 ${R} 張。下一場生效。`;
+    $('#tHuntMax').value = MX; $('#tvHuntMax').textContent = `${MX} 隻`;
+    $('#tHuntMaxD').textContent = '每關的隻數：' + huntCountCurve(R, MX).join(' → ') + ' 隻';
   }
   document.querySelectorAll('.themeBtn').forEach((b) => {
     b.addEventListener('click', () => {
@@ -1436,6 +1491,7 @@
   });
   [['tSpeed', 'speed'], ['tTex', 'tex'], ['tFov', 'fov'], ['tDur', 'dur'],
    ['tHuntDiff', 'huntDiff'], ['tHuntSec', 'huntSec'], ['tHuntBlock', 'huntBlock'],
+   ['tHuntRounds', 'huntRounds'], ['tHuntMax', 'huntMax'],
    ['tHuntSize', 'huntSize'], ['tHuntDepth', 'huntDepth'], ['tHuntEdge', 'huntEdge'], ['tHuntBlink', 'huntBlink'],
    ['tCansRefill', 'cansRefill'], ['tCansSec', 'cansSec'], ['tCansFun', 'cansFun']].forEach(([id, key]) => {
     $('#' + id).addEventListener('input', (e) => {
@@ -1800,7 +1856,7 @@
   // DO 發種子與位置演算法（同 paint.js 的 P.place），host 只負責畫；
   // 命中與搶快結算全在 DO（250ms claim window 比 client 時間戳）。
   const HUNT = {
-    running: false, round: 0, totalRounds: 8, bg: null, fit: null, chams: [],
+    running: false, round: 0, totalRounds: 8, bg: null, fit: null, chams: [],   // totalRounds 開場時依設定覆寫
     hNorm: .12, tEnd: 0, artIndex: 0, img: null, imgIdx: -1, reveal: [],
     stamps: [], rankText: '',
   };
@@ -1808,10 +1864,20 @@
   hctx.imageSmoothingEnabled = false;
   const cursors = new Map();   // clientId -> {x,y,el,at,cool}
 
-  // 難度曲線：8 關。主要的難度來源是「隻數」——從 1 隻一路加到 24 隻，
-  // 所以體型只是慢慢縮，不然後段又小又多會直接變成找不到。
-  const HUNT_COUNT = [1, 2, 3, 5, 8, 12, 17, 24];
-  function huntCount(round) { return HUNT_COUNT[Math.min(round - 1, HUNT_COUNT.length - 1)]; }
+  // 隻數曲線：第一關 3 隻，最後一關加到上限（預設 10）。
+  // 上一次真機跑到 24 隻時，45 秒只找到 5 隻、剩 19 隻——那不是難，是找不完。
+  // 10 隻是「一直有東西可以找、但收得完」的上限。
+  function huntRounds() {
+    const n = PAINT.THEMES[TUNE.huntTheme | 0].list.length;
+    return Math.max(3, Math.min(n, TUNE.huntRounds | 0 || n));
+  }
+  function huntMaxN() { return Math.max(3, Math.min(10, TUNE.huntMax | 0 || 10)); }
+  function huntCountCurve(rounds, maxN) {
+    const R = Math.max(1, rounds);
+    return Array.from({ length: R }, (_, i) =>
+      R === 1 ? maxN : Math.round(3 + (maxN - 3) * (i / (R - 1))));
+  }
+  function huntCount(round) { return huntCountCurve(huntRounds(), huntMaxN())[Math.max(0, round - 1)] || 3; }
   function huntParams(round) {
     const T = [
       { hNorm: .200, depth: .50, edge: .18, blink: 2.2 },
@@ -1823,7 +1889,9 @@
       { hNorm: .095, depth: .12, edge: .02, blink: 5.0 },
       { hNorm: .088, depth: .10, edge: .01, blink: 5.5 },
     ];
-    const t = T[Math.min(round - 1, T.length - 1)];
+    // 關數可調，所以曲線是「照比例取樣」而不是一關對一格
+    const R = huntRounds();
+    const t = T[Math.min(T.length - 1, Math.round((round - 1) / Math.max(1, R - 1) * (T.length - 1)))];
     const d = +TUNE.huntDiff || 1;            // 難度倍率 >1 = 更難（更小、更平、更少破綻）
     // 手感面板可以直接壓過曲線：0 = 照曲線走，非 0 = 全場固定用這個值
     const fix = (v, cur) => (+v > 0 ? +v : cur);
@@ -1834,18 +1902,20 @@
       blink: fix(TUNE.huntBlink, t.blink * Math.sqrt(d)),
     };
   }
-  const huntBlock = () => Math.max(2, Math.min(16, TUNE.huntBlock | 0 || 6));
+  const huntBlock = () => Math.max(1, Math.min(16, TUNE.huntBlock | 0 || 3));
 
   // 預載名畫：說明卡打開時就開始抓，載不到用程序化抽象畫
   let huntArtPool = [];
   function huntPreload() {
     PAINT.setTheme(TUNE.huntTheme | 0);
     HUNT.img = null; HUNT.imgIdx = -1; HUNT.bg = null;      // 換主題要重畫底圖
-    huntArtPool = [...Array(PAINT.ARTS.length).keys()].sort(() => Math.random() - .5);
+    HUNT.totalRounds = huntRounds();
+    huntArtPool = [...Array(PAINT.ARTS.length).keys()].sort(() => Math.random() - .5).slice(0, HUNT.totalRounds);
     PAINT.load(huntArtPool[0], (img) => { HUNT.img = img; HUNT.imgIdx = huntArtPool[0]; });
   }
   function huntStartGame() {
     HUNT.running = true; HUNT.round = 0; HUNT.rankText = ''; HUNT.stamps = []; HUNT.reveal = [];
+    HUNT.totalRounds = huntRounds();
     sock.send({ type: 'stage', stage: 'hunt' });
     setActiveBtn('hunt');
     huntNextRound();
