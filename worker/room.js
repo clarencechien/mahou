@@ -17,7 +17,7 @@ const MEANINGFUL = new Set(['join', 'deviceUpdate', 'tap', 'spamStart', 'spamDon
   'colorRound', 'colorPick', 'colorEnd', 'skiStart', 'skiRun', 'skiDone',
   'freezeStart', 'freezeRound', 'freezeTurn', 'freezeAct', 'freezeEnd', 'skiEnd', 'ready',
   'pointer', 'stampAct', 'huntRound', 'huntRoundEnd', 'huntEnd',
-  'cansStart', 'canAim', 'canThrow', 'canScoreEvt', 'cansLevel', 'cansEnd']);
+  'cansStart', 'canThrow', 'canScoreEvt', 'cansLevel', 'cansEnd']);
 
 // 變色龍藏匿位置。⚠️ 跟 public/engine/paint.js 的 P.place 是同一份演算法，
 // 改一邊一定要改另一邊——DO 用它判定命中，host 用它渲染，位置必須一模一樣。
@@ -552,20 +552,15 @@ export class RoomDO {
         this.broadcastAll({ type: 'cansStart', startAt, refill: msg.refill || 4500, levels: msg.levels || 5 });
         return;
       }
-      case 'canAim': {                                 // 瞄準箭頭，只轉發
-        const c = this.clients.get(ws._clientId);
-        if (!c) return;
-        this.toHosts({ type: 'canAim', clientId: ws._clientId, angle: msg.angle, active: !!msg.active });
-        return;
-      }
+      // 瞄準走 pointer（跟變色龍同一套），這裡只收「丟」：座標＋力量，沒有角度
       case 'canThrow': {
         const c = this.clients.get(ws._clientId);
         if (!c || !this.cans) return;
         const uplinkMs = typeof msg.tClient === 'number' ? now - msg.tClient : null;
-        this.log({ type: 'canThrow', clientId: ws._clientId, angle: msg.angle, power: msg.power,
+        this.log({ type: 'canThrow', clientId: ws._clientId, x: msg.x, y: msg.y, power: msg.power,
                    mode: msg.mode, tClient: msg.tClient, tServerRecv: now, uplinkMs });
         this.toHosts({ type: 'canThrow', clientId: ws._clientId, name: c.name,
-                       angle: msg.angle, power: msg.power });
+                       x: msg.x, y: msg.y, power: msg.power });
         return;
       }
       case 'canScoreEvt': {                            // host 模擬出來的得分事件

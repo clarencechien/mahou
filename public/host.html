@@ -203,8 +203,10 @@
   .hstamp { position: absolute; z-index: 3; transform: translate(-50%, -50%); pointer-events: none;
     font-size: .85rem; font-weight: 800; background: rgba(6,10,20,.8); border-radius: 8px; padding: 3px 8px;
     border: 2px solid #22c55e; }
+  /* 浮動計分：亮色地面上純文字讀不到，要底板（風格聖經 §3 明度對比） */
   .floatPts { position: absolute; z-index: 5; transform: translate(-50%, -50%); pointer-events: none;
-    font-weight: 900; font-size: 1.1rem; text-shadow: 0 2px 6px rgba(0,0,0,.9); animation: floatUp 1.3s forwards; }
+    font-weight: 900; font-size: 1.05rem; padding: 2px 8px; border-radius: 7px;
+    background: rgba(6,10,20,.78); animation: floatUp 1.3s forwards; white-space: nowrap; }
   @keyframes floatUp { from { opacity: 1; margin-top: 0; } to { opacity: 0; margin-top: -60px; } }
 
   #joinCard { cursor: pointer; transition: transform .25s cubic-bezier(.2,1.2,.4,1), opacity .25s; }
@@ -767,12 +769,12 @@
   };
   BRIEF.cans = {
     title: '砸罐子',
-    lead: '全員齊砸同一座塔・砸壞什麼算誰的',
-    say: '大家一起砸同一座塔。傾斜手機瞄準，看到自己顏色的箭頭，用力往前揮就把球丟出去。砸壞的東西就是你的分數，小心炸彈會連環爆。',
+    lead: '全員齊砸同一座塔・瞄哪就砸哪',
+    say: '大家一起砸同一座塔。手機當雷射筆，先瞄你想砸的東西，電視上有你顏色的圈圈。按住蓄力放開就丟，或者直接用力往前揮。瞄哪就打哪，不用調角度。砸壞的都是你的分數，炸彈會連環爆。',
     rules: [
-      { ic: '🎯', h: '傾斜瞄準', d: '左右傾斜調角度，電視上有你顏色的箭頭' },
-      { ic: '💪', h: '用力揮＝丟球', d: '球每幾秒補一顆；也可以用拉弓模式拖著丟' },
-      { ic: '💣', h: '砸壞算你的', d: '每一下都是你的分數，炸彈會連環爆整片算你的' },
+      { ic: '🔴', h: '雷射筆瞄準', d: '揮手機移動你的圈圈，瞄哪就打哪，不用算角度' },
+      { ic: '💪', h: '蓄力或用力揮', d: '按住放開＝蓄力丟；也可以直接把手機往前揮。球每幾秒補一顆' },
+      { ic: '💣', h: '砸壞算你的', d: '瞄底層可以整座垮，瞄炸彈整片飛——都算你的分' },
     ],
   };
   let briefOpen = false;
@@ -1767,6 +1769,9 @@
     SFX.go();
   });
   sock.on('pointer', (m) => {
+    // 砸罐子也用同一組 pointer：雷射點畫進 canvas，不用 DOM 游標
+    CANSG.aims.set(m.clientId, { x: m.x, y: m.y, name: m.name, at: performance.now() });
+    if (curStage !== 'hunt') return;
     let cur = cursors.get(m.clientId);
     if (!cur) {
       const el = document.createElement('div');
@@ -1915,7 +1920,8 @@
     }
   }, 33);
 
-  // ================= 遊戲四：砸罐子（全員齊砸同一座塔） =================
+  // ================= 遊戲四：砸罐子（第一人稱假 3D，全員齊砸） =================
+  // 鏡頭不動，飛走的是物件。雷射筆選位子 → 力量決定破壞力，不用調角度。
   const CANSG = { running: false, level: 0, levels: 5, world: null, aims: new Map(), scores: new Map(),
                   levelEndAt: 0, rankText: '', betweenLevels: false };
   const ccv = $('#cansCv'), cctx = ccv.getContext('2d');
@@ -1928,10 +1934,7 @@
     setActiveBtn('cans');
     sock.send({ type: 'cansStart', refill: Math.round((+TUNE.cansRefill || 4.5) * 1000), levels: CANSG.levels });
   }
-  sock.on('cansStart', (m) => {
-    CANSG.level = 0; CANSG.startAt = m.startAt;
-    cansNextLevel();
-  });
+  sock.on('cansStart', (m) => { CANSG.level = 0; CANSG.startAt = m.startAt; cansNextLevel(); });
   function cansNextLevel() {
     CANSG.level++;
     CANSG.betweenLevels = false;
@@ -1941,19 +1944,13 @@
     sock.send({ type: 'cansLevel', level: CANSG.level, levels: CANSG.levels });
     SFX.go();
   }
-  sock.on('canAim', (m) => {
-    const idx = roster.findIndex((c) => c.clientId === m.clientId);
-    CANSG.aims.set(m.clientId, { idx: idx < 0 ? 0 : idx, angle: m.angle, active: m.active, at: performance.now() });
-  });
   sock.on('canThrow', (m) => {
     if (!CANSG.world) return;
     const idx = roster.findIndex((c) => c.clientId === m.clientId);
-    CANS.throwBall(CANSG.world, m.angle, m.power, idx < 0 ? 0 : idx, m.clientId);
+    CANS.throwBall(CANSG.world, m.x, m.y, m.power, idx < 0 ? 0 : idx, m.clientId);
     SFX.turn();
   });
-  sock.on('canScore', (m) => {
-    if (m.clientId) CANSG.scores.set(m.clientId, m.total);
-  });
+  sock.on('canScore', (m) => { if (m.clientId) CANSG.scores.set(m.clientId, m.total); });
   sock.on('cansEnd', (m) => {
     CANSG.running = false; CANSG.world = null;
     SFX.win();
@@ -1961,35 +1958,44 @@
     updateShell();
   });
 
-  function cansToScreen(x, y) {
+  function cansToScreen(x, y, z) {
+    const pr = CANS.project(x, y, z);
+    if (!pr) return null;
     const cr = ccv.getBoundingClientRect(), wr = $('#gameWrap').getBoundingClientRect();
     const scale = Math.min(cr.width / ccv.width, cr.height / ccv.height);
     const dw = ccv.width * scale, dh = ccv.height * scale;
-    return { x: cr.left - wr.left + (cr.width - dw) / 2 + x * scale, y: cr.top - wr.top + (cr.height - dh) / 2 + y * scale };
+    return { x: cr.left - wr.left + (cr.width - dw) / 2 + pr.sx * scale,
+             y: cr.top - wr.top + (cr.height - dh) / 2 + pr.sy * scale };
   }
 
-  let cansLast = performance.now();
+  let cansLast = performance.now(), cansGroundReady = false;
   function cansDraw() {
+    if (!cansGroundReady) { CANS.buildGround(MODE7.buildWorld('dirt')); cansGroundReady = true; }
     const nowP = performance.now();
     const dt = Math.min(.05, (nowP - cansLast) / 1000);
     cansLast = nowP;
-    if (!CANSG.world) { cctx.fillStyle = '#111116'; cctx.fillRect(0, 0, ccv.width, ccv.height); return; }
+    if (!CANSG.world) { cctx.fillStyle = '#101018'; cctx.fillRect(0, 0, ccv.width, ccv.height); return; }
     const evts = CANS.step(CANSG.world, dt);
     for (const e of evts) {
       if (e.ownerId) sock.send({ type: 'canScoreEvt', clientId: e.ownerId, pts: e.pts, kind: e.kind });
       const c = roster.find((r) => r.clientId === e.ownerId);
-      const col = e.kind === 'boom' || e.kind === 'chain' ? '#f2c14e' : '#4ade80';
-      floatPts(cansToScreen(e.x, e.y), `+${e.pts}${c ? ' ' + c.name : ''}`, col);
+      const pos = cansToScreen(e.x, e.y, e.z);
+      if (pos) {
+        const col = e.kind === 'boom' ? '#f5d45d' : e.kind === 'chain' ? '#e98336' : '#4ade80';
+        floatPts(pos, `+${e.pts}${c ? ' ' + c.name : ''}`, col);
+      }
       if (e.kind === 'boom') SFX.caught();
       else if (e.kind === 'break' || e.kind === 'knock') SFX.ok();
     }
+    // 雷射點：跟變色龍共用 pointer 協定
     const aims = [];
-    for (const [, a] of CANSG.aims) {
-      if (performance.now() - a.at < 2500 && a.active) aims.push(a);
+    for (const [id, a] of CANSG.aims) {
+      if (nowP - a.at > 3500) continue;
+      const idx = roster.findIndex((c) => c.clientId === id);
+      aims.push({ idx: idx < 0 ? 0 : idx, nx: a.x, ny: a.y, name: a.name });
     }
     CANS.render(cctx, CANSG.world, PLAYER_COLS, aims);
 
-    // 關卡推進：85% 摧毀或時間到
     if (CANSG.running && !CANSG.betweenLevels) {
       const now2 = hostClock.serverNow() ?? Date.now();
       const done = CANS.destroyedRatio(CANSG.world) >= 0.85;
@@ -2002,7 +2008,8 @@
   }
   let cansIdleWorld = null;
   function cansIdle() {
-    if (!cansIdleWorld) cansIdleWorld = CANS.build(2);
+    if (!cansGroundReady) { CANS.buildGround(MODE7.buildWorld('dirt')); cansGroundReady = true; }
+    if (!cansIdleWorld) cansIdleWorld = CANS.build(3);
     CANS.render(cctx, cansIdleWorld, PLAYER_COLS, []);
   }
 

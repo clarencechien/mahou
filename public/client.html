@@ -230,39 +230,28 @@
   </div>
 </section>
 
-<!-- 遊戲四：砸罐子（手機＝投擲器） -->
+<!-- 遊戲四：砸罐子（手機＝雷射筆＋投擲器） -->
 <section id="st-cans" class="stage">
   <button id="cansPermBtn">啟用感測器</button>
   <div id="cansUI" style="display:none; flex-direction:column; gap:8px; flex:1">
     <div style="display:flex; gap:6px">
-      <button id="cansModeSwing" style="flex:1; background:#2563eb; padding:10px">揮擲</button>
-      <button id="cansModeSling" style="flex:1; background:#374151; padding:10px">拉弓</button>
+      <button id="cansModeGyro" style="flex:1; background:#2563eb; padding:10px">雷射筆</button>
+      <button id="cansModePad" style="flex:1; background:#374151; padding:10px">觸控板</button>
     </div>
     <p class="hint" id="cansMsg">等主持人開始</p>
-    <div style="display:flex; align-items:center; gap:10px">
-      <div style="flex:1">
-        <div style="font-size:.8rem; color:#94a3b8">瞄準角度（左右傾斜）</div>
-        <div id="cansAngleBar" style="height:22px; background:#1f2937; border-radius:11px; position:relative; margin-top:4px">
-          <div id="cansAngleDot" style="position:absolute; top:2px; left:50%; width:18px; height:18px; margin-left:-9px; border-radius:50%; background:#e98336"></div>
-        </div>
-      </div>
-      <div style="text-align:center; min-width:74px">
-        <div style="font-size:.8rem; color:#94a3b8">球</div>
-        <div id="cansBall" style="font-size:1.7rem; font-weight:900">●</div>
-      </div>
-    </div>
-    <div id="cansPad" class="tappad" style="flex:1; min-height:190px; border-radius:20px; background:#1f2937;
+    <div id="cansPad" class="tappad" style="flex:1; min-height:150px; border-radius:20px; background:#1f2937;
          display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
          user-select:none; -webkit-user-select:none; position:relative; overflow:hidden">
-      <div id="cansPadTitle" style="font-size:1.5rem; font-weight:800">用力往前揮！</div>
-      <div id="cansPadSub" style="font-size:.9rem; color:#94a3b8">握緊手機</div>
-      <div id="slingArrow" style="position:absolute; left:50%; top:50%; width:4px; height:0; background:#e98336; transform-origin:top center; display:none"></div>
+      <div id="cansPadTitle" style="font-size:1.4rem; font-weight:800">瞄你想砸的東西</div>
+      <div id="cansPadSub" style="font-size:.9rem; color:#94a3b8">雷射點在電視上</div>
     </div>
-    <div id="cansPowerTrack" style="height:14px; background:#1f2937; border-radius:8px; overflow:hidden">
-      <div id="cansPowerBar" style="height:100%; width:0%; background:#e98336"></div>
+    <div id="cansPowerTrack" style="height:18px; background:#1f2937; border-radius:9px; overflow:hidden">
+      <div id="cansPowerBar" style="height:100%; width:0%; background:#e98336; transition:none"></div>
     </div>
+    <button id="cansThrowBtn" class="tappad" style="min-height:110px; font-size:1.9rem; font-weight:900;
+            border-radius:22px; background:#b45309">按住蓄力</button>
     <div style="display:flex; gap:8px">
-      <button id="cansZero" style="flex:1; background:#374151; padding:12px">角度歸零</button>
+      <button id="cansZero" style="flex:1; background:#374151; padding:12px">游標回中央</button>
       <button id="cansReady" style="flex:1; background:#16a34a; padding:12px">我準備好了</button>
     </div>
     <div class="card stat" id="cansStat"></div>
@@ -310,7 +299,8 @@
     }, { passive: false });
     el.addEventListener('dblclick', (e) => e.preventDefault());
   }
-  ['#skiPad', '#calTap', '#fzCalTap', '#fzArea', '#huntPad', '#huntStampBtn', '#cansPad'].forEach((sel) => noDoubleTapZoom($(sel)));
+  ['#skiPad', '#calTap', '#fzCalTap', '#fzArea', '#huntPad', '#huntStampBtn',
+   '#cansPad', '#cansThrowBtn'].forEach((sel) => noDoubleTapZoom($(sel)));
   // 雙指縮放：Safari 專有事件，擋掉才不會整頁被放大後回不去
   for (const t of ['gesturestart', 'gesturechange', 'gestureend']) {
     document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
@@ -1050,12 +1040,19 @@
   // 會漂所以「游標回中央」要一直在手邊。觸控板模式＝零漂移備援。
   const HUNTC = {
     GYRO_RANGE: 22,          // ±22° = 半個畫面寬
-    PAD_SENS: 1.5,           // 觸控板靈敏度（px → 正規化）
     COOLDOWN: 1.5,
   };
-  let huntMode = 'gyro', hx = 0.5, hy = 0.5, hCool = 0, hScore = 0, hReadySent = false;
+  // 指向裝置是變色龍與砸罐子共用的：一組狀態、一個上報迴圈
+  const PTR_PAD_SENS = 1.5;  // 觸控板靈敏度（px → 正規化）
+  let ptrMode = 'gyro', ptrX = 0.5, ptrY = 0.5;
+  let hCool = 0, hScore = 0, hReadySent = false;
   let oAlpha = 0, oBeta = 0, oAlpha0 = null, oBeta0 = null, oOn = false;
   let lastPtrSent = 0, lastPtrX = -1, lastPtrY = -1;
+  function ptrZero() { oAlpha0 = oAlpha; oBeta0 = oBeta; ptrX = 0.5; ptrY = 0.5; }
+  function ptrMove(dx, dy) {
+    ptrX = Math.max(0, Math.min(1, ptrX + dx));
+    ptrY = Math.max(0, Math.min(1, ptrY + dy));
+  }
 
   function startOrientHunt() {
     if (oOn) return;
@@ -1067,16 +1064,15 @@
     });
   }
   function wrap180(a) { return ((a + 180) % 360 + 360) % 360 - 180; }
-  function huntZero() { oAlpha0 = oAlpha; oBeta0 = oBeta; hx = 0.5; hy = 0.5; }
-  $('#huntZero').addEventListener('click', huntZero);
+  $('#huntZero').addEventListener('click', ptrZero);
 
   function setHuntMode(m2) {
-    huntMode = m2;
+    ptrMode = m2;
     $('#huntModeGyro').style.background = m2 === 'gyro' ? '#2563eb' : '#374151';
     $('#huntModePad').style.background = m2 === 'pad' ? '#2563eb' : '#374151';
     $('#huntPadTitle').textContent = m2 === 'gyro' ? '揮動手機移游標' : '在這裡滑動移游標';
     $('#huntPadSub').textContent = m2 === 'gyro' ? '游標在電視上・會漂就按歸零' : '手機當觸控板';
-    if (m2 === 'gyro') huntZero();
+    if (m2 === 'gyro') ptrZero();
   }
   $('#huntModeGyro').addEventListener('click', () => setHuntMode('gyro'));
   $('#huntModePad').addEventListener('click', () => setHuntMode('pad'));
@@ -1108,11 +1104,9 @@
   let padLast = null;
   $('#huntPad').addEventListener('pointerdown', (e) => { e.preventDefault(); padLast = [e.clientX, e.clientY]; });
   $('#huntPad').addEventListener('pointermove', (e) => {
-    if (huntMode !== 'pad' || !padLast) return;
+    if (ptrMode !== 'pad' || !padLast) return;
     const r = $('#huntPad').getBoundingClientRect();
-    hx += (e.clientX - padLast[0]) / r.width * HUNTC.PAD_SENS;
-    hy += (e.clientY - padLast[1]) / r.height * HUNTC.PAD_SENS;
-    hx = Math.max(0, Math.min(1, hx)); hy = Math.max(0, Math.min(1, hy));
+    ptrMove((e.clientX - padLast[0]) / r.width * PTR_PAD_SENS, (e.clientY - padLast[1]) / r.height * PTR_PAD_SENS);
     padLast = [e.clientX, e.clientY];
   });
   addEventListener('pointerup', () => { padLast = null; });
@@ -1122,23 +1116,23 @@
   }
   // 60Hz 更新游標；有動才上報（15Hz 上限），閒置手機不養房間
   setInterval(() => {
-    if (ended || stage !== 'hunt' || !joined) return;
-    if (huntMode === 'gyro' && oOn && oAlpha0 !== null) {
-      hx = Math.max(0, Math.min(1, 0.5 - wrap180(oAlpha - oAlpha0) / (HUNTC.GYRO_RANGE * 2)));
-      hy = Math.max(0, Math.min(1, 0.5 - (oBeta - oBeta0) / (HUNTC.GYRO_RANGE * 2)));
+    if (ended || !joined || (stage !== 'hunt' && stage !== 'cans')) return;
+    if (ptrMode === 'gyro' && oOn && oAlpha0 !== null) {
+      ptrX = Math.max(0, Math.min(1, 0.5 - wrap180(oAlpha - oAlpha0) / (HUNTC.GYRO_RANGE * 2)));
+      ptrY = Math.max(0, Math.min(1, 0.5 - (oBeta - oBeta0) / (HUNTC.GYRO_RANGE * 2)));
     }
     if (hCool > 0) { hCool -= 1 / 60; if (hCool <= 0) { $('#huntPad').style.background = '#1f2937'; renderHuntStat(); } }
     const nowP = performance.now();
-    if (nowP - lastPtrSent > 66 && (Math.abs(hx - lastPtrX) > .004 || Math.abs(hy - lastPtrY) > .004)) {
-      lastPtrSent = nowP; lastPtrX = hx; lastPtrY = hy;
-      sock.send({ type: 'pointer', x: +hx.toFixed(4), y: +hy.toFixed(4) });
+    if (nowP - lastPtrSent > 66 && (Math.abs(ptrX - lastPtrX) > .004 || Math.abs(ptrY - lastPtrY) > .004)) {
+      lastPtrSent = nowP; lastPtrX = ptrX; lastPtrY = ptrY;
+      sock.send({ type: 'pointer', x: +ptrX.toFixed(4), y: +ptrY.toFixed(4) });
     }
   }, 1000 / 60);
 
   $('#huntStampBtn').addEventListener('pointerdown', (e) => {
     e.preventDefault();
     if (ended || stage !== 'hunt' || hCool > 0) return;
-    sock.send({ type: 'stampAct', x: +hx.toFixed(4), y: +hy.toFixed(4), tClient: clock.serverNow() });
+    sock.send({ type: 'stampAct', x: +ptrX.toFixed(4), y: +ptrY.toFixed(4), tClient: clock.serverNow() });
     navigator.vibrate?.(18);
   });
   sock.on('huntMiss', () => {
@@ -1163,38 +1157,40 @@
     if (m.rank) $('#huntStat').innerHTML = m.rank.map((r, i) => `${i + 1}. ${r.name} ${r.score}分`).join('<br>');
     $('#huntMsg').textContent = '結束！';
   });
-  window.__huntPoint = (x, y) => { hx = x; hy = y; huntMode = 'test'; };   // 測試鉤子
-  window.__huntStamp = () => { sock.send({ type: 'stampAct', x: +hx.toFixed(4), y: +hy.toFixed(4), tClient: clock.serverNow() }); };
+  window.__huntPoint = (x, y) => { ptrX = x; ptrY = y; ptrMode = 'test'; };   // 測試鉤子
+  window.__huntStamp = () => { sock.send({ type: 'stampAct', x: +ptrX.toFixed(4), y: +ptrY.toFixed(4), tClient: clock.serverNow() }); };
 
-  // ---- 遊戲四：砸罐子（手機＝投擲器）----
-  // 揮擲＝加速度尖峰 → 力量（飽和曲線：中等力道就有 8 成，拚命揮只多一點——安全）
-  // 拉弓＝拖放（Angry Birds），沒感測器也玩得下去。角度用左右傾斜。
-  const CANSC = { ANGLE_MIN: 14, ANGLE_MAX: 72, SWING_TH: 8, SWING_WIN: 280, REFILL: 4500 };
-  let cansMode = 'swing', cansAngle = 40, cansBallAt = 0, cansScoreN = 0, cansReadySent = false;
-  let cansOn = false, swingPeak = 0, swingUntil = 0, cansStartAt = 0, cansGammaZero = 0;
+  // ---- 遊戲四：砸罐子（手機＝雷射筆＋投擲器）----
+  // 瞄準跟變色龍共用同一組 pointer（陀螺儀／觸控板），所以不用調角度：瞄哪就打哪。
+  // 力量兩條路：按住蓄力放開，或直接用力往前揮（力量飽和，手機不會飛出去）。
+  const CANSC = { SWING_TH: 8, SWING_WIN: 260, CHARGE_MS: 1100, REFILL: 4500 };
+  let cansReadySent = false, cansBallAt = 0, cansStartAt = 0, cansOn = false;
+  let swingPeak = 0, swingUntil = 0, chargeAt = 0, charging = false;
 
   function setCansMode(m2) {
-    cansMode = m2;
-    $('#cansModeSwing').style.background = m2 === 'swing' ? '#2563eb' : '#374151';
-    $('#cansModeSling').style.background = m2 === 'sling' ? '#2563eb' : '#374151';
-    $('#cansPadTitle').textContent = m2 === 'swing' ? '用力往前揮！' : '按住往下拉再放開';
-    $('#cansPadSub').textContent = m2 === 'swing' ? '握緊手機' : '拉越長丟越大力';
+    ptrMode = m2;
+    $('#cansModeGyro').style.background = m2 === 'gyro' ? '#2563eb' : '#374151';
+    $('#cansModePad').style.background = m2 === 'pad' ? '#2563eb' : '#374151';
+    $('#cansPadTitle').textContent = m2 === 'gyro' ? '瞄你想砸的東西' : '在這裡滑動瞄準';
+    $('#cansPadSub').textContent = m2 === 'gyro' ? '雷射點在電視上・會漂就按歸零' : '手機當觸控板';
+    if (m2 === 'gyro') ptrZero();
   }
-  $('#cansModeSwing').addEventListener('click', () => setCansMode('swing'));
-  $('#cansModeSling').addEventListener('click', () => setCansMode('sling'));
-  $('#cansZero').addEventListener('click', () => { cansGammaZero = gammaF; });
+  $('#cansModeGyro').addEventListener('click', () => setCansMode('gyro'));
+  $('#cansModePad').addEventListener('click', () => setCansMode('pad'));
+  $('#cansZero').addEventListener('click', ptrZero);
 
   function setupCansStage() {
-    if (motionOn) { $('#cansPermBtn').style.display = 'none'; $('#cansUI').style.display = 'flex'; startOrient(); startOrientHunt(); startCansSwing(); }
+    if (motionOn) { $('#cansPermBtn').style.display = 'none'; $('#cansUI').style.display = 'flex'; startOrientHunt(); startCansSwing(); }
     else { $('#cansPermBtn').style.display = ''; $('#cansUI').style.display = 'none'; }
     $('#cansReady').style.display = cansReadySent ? 'none' : '';
-    cansScoreN = 0; renderCansStat(0);
+    setCansMode(motionOn ? 'gyro' : 'pad');
+    renderCansStat(0);
   }
   $('#cansPermBtn').addEventListener('click', async () => {
     if (!(await ensureMotion())) {
       $('#cansPermBtn').style.display = 'none';
       $('#cansUI').style.display = 'flex';
-      setCansMode('sling');                      // 沒感測器：拉弓＋畫面滑動調角度
+      setCansMode('pad');                        // 沒感測器：觸控板瞄準＋按住蓄力
       return;
     }
     setupCansStage();
@@ -1206,13 +1202,24 @@
     $('#cansMsg').textContent = '已就緒，等主持人開始';
   });
 
-  // 揮擲偵測：線性加速度尖峰。跟滑雪的抬手機同一套基準線低通，門檻更高
+  // 觸控板瞄準（跟變色龍同一個 pad 邏輯，只是掛在不同元素上）
+  let cansPadLast = null;
+  $('#cansPad').addEventListener('pointerdown', (e) => { e.preventDefault(); cansPadLast = [e.clientX, e.clientY]; });
+  $('#cansPad').addEventListener('pointermove', (e) => {
+    if (ptrMode !== 'pad' || !cansPadLast) return;
+    const r = $('#cansPad').getBoundingClientRect();
+    ptrMove((e.clientX - cansPadLast[0]) / r.width * PTR_PAD_SENS, (e.clientY - cansPadLast[1]) / r.height * PTR_PAD_SENS);
+    cansPadLast = [e.clientX, e.clientY];
+  });
+  addEventListener('pointerup', () => { cansPadLast = null; });
+
+  // 揮擲：加速度尖峰 → 力量。飽和曲線＝中等力道就有八成，拚命揮只多一點（安全＋長輩公平）
   function startCansSwing() {
     if (cansOn) return;
     cansOn = true;
     let base = 9.8;
     addEventListener('devicemotion', (e) => {
-      if (stage !== 'cans' || cansMode !== 'swing') return;
+      if (stage !== 'cans' || charging) return;
       const a = e.accelerationIncludingGravity;
       if (!a || a.x == null) return;
       const mag = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
@@ -1220,23 +1227,31 @@
       const lin = Math.abs(mag - base);
       const nowP = performance.now();
       if (lin > CANSC.SWING_TH && nowP > swingUntil) {
-        swingPeak = lin; swingUntil = nowP + CANSC.SWING_WIN;   // 開一段收峰值的窗
-        setTimeout(() => cansCommitThrow(), CANSC.SWING_WIN + 10);
-      } else if (nowP < swingUntil) {
-        swingPeak = Math.max(swingPeak, lin);
-      }
+        swingPeak = lin; swingUntil = nowP + CANSC.SWING_WIN;
+        setTimeout(() => { const p = Math.min(1, 0.55 + Math.sqrt(Math.max(0, swingPeak - CANSC.SWING_TH) / 30) * 0.45); swingPeak = 0; doThrow(p); }, CANSC.SWING_WIN + 10);
+      } else if (nowP < swingUntil) swingPeak = Math.max(swingPeak, lin);
     });
   }
-  // 力量飽和：sqrt 曲線＋0.55 起跳，中等力道 ≈ 0.8，拚命揮只多一點（安全＋長輩公平）
-  function swingToPower(peak) {
-    return Math.min(1, 0.55 + Math.sqrt(Math.max(0, peak - CANSC.SWING_TH) / 30) * 0.45);
-  }
-  function cansCommitThrow() {
-    if (ended || stage !== 'cans') return;
-    const power = swingToPower(swingPeak);
-    swingPeak = 0;
-    doThrow(power);
-  }
+
+  // 按住蓄力：0.35 → 1.0，1.1 秒充滿。沒感測器也玩得下去，長輩也懂
+  $('#cansThrowBtn').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (!ballReady()) { $('#cansPadSub').textContent = '球還沒好'; return; }
+    charging = true; chargeAt = performance.now();
+    $('#cansThrowBtn').textContent = '放開！';
+    $('#cansThrowBtn').style.background = '#dc2626';
+  });
+  const releaseThrow = () => {
+    if (!charging) return;
+    charging = false;
+    const held = Math.min(CANSC.CHARGE_MS, performance.now() - chargeAt);
+    $('#cansThrowBtn').textContent = '按住蓄力';
+    $('#cansThrowBtn').style.background = '#b45309';
+    doThrow(0.35 + (held / CANSC.CHARGE_MS) * 0.65);
+  };
+  $('#cansThrowBtn').addEventListener('pointerup', releaseThrow);
+  $('#cansThrowBtn').addEventListener('pointercancel', releaseThrow);
+
   function ballReady() {
     const now = clock.serverNow() ?? Date.now();
     return cansStartAt > 0 && now >= cansStartAt && now - cansBallAt >= CANSC.REFILL;
@@ -1244,78 +1259,37 @@
   function doThrow(power) {
     if (!ballReady()) { $('#cansPadSub').textContent = '球還沒好'; return; }
     cansBallAt = clock.serverNow() ?? Date.now();
-    sock.send({ type: 'canThrow', angle: Math.round(cansAngle), power: +power.toFixed(2), mode: cansMode, tClient: clock.serverNow() });
+    sock.send({ type: 'canThrow', x: +ptrX.toFixed(4), y: +ptrY.toFixed(4),
+                power: +power.toFixed(2), mode: ptrMode, tClient: clock.serverNow() });
     $('#cansPowerBar').style.width = (power * 100) + '%';
-    $('#cansPadTitle').textContent = '丟出去了！';
-    setTimeout(() => setCansMode(cansMode), 900);
-    navigator.vibrate?.(30);
+    $('#cansPadTitle').textContent = power > .85 ? '全力砸出去！' : '丟出去了！';
+    navigator.vibrate?.(Math.round(20 + power * 40));
+    setTimeout(() => { setCansMode(ptrMode); $('#cansPowerBar').style.width = '0%'; }, 900);
   }
 
-  // 拉弓：在 pad 上往下/往後拖，放開就丟
-  let slingStart = null;
-  $('#cansPad').addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    if (cansMode !== 'sling') return;
-    slingStart = [e.clientX, e.clientY];
-  });
-  $('#cansPad').addEventListener('pointermove', (e) => {
-    if (!slingStart || cansMode !== 'sling') return;
-    const dx = e.clientX - slingStart[0], dy = e.clientY - slingStart[1];
-    const len = Math.hypot(dx, dy);
-    const el = $('#slingArrow');
-    el.style.display = '';
-    el.style.height = Math.min(140, len) + 'px';
-    el.style.transform = `rotate(${Math.atan2(dy, dx) * 180 / Math.PI - 90}deg)`;
-    $('#cansPowerBar').style.width = Math.min(100, len / 1.6) + '%';
-  });
-  const slingRelease = (e) => {
-    if (!slingStart || cansMode !== 'sling') return;
-    const dx = e.clientX - slingStart[0], dy = e.clientY - slingStart[1];
-    slingStart = null;
-    $('#slingArrow').style.display = 'none';
-    const len = Math.hypot(dx, dy);
-    if (len < 24) return;                        // 太短當誤觸
-    // 拉的方向反過來就是丟的方向：往下拉＝往上丟
-    const ang = Math.atan2(dy, -dx) * 180 / Math.PI;   // 螢幕座標 → 發射角
-    cansAngle = Math.max(CANSC.ANGLE_MIN, Math.min(CANSC.ANGLE_MAX, ang));
-    doThrow(Math.min(1, 0.4 + len / 260));
-  };
-  $('#cansPad').addEventListener('pointerup', slingRelease);
-  $('#cansPad').addEventListener('pointercancel', () => { slingStart = null; $('#slingArrow').style.display = 'none'; });
-
-  // 角度：左右傾斜（揮擲模式）。上報 canAim 讓電視畫出你的箭頭
-  let lastAimSent = 0, lastAimAngle = -1;
+  function renderCansStat(total) { $('#cansStat').innerHTML = `得分 <b>${total}</b>`; }
+  // 蓄力條與球回充狀態
   setInterval(() => {
-    if (ended || stage !== 'cans' || !joined) return;
-    if (cansMode === 'swing' && motionOn) {
-      const g = gammaF - cansGammaZero;
-      const t = Math.max(-1, Math.min(1, g / 28));
-      cansAngle = 43 - t * 29;                   // 往左傾＝高拋，往右傾＝平射
+    if (ended || stage !== 'cans') return;
+    if (charging) {
+      const p = Math.min(1, (performance.now() - chargeAt) / CANSC.CHARGE_MS);
+      $('#cansPowerBar').style.width = (35 + p * 65) + '%';
+      $('#cansPowerBar').style.background = p > .85 ? '#dc2626' : '#e98336';
     }
-    const t2 = (cansAngle - CANSC.ANGLE_MIN) / (CANSC.ANGLE_MAX - CANSC.ANGLE_MIN);
-    $('#cansAngleDot').style.left = (6 + (1 - t2) * 88) + '%';
     const ready = ballReady();
-    $('#cansBall').textContent = ready ? '●' : '…';
-    $('#cansBall').style.color = ready ? '#4ade80' : '#64748b';
-    if (!ready && cansStartAt) {
-      const now = clock.serverNow() ?? Date.now();
-      const left = Math.max(0, (CANSC.REFILL - (now - cansBallAt)) / 1000);
-      if (now >= cansStartAt) $('#cansBall').textContent = left.toFixed(0);
+    const btn = $('#cansThrowBtn');
+    if (!charging) {
+      btn.disabled = !ready;
+      btn.style.opacity = ready ? 1 : .45;
+      if (!ready && cansStartAt) {
+        const now = clock.serverNow() ?? Date.now();
+        btn.textContent = now < cansStartAt ? '準備…' : '補球 ' + Math.max(0, ((CANSC.REFILL - (now - cansBallAt)) / 1000)).toFixed(1);
+      } else if (ready) btn.textContent = '按住蓄力';
     }
-    const nowP = performance.now();
-    if (nowP - lastAimSent > 180 && Math.abs(cansAngle - lastAimAngle) > 1.5) {
-      lastAimSent = nowP; lastAimAngle = cansAngle;
-      sock.send({ type: 'canAim', angle: Math.round(cansAngle), active: ready });
-    }
-  }, 1000 / 30);
+  }, 1000 / 20);
 
-  function renderCansStat(total) {
-    $('#cansStat').innerHTML = `得分 <b>${total}</b>`;
-  }
   sock.on('cansStart', (m) => {
-    cansStartAt = m.startAt;
-    CANSC.REFILL = m.refill || 4500;
-    cansBallAt = 0;
+    cansStartAt = m.startAt; CANSC.REFILL = m.refill || 4500; cansBallAt = 0;
     $('#cansMsg').textContent = '開始！';
   });
   sock.on('cansLevel', (m) => { $('#cansMsg').textContent = `第 ${m.level}/${m.levels || 5} 關`; });
@@ -1325,7 +1299,7 @@
     if (m.rank) $('#cansStat').innerHTML = m.rank.map((r, i) => `${i + 1}. ${r.name} ${r.score}分`).join('<br>');
     $('#cansMsg').textContent = '結束！';
   });
-  window.__cansThrow = (angle, power) => { cansAngle = angle; cansBallAt = 0; doThrow(power); };   // 測試鉤子
+  window.__cansThrow = (nx, ny, power) => { ptrX = nx; ptrY = ny; cansBallAt = 0; doThrow(power); };   // 測試鉤子
 
 })();
 </script>
