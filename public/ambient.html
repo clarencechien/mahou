@@ -35,9 +35,19 @@
     position: absolute; inset: 0; display: block; background-position: center; background-repeat: no-repeat;
     animation: drift 46s ease-in-out infinite alternate;
   }
-  .bg .fill { background-size: cover; filter: blur(42px) brightness(.42) saturate(.85); transform: scale(1.2); animation: none; }
+  /* 底一律壓成灰的。原本是「同一張圖放大模糊」，遇到亮照片（白天花板、白紗）
+     整條邊就變成白的，在暗房間的電視上刺眼得像開了燈。
+     grayscale 去色 → contrast(.5) 把亮暗都往中間拉 → brightness 壓暗：
+     白的 255 進來會變成 ~54 的深灰，暗的 30 變成 ~22，只剩一點點照片的形狀。 */
+  .bg .fill {
+    background-size: cover;
+    filter: blur(48px) grayscale(1) contrast(.5) brightness(.34);
+    transform: scale(1.2); animation: none;
+  }
   .bg .main { background-size: cover; }
   .bg.fit .main { background-size: contain; }
+  /* 圖還沒進來的那一瞬間也要是灰的，不然會閃一下白 */
+  .bg.fit { background: #15181d; }
   .bg.fit .fill { display: block; }
   .bg:not(.fit) .fill { display: none; }
   @keyframes drift { from { transform: scale(1.06) translate(0, 0); } to { transform: scale(1.14) translate(-1.5%, -1%); } }
@@ -109,7 +119,20 @@
     width: 400px; max-width: calc(100vw - 44px);
     background: var(--card); border: 1px solid var(--line); border-radius: 18px;
     backdrop-filter: blur(14px); box-shadow: 0 18px 50px rgba(0,0,0,.5); overflow: hidden;
+    /* 它要在旁邊掛一整場，預設就該淡一點。滑鼠移上去才變回全實心，
+       不然要調東西的時候看不清楚自己在按什麼。 */
+    opacity: var(--dockOpa, .78); transition: opacity .18s ease;
   }
+  #dock:hover, #dock:focus-within { opacity: 1; }
+  /* widget 的抬頭：歌名不是主角，當下那句歌詞才是。
+     所以歌名縮小、變成跟時間戳同一階的灰，日文副標整個拿掉，按鈕平常淡著。 */
+  body.m-widget #dockHead { padding: 10px 14px 7px; gap: 10px; }
+  body.m-widget #dockTitle b { font-size: .82rem; font-weight: 600; color: var(--dim); letter-spacing: .02em; }
+  body.m-widget #dockTitle span { display: none; }
+  body.m-widget #dockHead .ico, body.m-widget #dockFoot { opacity: .42; transition: opacity .18s ease; }
+  #dock:hover #dockHead .ico, #dock:hover #dockFoot,
+  #dock:focus-within #dockHead .ico, #dock:focus-within #dockFoot { opacity: 1; }
+  #dockOpa { width: 62px; margin-left: auto; accent-color: var(--accent); }
   body.m-mini #dock, body.m-widget #dock { display: block; }
   body.m-mini #dock { width: auto; }
   #dockHead { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
@@ -122,18 +145,27 @@
   #dockBody { max-height: 46vh; overflow-y: auto; padding: 12px 16px 14px; scrollbar-width: thin; }
   /* widget 的跟隨模式只留當下那一句：它是背景，不是歌詞本。
      不能用 visibility 或 opacity 藏——那些還是佔位子，卡片一樣是滿的高度。 */
-  body.m-widget.oneLine #dockBody { max-height: none; overflow: hidden; padding: 8px 16px 12px; }
+  body.m-widget.oneLine #dockBody {
+    /* **高度寫死兩行**（有羅馬拼音就三行）。不寫死的話，有中譯的句子兩行、
+       純日文的句子一行、間奏只有一個音符——卡片會一直上下跳，比歌詞本還吵。 */
+    height: calc(1.02rem * 1.4 + .84rem * 1.4 + 20px);
+    max-height: none; overflow: hidden; padding: 8px 16px 12px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  body.m-widget.oneLine.showRomaji #dockBody { height: calc(1.02rem * 1.4 + .84rem * 1.4 + .72rem * 1.4 + 20px); }
   body.m-widget.oneLine #dockBody .sec,
   body.m-widget.oneLine #dockBody .ln:not(.cur) { display: none; }
-  body.m-widget.oneLine #dockBody .ln.cur { opacity: 1; }
+  body.m-widget.oneLine #dockBody .ln.cur { opacity: 1; padding: 0; }
+  /* 一行就是一行：長句子截斷，不要換行把固定高度撐破 */
+  body.m-widget.oneLine #dockBody .ln > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.m-widget.oneLine #dockBody:empty::after,
   body.m-widget.oneLine #dockBody.blank::after {
     content: '♪'; color: var(--dim); font-size: .9rem;
   }
   #dockBody .ln { text-align: left; padding: 5px 0; }
   #dockBody .ln .jp { font-size: 1.02rem; line-height: 1.4; }
-  #dockBody .ln .zh { font-size: .84rem; }
-  #dockBody .ln .rm { font-size: .72rem; }
+  #dockBody .ln .zh { font-size: .84rem; line-height: 1.4; }
+  #dockBody .ln .rm { font-size: .72rem; line-height: 1.4; }
   #dockBody .sec { margin: 10px 0 0; }
   #dockFoot { display: flex; align-items: center; gap: 8px; padding: 0 14px 12px; }
   #dockFoot .seg button { padding: 5px 10px; font-size: .74rem; }
@@ -210,6 +242,7 @@
       <button data-l="follow">跟隨歌詞</button>
       <button data-l="all">完整歌詞</button>
     </div>
+    <input type="range" id="dockOpa" min="0.3" max="1" step="0.02" value="0.78" title="透明度（[ ]）">
     <button class="ico" id="dMini" title="只留歌名">▁</button>
   </div>
 </div>
@@ -220,7 +253,7 @@
   <h1>背景模式</h1>
   <p id="gateNote">載入中…</p>
   <button id="gateGo">▶ 開始播放</button>
-  <p style="font-size:.78rem; opacity:.6">空白鍵 播放／暫停・← → 換歌・1 2 3 換歌單<br>S 舞台・W widget・M 縮小・L 歌詞模式・B 換背景・F 全螢幕</p>
+  <p style="font-size:.78rem; opacity:.6">空白鍵 播放／暫停・← → 換歌・1 2 3 換歌單<br>S 舞台・W widget・M 縮小・L 歌詞模式・B 換背景・F 全螢幕・[ ] 透明度</p>
 </div>
 
 <audio id="au" preload="metadata"></audio>
@@ -232,7 +265,7 @@
 
   // ---- 設定 ----
   let CFG = null, PL = [], BACK = [], AUDIO_BASE = '';
-  let plIdx = 0, songIdx = 0, song = null, lineEls = [], active = -1;
+  let plIdx = 0, songIdx = 0, song = null, lineEls = [], active = -1, opa = 0.78;
   let mode = 'stage', lyrMode = 'follow', romaji = false;
   let follow = true, followTimer = 0;
 
@@ -343,9 +376,11 @@
         const d = Math.abs(k - i);
         el.className = 'ln ' + (k === i ? 'cur' : d <= 1 ? 'near' : 'off');
       });
+      // ⚠️ blank 要在 return 之前設。間奏時 i 是 -1、els[-1] 是 undefined，
+      // 擺在 return 後面的話 widget 永遠等不到那個 ♪，只會空一塊。
+      if (host === 1) $('#dockBody').classList.toggle('blank', i < 0);
       const el = els[i];
       if (!el) return;
-      if (host === 1) $('#dockBody').classList.toggle('blank', i < 0);
       if (host === 0 && lyrMode === 'follow') {
         // 舞台的跟隨模式：整條歌詞平移，讓當下那句停在框的正中央
         const box = $('#lyrics'), inner = $('#lyricsInner');
@@ -439,6 +474,13 @@
     $('#romaji').style.opacity = on ? 1 : .45;
     store.set('romaji', on ? '1' : '0');
   }
+  // 透明度：widget／縮小掛在旁邊一整場，太實心會一直搶眼睛
+  function setOpa(v) {
+    opa = Math.max(0.3, Math.min(1, +v || 0.78));
+    document.documentElement.style.setProperty('--dockOpa', opa.toFixed(2));
+    $('#dockOpa').value = opa;
+    store.set('opa', opa.toFixed(2));
+  }
   function setPlaylist(i) {
     if (!PL[i] || !PL[i].songs.length) return;
     plIdx = i;
@@ -470,6 +512,7 @@
   $('#romaji').onclick = () => setRomaji(!romaji);
   $('#fs').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.().catch(() => {}));
   $('#vol').oninput = (e) => { au.volume = +e.target.value; store.set('vol', e.target.value); };
+  $('#dockOpa').oninput = (e) => setOpa(e.target.value);
   $('#track').onclick = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     const d = au.duration || song?.duration || 0;
@@ -499,6 +542,8 @@
     else if (k === 'r') setRomaji(!romaji);
     else if (k === 'f') $('#fs').click();
     else if (k === 'b') setBackdrop((bgIdx + 1) % Math.max(1, BACK.length));
+    else if (e.key === '[') setOpa(opa - 0.06);
+    else if (e.key === ']') setOpa(opa + 0.06);
     else if ('123'.includes(e.key)) setPlaylist(+e.key - 1);
   });
 
@@ -520,6 +565,7 @@
       `<button data-p="${i}" ${p.songs.length ? '' : 'disabled style="opacity:.35"'}>${esc(p.name)}</button>`).join('');
     $('#plSeg').querySelectorAll('button').forEach((b, i) => (b.onclick = () => setPlaylist(i)));
 
+    setOpa(store.get('opa', '0.78'));
     setMode(store.get('mode', 'widget'));   // 預設就是右下角那張小卡，不佔畫面
     setLyrMode(store.get('lyr', 'follow'));
     setRomaji(store.get('romaji', '0') === '1');
