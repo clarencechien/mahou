@@ -400,7 +400,12 @@
             <button id="customPick" style="flex:1; padding:8px 0; font-size:.84rem">選圖片…</button>
             <button id="customClear" style="padding:8px 12px; font-size:.84rem; background:#3f1d1d">清除</button>
           </div>
+          <div style="display:flex; gap:6px; margin-top:6px">
+            <button id="customSave" style="flex:1; padding:7px 0; font-size:.8rem">存成一個檔</button>
+            <button id="customLoad" style="flex:1; padding:7px 0; font-size:.8rem">讀回來</button>
+          </div>
           <input type="file" id="customFiles" accept="image/*" multiple style="display:none">
+          <input type="file" id="customBundle" accept=".mahou-arts,application/json" style="display:none">
           <div class="d" id="customD">從這台電腦選圖片。<b style="color:#7dd3fc">只存在這台瀏覽器，不會上傳、不會進版本庫。</b>直式的手機桌布也可以——隨機裁切會自己挑一塊橫的。</div>
         </div>
       </div>
@@ -1983,10 +1988,20 @@
     });
   }
   async function artPut(files) {
+    // ⚠️ 檔案要**先全部讀完**再開 transaction。
+    // IndexedDB 的 transaction 只要遇到一次沒有待處理請求的 microtask 就會自動關掉，
+    // 所以 `add({ buf: await f.arrayBuffer() })` 這種寫法連第一張都存不進去
+    // （await 先跑，tx 當場失效，接著 add() 丟 TransactionInactiveError）。
+    const rows = [];
+    for (const f of files) rows.push({ name: f.name, type: f.type, buf: await f.arrayBuffer() });
     const db = await artDB();
-    const tx = db.transaction('imgs', 'readwrite');
-    for (const f of files) tx.objectStore('imgs').add({ name: f.name, type: f.type, buf: await f.arrayBuffer() });
-    return new Promise((res) => { tx.oncomplete = res; });
+    return new Promise((res, rej) => {
+      const tx = db.transaction('imgs', 'readwrite');
+      const st = tx.objectStore('imgs');
+      for (const r of rows) st.add(r);                 // 中間不能有 await
+      tx.oncomplete = () => res(rows.length);
+      tx.onerror = tx.onabort = () => rej(tx.error || new Error('IndexedDB 寫入失敗'));
+    });
   }
   async function artAll() {
     const db = await artDB();
@@ -1998,7 +2013,19 @@
   }
   async function artClear() {
     const db = await artDB();
-    return new Promise((res) => { const tx = db.transaction('imgs', 'readwrite'); tx.objectStore('imgs').clear(); tx.oncomplete = res; });
+    return new Promise((res, rej) => {
+      const tx = db.transaction('imgs', 'readwrite');
+      tx.objectStore('imgs').clear();
+      tx.oncomplete = res;
+      tx.onerror = tx.onabort = () => rej(tx.error || new Error('IndexedDB 清除失敗'));
+    });
+  }
+  // 社群 App 下載下來的檔名長這樣：650207988_3981541511978492_361977…_n.jpg
+  // 直接當畫名寫在 HUD 上只是一串亂碼，那種就改叫「自訂 N」。
+  function customName(fname, i) {
+    const base = String(fname || '').replace(/\.[^.]+$/, '');
+    const human = base.length <= 12 && /[^\d_\-]/.test(base) && !/^\d{6,}/.test(base);
+    return human ? base : '自訂 ' + (i + 1);
   }
   let customUrls = [];
   async function loadCustomTheme() {
@@ -2011,7 +2038,7 @@
     th.list = rows.map((r, i) => {
       const url = URL.createObjectURL(new Blob([r.buf], { type: r.type || 'image/jpeg' }));
       customUrls.push(url);
-      return { name: (r.name || ('圖 ' + (i + 1))).replace(/\.[^.]+$/, '').slice(0, 14), meta: '自訂', file: 'custom-' + r.id, blob: url };
+      return { name: customName(r.name, i), meta: '自訂', file: 'custom-' + r.id, blob: url };
     });
     renderTune();
     if (GAMES[pickedGame].key === 'hunt' && (TUNE.huntTheme | 0) === PAINT.THEMES.indexOf(th)) {
@@ -2021,20 +2048,68 @@
   }
   $('#customPick').addEventListener('click', () => $('#customFiles').click());
   $('#customFiles').addEventListener('change', async (e) => {
-    const files = [...e.target.files].filter((f) => /^image\//.test(f.type));
+    // 有些檔案總管給不出 MIME type，所以副檔名也認
+    const files = [...e.target.files].filter((f) => /^image\//.test(f.type) || /\.(jpe?g|png|gif|webp|avif|bmp)$/i.test(f.name));
+    const dropped = e.target.files.length - files.length;
     e.target.value = '';
-    if (!files.length) return;
+    if (!files.length) {
+      $('#customD').textContent = '沒有可用的圖片檔（只收 jpg / png / gif / webp）';
+      return;
+    }
     $('#customD').textContent = `讀取中… ${files.length} 張`;
-    await artPut(files);
-    await loadCustomTheme();
-    feed(`自訂圖庫加入 ${files.length} 張（只存在這台電腦）`);
+    try {
+      await artPut(files);
+      await loadCustomTheme();
+      feed(`自訂圖庫加入 ${files.length} 張（只存在這台電腦）` + (dropped ? `，略過 ${dropped} 個非圖片檔` : ''));
+    } catch (err) {
+      // 失敗要講出來。之前這裡整個吞掉，畫面上只是沒反應，看起來像按鈕壞了。
+      $('#customD').innerHTML = `<b style="color:#f87171">存不進去：${esc(err.message || String(err))}</b>`;
+      feed('自訂圖庫寫入失敗：' + (err.message || err));
+    }
   });
   $('#customClear').addEventListener('click', async () => {
     if (!confirm('清空自訂圖庫？')) return;
-    await artClear();
-    await loadCustomTheme();
+    try { await artClear(); await loadCustomTheme(); feed('自訂圖庫已清空'); }
+    catch (err) { $('#customD').innerHTML = `<b style="color:#f87171">清不掉：${esc(err.message || String(err))}</b>`; }
+  });
+  // 存成一個檔 / 讀回來：換主控電腦、或清掉瀏覽器資料時不用重選一次。
+  // 檔案存在主持人自己的硬碟上，一樣不經過任何伺服器。
+  const b64 = (buf) => {
+    const u8 = new Uint8Array(buf); let s2 = '';
+    for (let i = 0; i < u8.length; i += 0x8000) s2 += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(s2);
+  };
+  const unb64 = (str) => { const bin = atob(str); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return u8.buffer; };
+  $('#customSave').addEventListener('click', async () => {
+    try {
+      const rows = await artAll();
+      if (!rows.length) { $('#customD').textContent = '圖庫是空的，沒東西可以存'; return; }
+      const blob = new Blob([JSON.stringify({ v: 1, imgs: rows.map((r) => ({ name: r.name, type: r.type, b64: b64(r.buf) })) })],
+        { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `mahou-arts-${new Date().toISOString().slice(0, 10)}.mahou-arts`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      feed(`自訂圖庫存成一個檔（${rows.length} 張）`);
+    } catch (err) { $('#customD').innerHTML = `<b style="color:#f87171">存不出來：${esc(err.message || String(err))}</b>`; }
+  });
+  $('#customLoad').addEventListener('click', () => $('#customBundle').click());
+  $('#customBundle').addEventListener('change', async (e) => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    try {
+      const j = JSON.parse(await f.text());
+      const imgs = (j && j.imgs) || [];
+      if (!imgs.length) throw new Error('檔案裡沒有圖片');
+      await artPut(imgs.map((r) => ({ name: r.name, type: r.type, arrayBuffer: async () => unb64(r.b64) })));
+      await loadCustomTheme();
+      feed(`自訂圖庫讀回 ${imgs.length} 張`);
+    } catch (err) { $('#customD').innerHTML = `<b style="color:#f87171">讀不進來：${esc(err.message || String(err))}</b>`; }
   });
   loadCustomTheme();
+  window.__artPut = (files) => artPut(files).then(() => loadCustomTheme());   // 測試鉤子
+  window.__artCount = () => (PAINT.THEMES.find((t) => t.key === 'custom') || { list: [] }).list.length;
 
   let huntPreloadGen = 0;
   function huntPreloadSeq(gen, k) {
