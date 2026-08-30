@@ -421,8 +421,12 @@ export class RoomDO {
         const c = this.clients.get(ws._clientId);
         if (!c) return;
         const uplinkMs = typeof msg.tClient === 'number' ? now - msg.tClient : null;
+        // lv/misses/rolls 一定要記進 log，不能只轉發給 host：
+        // 少了 lv，匯出的檔案就看不出超加速到底有沒有生效（實測踩過一次，
+        // 明明最高速 37.9 已經是二級的上限，匯出卻整場顯示 lv 0）
         this.log({ type: 'skiRun', clientId: ws._clientId, x: msg.x, wy: msg.wy, speed: msg.speed,
                    vx: msg.vx, air: msg.air, jumps: msg.jumps, hits: msg.hits, combo: msg.combo,
+                   lv: msg.lv, misses: msg.misses, rolls: msg.rolls,
                    tClient: msg.tClient, tServerRecv: now, uplinkMs });
         this.toHosts({ type: 'skiRun', clientId: ws._clientId, name: c.name, x: msg.x, wy: msg.wy,
                        speed: msg.speed, vx: msg.vx, air: msg.air, airMax: msg.airMax, rot: msg.rot,
@@ -434,7 +438,8 @@ export class RoomDO {
       case 'skiDone': {
         const c = this.clients.get(ws._clientId);
         if (!c || !this.ski) return;
-        const r = { dist: msg.dist, jumps: msg.jumps, hits: msg.hits, combo: msg.combo | 0 };
+        const r = { dist: msg.dist, jumps: msg.jumps, hits: msg.hits, combo: msg.combo | 0,
+                    misses: msg.misses | 0, rolls: msg.rolls | 0, lv: msg.lv | 0 };
         this.ski.results.set(ws._clientId, r);
         this.log({ type: 'skiDone', clientId: ws._clientId, ...r });
         this.toHosts({ type: 'skiDone', clientId: ws._clientId, name: c.name, ...r });

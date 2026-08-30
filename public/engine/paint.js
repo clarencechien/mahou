@@ -4,11 +4,21 @@
 (function () {
   const P = (window.PAINT = {});
 
+  // 檔名 → 本機檔名。跟 tools/fetch-arts.mjs 的 slug 必須一模一樣。
+  P.slug = (f) => f.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
   // 可覆寫，測試時指到本機的假 Commons（含逐級退寬度的行為）
   P.FILE = (f, w) => 'https://commons.wikimedia.org/wiki/Special:Redirect/file/' + encodeURIComponent(f) + '?width=' + (w || 1280);
   const FILE = (f, w) => P.FILE(f, w);
-  // 兩套主題各八張，全部是公有領域作品（Wikimedia 直連，載不到退程序化抽象畫）。
-  // 挑選標準是「好不好藏人」：畫面要夠花、明度層次多，純色大背景的畫藏不住小人。
+  // 自己 host 的那一份（public/arts/）。同源＝canvas 不會 tainted，色階量化才跑得起來。
+  P.LOCAL = (f) => '/arts/' + P.slug(f) + '.jpg';
+  // 名畫系八張，全部是公有領域作品。自己 host 在 public/arts/，Wikimedia 只當備援。
+  //
+  // 兩條挑選標準，缺一不可：
+  // 1. **好不好藏人**：畫面要夠花、明度層次多。純色大背景的畫藏不住小人。
+  // 2. **小朋友看了不會怕**：家宴現場有小孩。裸體（維納斯的誕生）、驚恐（吶喊）、
+  //    妖怪與骸骨（百鬼夜行、相馬の古內裏）、地獄場景（人間樂園）一律不收——
+  //    就算它們藏人的效果很好。兒童遊戲那張反而是最理想的：
+  //    兩百多個小孩在玩，本來就滿是小人，藏一隻進去剛剛好。
   P.THEMES = [
     {
       key: 'art', name: '名畫系',
@@ -16,28 +26,20 @@
         { name: '星夜', meta: 'Vincent van Gogh · 1889', file: 'Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg' },
         { name: '神奈川沖浪裏', meta: '葛飾北齋 · c.1830–31', file: 'The_Great_Wave_off_Kanagawa.jpg' },
         { name: '蒙娜麗莎', meta: 'Leonardo da Vinci · c.1503–19', file: 'Leonardo_da_Vinci_-_Mona_Lisa.jpg' },
-        { name: '吶喊', meta: 'Edvard Munch · 1893', file: 'Edvard_Munch_-_The_Scream.jpg' },
-        { name: '維納斯的誕生', meta: 'Sandro Botticelli · c.1484–86', file: 'Birth_of_Venus_Botticelli.jpg' },
+        { name: '兒童遊戲', meta: 'Pieter Bruegel · 1560', file: 'Pieter_Bruegel_the_Elder_-_Children’s_Games_-_Google_Art_Project.jpg' },
+        { name: '夜巡', meta: 'Rembrandt · 1642', file: 'The_Night_Watch.jpg' },
         { name: '睡蓮', meta: 'Claude Monet · 1920–26', file: 'Water_lilies_Monet.jpg' },
         { name: '吻', meta: 'Gustav Klimt · 1907–08', file: 'The_Kiss_-_Gustav_Klimt_-_Google_Cultural_Institute.jpg' },
         { name: '大碗島的星期天下午', meta: 'Georges Seurat · 1884', file: 'A_Sunday_on_La_Grande_Jatte,_Georges_Seurat,_1884.jpg' },
       ],
     },
     {
-      // 卡通系＝「看起來就像卡通」的公有領域作品：戲畫、妖怪繪卷、國芳的貓、
-      // 波希的怪物、盧梭的平塗叢林、布勒哲爾的一百個小人。
-      // ⚠️ 吉伊卡哇／皮克敏／寶可夢這類還在版權內的角色不能放進來。
-      key: 'toon', name: '卡通系',
-      list: [
-        { name: '鳥獸戲畫・相撲', meta: '傳鳥羽僧正 · 12 世紀', file: 'Chouju_sumo2.jpg' },
-        { name: '百鬼夜行繪卷', meta: '室町時代 · 付喪神', file: 'Hyakki-Yagyo-Emaki_Tsukumogami_1.jpg' },
-        { name: '貓飼好五十三疋', meta: '歌川國芳 · 1848', file: 'Cats_suggested_as_the_fifty-three_stations_of_the_Tokaido.jpg' },
-        { name: '東海道五十三對', meta: '歌川國芳 · c.1845', file: 'Kuniyoshi_Utagawa,_The_fifty_three_stations_of_the_tokaido.jpg' },
-        { name: '相馬の古內裏', meta: '歌川國芳 · c.1844 · 骸骨', file: 'Takiyasha_the_Witch_and_the_Skeleton_Spectre,_by_Utagawa_Kuniyoshi.jpg' },
-        { name: '人間樂園', meta: 'Hieronymus Bosch · c.1500', file: 'The_Garden_of_earthly_delights.jpg' },
-        { name: '夢', meta: 'Henri Rousseau · 1910', file: 'Henri_Rousseau_-_Il_sogno.jpg' },
-        { name: '尼德蘭箴言', meta: 'Pieter Bruegel · 1559', file: 'Pieter_Bruegel_the_Elder_-_The_Dutch_Proverbs_-_Google_Art_Project.jpg' },
-      ],
+      // 自訂主題：主持人自己從電腦選圖片。
+      // 圖片**只存在這台瀏覽器的 IndexedDB 裡**——不會上傳、不會進 git、不會進部署。
+      // 之前的公有領域卡通系拿掉了，因為使用者要用自己的圖；
+      // 而吉伊卡哇／皮克敏／寶可夢那類素材有版權，不能放進這個公開 repo 或公開網址。
+      // 直式的手機桌布靠隨機裁切就能用（見 P.pickCrop）。
+      key: 'custom', name: '自訂', list: [],
     },
   ];
   P.theme = 0;
@@ -57,17 +59,27 @@
   P.LOAD_TIMEOUT = 10000;
   P.load = function (idx, cb) {
     const art = P.ARTS[idx % P.ARTS.length];
+    if (art.blob) {                                  // 自訂主題：圖片就在瀏覽器裡，不用連外
+      const img = new Image();
+      img.onload = () => cb(img, { name: art.name, ok: true, width: img.naturalWidth, ms: 0, src: 'local' });
+      img.onerror = () => cb(null, { name: art.name, ok: false, ms: 0, src: 'local' });
+      img.src = art.blob;
+      return;
+    }
     const t0 = (performance && performance.now) ? performance.now() : Date.now();
+    // 先試自己 host 的那一份，失敗才往 Wikimedia 退
+    const srcs = [{ url: P.LOCAL(art.file), tag: 'local', w: 1280 }]
+      .concat(WIDTHS.map((w) => ({ url: FILE(art.file, w), tag: 'commons', w })));
     let step = 0;
     const attempt = () => {
-      if (step >= WIDTHS.length) { cb(null, { name: art.name, ok: false, ms: Math.round(now() - t0) }); return; }
-      const w = WIDTHS[step++];
+      if (step >= srcs.length) { cb(null, { name: art.name, ok: false, ms: Math.round(now() - t0) }); return; }
+      const { url: u, tag, w } = srcs[step++];
       const img = new Image();
       let done = false;
       const finish = (ok) => {
         if (done) return; done = true;
         clearTimeout(t);
-        if (ok) cb(img, { name: art.name, ok: true, width: w, ms: Math.round(now() - t0) });
+        if (ok) cb(img, { name: art.name, ok: true, width: w, src: tag, ms: Math.round(now() - t0) });
         else attempt();
       };
       const t = setTimeout(() => {
@@ -81,7 +93,7 @@
       }, P.LOAD_TIMEOUT);
       img.onload = () => finish(true);
       img.onerror = () => finish(false);
-      img.src = FILE(art.file, w);
+      img.src = u;
     };
     const now = () => ((performance && performance.now) ? performance.now() : Date.now());
     attempt();
@@ -155,10 +167,69 @@
     return cv;
   };
 
-  // 像素化：img（可為 null → 程序化）畫進 W×H 緩衝，contain-fit。
+  // 隨機裁切：從原圖裡挑一塊「跟畫布同比例」的區域。
+  //
+  // 三個好處，一次拿到：
+  // 1. 直式的畫（蒙娜麗莎 1280×1913、手機桌布 800×1732）本來只能用畫面中間一條，
+  //    裁切之後填滿整個畫面，藏人的面積直接多一倍以上。
+  // 2. 同一張畫每一關都不一樣，玩家沒辦法靠「上次那隻在左上角」記位置。
+  // 3. 放大之後細節變大，小人躲在細節裡才有得躲。
+  // amount 0=不裁切（整張 contain 進去），1=裁得最兇。seed 來自 DO 的回合種子，
+  // 所以同一回合重畫（例如換像素大小）不會跳掉。
+  P.pickCrop = function (img, W, H, seed, amount) {
+    const a = Math.max(0, Math.min(1, amount == null ? 0.6 : amount));
+    if (a <= 0.001) return null;
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    if (!iw || !ih) return null;
+    const rnd = mulberry32(seed >>> 0);
+    const aspect = W / H;
+    let mw = iw, mh = iw / aspect;                       // 塞得進原圖的最大同比例視窗
+    if (mh > ih) { mh = ih; mw = ih * aspect; }
+    const box = () => {
+      const zoom = 1 - a * (0.30 + rnd() * 0.35);        // a=1 → 取 35%–70%
+      const sw = Math.max(48, Math.round(mw * zoom));
+      const sh = Math.max(27, Math.round(mh * zoom));
+      return { sx: Math.round(rnd() * (iw - sw)), sy: Math.round(rnd() * (ih - sh)), sw, sh };
+    };
+    // 丟 6 個候選，挑「最藏得住人」的那個。
+    // 隨便裁會裁到夜巡左上那一整片黑，或睡蓮的一池同色——太暗或太平的區塊
+    // 小人不是看不見就是一眼就看到，兩種都不好玩。
+    // 評分：明度標準差越高越好，平均明度偏離中間值就扣分。
+    // ⚠️ 起始分數要用 -Infinity，不是 -1。夜巡那種整片暗的畫，
+    // 六個候選的分數全部是負的（sd 30 − |mean−128|×0.35 ≈ −9），
+    // 用 -1 當起點的話一個都選不上，best 留在 null＝那張畫完全不裁切。
+    let best = null, bestScore = -Infinity;
+    for (let k = 0; k < 6; k++) {
+      const c = box();
+      const sc = scoreCrop(img, c);
+      if (sc == null) return c;                          // 讀不到像素（跨來源）就用第一個
+      if (sc > bestScore) { bestScore = sc; best = c; }
+    }
+    return best;
+  };
+  let probe = null;
+  function scoreCrop(img, c) {
+    if (!probe) { probe = document.createElement('canvas'); probe.width = 32; probe.height = 18; }
+    const g = probe.getContext('2d', { willReadFrequently: true });
+    try {
+      g.drawImage(img, c.sx, c.sy, c.sw, c.sh, 0, 0, 32, 18);
+      const d = g.getImageData(0, 0, 32, 18).data;
+      let sum = 0, sum2 = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        const L = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        sum += L; sum2 += L * L;
+      }
+      const n = d.length / 4, mean = sum / n;
+      const sd = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
+      return sd - Math.abs(mean - 128) * 0.35;
+    } catch (e) { return null; }                         // canvas tainted：跳過評分
+  }
+
+  // 像素化：img（可為 null → 程序化）畫進 W×H 緩衝。
+  // 有 crop 就把那一塊拉滿整個畫布（fit = 全畫面），沒有就 contain-fit。
   // 回傳 {bg, fit}。名畫來源沒有 CORS 也沒關係——偽裝只用 drawImage，不做 pixel read。
   P.pixelize = function (img, W, H, opts) {
-    const o = Object.assign({ block: 6, contrast: 106, sat: 108, levels: 9, seed: 1 }, opts);
+    const o = Object.assign({ block: 6, contrast: 106, sat: 108, levels: 9, seed: 1, crop: null }, opts);
     const bg = document.createElement('canvas');
     bg.width = W; bg.height = H;
     const g = bg.getContext('2d');
@@ -171,16 +242,24 @@
       g.drawImage(art, 0, 0);
       return { bg, fit, fallback: true };
     }
-    const s = Math.min(W / img.naturalWidth, H / img.naturalHeight);
-    const fw = img.naturalWidth * s, fh = img.naturalHeight * s;
-    fit = { x: (W - fw) / 2, y: (H - fh) / 2, w: fw, h: fh };
+    const c = o.crop;
+    let fw, fh;
+    if (c) {
+      fit = { x: 0, y: 0, w: W, h: H };                 // 裁切區塊拉滿畫布，沒有黑邊
+      fw = W; fh = H;
+    } else {
+      const s = Math.min(W / img.naturalWidth, H / img.naturalHeight);
+      fw = img.naturalWidth * s; fh = img.naturalHeight * s;
+      fit = { x: (W - fw) / 2, y: (H - fh) / 2, w: fw, h: fh };
+    }
     const tiny = document.createElement('canvas');
     tiny.width = Math.max(2, Math.round(fw / o.block));
     tiny.height = Math.max(2, Math.round(fh / o.block));
     const tg = tiny.getContext('2d', { willReadFrequently: true });
     tg.imageSmoothingEnabled = true;
     tg.filter = `contrast(${o.contrast}%) saturate(${o.sat}%)`;
-    tg.drawImage(img, 0, 0, tiny.width, tiny.height);
+    if (c) tg.drawImage(img, c.sx, c.sy, c.sw, c.sh, 0, 0, tiny.width, tiny.height);
+    else tg.drawImage(img, 0, 0, tiny.width, tiny.height);
     tg.filter = 'none';
     try {                                                    // 來源允許 pixel read 才做色階量化
       const q = (v) => { const step = 255 / (o.levels - 1); return Math.round(v / step) * step; };
