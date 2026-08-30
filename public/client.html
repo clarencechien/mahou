@@ -281,7 +281,7 @@
     document.body.innerHTML = '<p style="padding:24px">網址少了房號，請重新掃 QR code。</p>';
     return;
   }
-  $('#roomLabel').textContent = '房 ' + roomId;
+  $('#roomLabel').textContent = '#' + roomId;
 
   // ---- in-app browser 阻擋 ----
   const iab = Mahou.inAppBrowser();
