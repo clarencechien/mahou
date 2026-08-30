@@ -1,0 +1,168 @@
+{
+  "id": "start-of-forever-cover",
+  "title": "Start of Forever",
+  "titleZh": "永遠的起點",
+  "subtitle": "Start of Forever",
+  "audio": "music/Start_of_Forever_(Cover).mp3",
+  "duration": 128,
+  "offset": 0,
+  "timing": {
+    "source": "gemini-3.6-flash+gemini-3.5-flash+ear",
+    "agreementMedianSec": 0,
+    "agreementWorstSec": 2,
+    "flagged": [
+      7
+    ],
+    "spotChecks": "5/5",
+    "corrected": "2026-08-28"
+  },
+  "lines": [
+    {
+      "t": 11,
+      "section": "Verse 1",
+      "jp": "時計の針が　もうすぐ重なる",
+      "romaji": "Tokei no hari ga mousugu kasanaru",
+      "zh": "時針與分針 馬上就要重合了"
+    },
+    {
+      "t": 15,
+      "section": "Verse 1",
+      "jp": "ルームサービスで頼んだ　小さなケーキ",
+      "romaji": "Ruumu saabisu de tanonda chiisana keeki",
+      "zh": "叫了客房服務送來的 小小蛋糕"
+    },
+    {
+      "t": 21,
+      "section": "Verse 1",
+      "jp": "甘いクリームと　君の笑顔",
+      "romaji": "Amai kuriimu to kimi no egao",
+      "zh": "甜甜的奶油 與妳的笑容"
+    },
+    {
+      "t": 26,
+      "section": "Verse 1",
+      "jp": "これ以上　何もいらないね",
+      "romaji": "Kore ijou nanimo iranai ne",
+      "zh": "除了這些 我什麼都不需要了"
+    },
+    {
+      "t": 31,
+      "section": "Pre-Chorus",
+      "jp": "テーブルに置かれた　一枚のカード",
+      "romaji": "Teeburu ni okareta ichimai no kaado",
+      "zh": "放在桌上的 那一張小卡"
+    },
+    {
+      "t": 36,
+      "section": "Pre-Chorus",
+      "jp": "君が書いた文字が　光って見える",
+      "romaji": "Kimi ga kaita moji ga hikatte mieru",
+      "zh": "妳寫下的字跡 看起來閃閃發光"
+    },
+    {
+      "t": 41,
+      "section": "Pre-Chorus",
+      "jp": "「ここからが始まり」だって",
+      "romaji": "\"Koko kara ga hajimari\" datte",
+      "zh": "上面寫著「從這裡開始」"
+    },
+    {
+      "t": 50,
+      "section": "Chorus",
+      "jp": "This is the Start of Forever 誓い合おう　新しい年に",
+      "romaji": "This is the Start of Forever chikai aou atarashii toshi ni",
+      "zh": "互相立誓吧 在這新的一年"
+    },
+    {
+      "t": 57,
+      "section": "Chorus",
+      "jp": "過去も未来も　全部抱きしめて",
+      "romaji": "Kako mo mirai mo zenbu dakishimete",
+      "zh": "將過去與未來 全部緊緊擁抱"
+    },
+    {
+      "t": 62,
+      "section": "Chorus",
+      "jp": "Start of Forever 君と描く　終わらないストーリー",
+      "romaji": "Start of Forever kimi to egaku owaranai sutoorii",
+      "zh": "與妳共繪的 無盡故事"
+    },
+    {
+      "t": 68,
+      "section": "Chorus",
+      "jp": "Happy New Year, My Love ずっとそばにいて",
+      "romaji": "Happy New Year, My Love zutto soba ni ite",
+      "zh": "一直待在我身邊吧"
+    },
+    {
+      "t": 73,
+      "section": "Bridge",
+      "jp": "Three... Two... One...",
+      "romaji": "",
+      "zh": ""
+    },
+    {
+      "t": 75,
+      "section": "Bridge",
+      "jp": "おめでとう",
+      "romaji": "Omedetou",
+      "zh": "新年快樂"
+    },
+    {
+      "t": 77,
+      "section": "Bridge",
+      "jp": "Kiss me now",
+      "romaji": "",
+      "zh": ""
+    },
+    {
+      "t": 84,
+      "section": "Verse 2",
+      "jp": "甘いケーキを　ひと口食べて",
+      "romaji": "Amai keeki wo hitokuchi tabete",
+      "zh": "吃了一口 甜甜的蛋糕"
+    },
+    {
+      "t": 89,
+      "section": "Verse 2",
+      "jp": "溶けていく不安　広がる希望",
+      "romaji": "Toketeiku fuan hirogaru kibou",
+      "zh": "融化了不安 蔓延開來的 是希望"
+    },
+    {
+      "t": 94,
+      "section": "Verse 2",
+      "jp": "このカードをお守りにして",
+      "romaji": "Kono kaado wo omamori ni shite",
+      "zh": "把這張小卡 當作護身符"
+    },
+    {
+      "t": 99,
+      "section": "Verse 2",
+      "jp": "歩いていこう",
+      "romaji": "Aruite ikou",
+      "zh": "一起走下去吧"
+    },
+    {
+      "t": 102,
+      "section": "Outro",
+      "jp": "Start of Forever...",
+      "romaji": "",
+      "zh": ""
+    },
+    {
+      "t": 107,
+      "section": "Outro",
+      "jp": "Happy New Year...",
+      "romaji": "",
+      "zh": ""
+    },
+    {
+      "t": 111,
+      "section": "Outro",
+      "jp": "You are my forever...",
+      "romaji": "",
+      "zh": ""
+    }
+  ]
+}

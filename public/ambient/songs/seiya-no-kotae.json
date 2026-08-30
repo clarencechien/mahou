@@ -1,0 +1,135 @@
+{
+  "id": "seiya-no-kotae",
+  "title": "聖夜の答え",
+  "titleZh": "聖夜的答案",
+  "subtitle": "Seiya no Kotae",
+  "audio": "music/Seiya_no_Kotae.mp3",
+  "duration": 125,
+  "offset": 0,
+  "timing": {
+    "source": "gemini-3.6-flash+gemini-3.5-flash",
+    "agreementMedianSec": 1,
+    "agreementWorstSec": 5,
+    "flagged": [
+      2,
+      3,
+      5,
+      12
+    ],
+    "spotChecks": "5/5"
+  },
+  "lines": [
+    {
+      "t": 0,
+      "section": "Verse 1",
+      "jp": "窓の外は　静かな古都の雪",
+      "romaji": "Mado no soto wa shizuka na koto no yuki",
+      "zh": "窗外是 寧靜古都的雪"
+    },
+    {
+      "t": 7,
+      "section": "Verse 1",
+      "jp": "キャンドルの火が　君の瞳に揺れる",
+      "romaji": "Kyandoru no hi ga kimi no hitomi ni yureru",
+      "zh": "燭光 在妳的眼中搖曳"
+    },
+    {
+      "t": 20,
+      "section": "Verse 1",
+      "jp": "遠回りしたね　僕たちの旅路",
+      "romaji": "Toomawari shita ne bokutachi no tabiji",
+      "zh": "繞了好大一圈呢 我們的旅程"
+    },
+    {
+      "t": 32,
+      "section": "Verse 1",
+      "jp": "でも今夜　すべてが報われる",
+      "romaji": "Demo kon'ya subete ga mukuwareru",
+      "zh": "但今晚 一切都得到了回報"
+    },
+    {
+      "t": 39,
+      "section": "Pre-Chorus",
+      "jp": "冷たい風も　今は心地いい",
+      "romaji": "Tsumetai kaze mo ima wa kokochii",
+      "zh": "就連冷風 現在也覺得舒適"
+    },
+    {
+      "t": 46,
+      "section": "Pre-Chorus",
+      "jp": "君が隣に　いてくれるから",
+      "romaji": "Kimi ga tonari ni ite kureru kara",
+      "zh": "因為有妳 就在身旁"
+    },
+    {
+      "t": 53,
+      "section": "Chorus",
+      "jp": "It was worth the wait この景色のために",
+      "romaji": "It was worth the wait kono keshiki no tame ni",
+      "zh": "就是為了 這片景色"
+    },
+    {
+      "t": 60,
+      "section": "Chorus",
+      "jp": "It was worth the wait やっと出会えた奇跡",
+      "romaji": "It was worth the wait yatto deaeta kiseki",
+      "zh": "終於遇見的 奇蹟"
+    },
+    {
+      "t": 66,
+      "section": "Chorus",
+      "jp": "Merry Christmas, My Dear 震える手　握り返して",
+      "romaji": "Merry Christmas, My Dear furueru te nigirikaeshite",
+      "zh": "緊握著 妳顫抖的手"
+    },
+    {
+      "t": 74,
+      "section": "Chorus",
+      "jp": "悲しみはもう　過去に溶けていく",
+      "romaji": "Kanashimi wa mou kako ni toketeyuku",
+      "zh": "悲傷已經 融化在過去裡"
+    },
+    {
+      "t": 80,
+      "section": "Chorus",
+      "jp": "(Just you and me tonight)",
+      "romaji": "",
+      "zh": ""
+    },
+    {
+      "t": 85,
+      "section": "Verse 2",
+      "jp": "言葉はいらない　温もりだけで",
+      "romaji": "Kotoba wa iranai nukumori dakede",
+      "zh": "不需要言語 只要有這份溫暖"
+    },
+    {
+      "t": 92,
+      "section": "Verse 2",
+      "jp": "確かめ合う　二人の時間",
+      "romaji": "Tashikameau futari no jikan",
+      "zh": "互相確認著 屬於兩人的時間"
+    },
+    {
+      "t": 97,
+      "section": "Verse 2",
+      "jp": "長い冬も　怖くはないよ",
+      "romaji": "Nagai fuyu mo kowaku wa nai yo",
+      "zh": "漫長的冬天 也一點都不讓人害怕"
+    },
+    {
+      "t": 104,
+      "section": "Outro",
+      "jp": "星が降る夜に...",
+      "romaji": "Hoshi ga furu yoru ni...",
+      "zh": "在星光灑落的夜晚..."
+    },
+    {
+      "t": 108,
+      "section": "Outro",
+      "jp": "Worth the wait... Forever...",
+      "romaji": "",
+      "zh": ""
+    }
+  ]
+}

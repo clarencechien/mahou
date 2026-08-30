@@ -1,0 +1,144 @@
+{
+  "id": "jaa-ne-mata-ne-cover",
+  "title": "じゃあね、またね",
+  "titleZh": "那，下次見囉",
+  "subtitle": "Jaa ne, Mata ne",
+  "audio": "music/Jaa_ne,_Mata_ne_(Cover).mp3",
+  "duration": 100,
+  "offset": 0,
+  "timing": {
+    "source": "gemini-3.6-flash+gemini-3.5-flash+ear",
+    "agreementMedianSec": 0,
+    "agreementWorstSec": 1,
+    "flagged": [],
+    "spotChecks": "5/5"
+  },
+  "lines": [
+    {
+      "t": 0,
+      "section": "Verse 1",
+      "jp": "パンパンに詰めた　スーツケース",
+      "romaji": "Panpan ni tsumeta suutsukeesu",
+      "zh": "塞得滿滿的 行李箱"
+    },
+    {
+      "t": 4,
+      "section": "Verse 1",
+      "jp": "重たいのは　お土産だけじゃないね",
+      "romaji": "Omotai no wa omiyage dake janai ne",
+      "zh": "沈重的 不只是伴手禮而已呢"
+    },
+    {
+      "t": 9,
+      "section": "Verse 1",
+      "jp": "この街の匂い　冬の空",
+      "romaji": "Kono machi no nioi fuyu no sora",
+      "zh": "這街道的氣味 冬天的天空"
+    },
+    {
+      "t": 14,
+      "section": "Verse 1",
+      "jp": "全部持って帰りたいけど",
+      "romaji": "Zenbu motte kaeritai kedo",
+      "zh": "雖然想把這一切全部帶回家"
+    },
+    {
+      "t": 19,
+      "section": "Pre-Chorus",
+      "jp": "改札の向こう　手を振るように",
+      "romaji": "Kaisatsu no mukou te wo furu you ni",
+      "zh": "就像在剪票口揮手一樣"
+    },
+    {
+      "t": 24,
+      "section": "Pre-Chorus",
+      "jp": "遠ざかる景色に　ありがとう",
+      "romaji": "Toozakaru keshiki ni arigatou",
+      "zh": "對著遠去的景色 說聲謝謝"
+    },
+    {
+      "t": 29,
+      "section": "Pre-Chorus",
+      "jp": "魔法の時間は　一度おやすみ",
+      "romaji": "Mahou no jikan wa ichido oyasumi",
+      "zh": "魔法的時間 先暫時道聲晚安"
+    },
+    {
+      "t": 36,
+      "section": "Chorus",
+      "jp": "じゃあ、またね",
+      "romaji": "Jaa, mata ne",
+      "zh": "那，下次見囉"
+    },
+    {
+      "t": 39,
+      "section": "Chorus",
+      "jp": "寂しくないよ　すぐ来るから",
+      "romaji": "Sabishikunai yo sugu kuru kara",
+      "zh": "不會寂寞喔 因為馬上就會再來"
+    },
+    {
+      "t": 44,
+      "section": "Chorus",
+      "jp": "約束しよう　次の季節",
+      "romaji": "Yakusoku shiyou tsugi no kisetsu",
+      "zh": "約定好吧 下一個季節"
+    },
+    {
+      "t": 47,
+      "section": "Chorus",
+      "jp": "桜が咲く頃　僕らは帰ってくる",
+      "romaji": "Sakura ga saku koro bokura wa kaette kuru",
+      "zh": "當櫻花盛開的時候 我們會回來的"
+    },
+    {
+      "t": 53,
+      "section": "Chorus",
+      "jp": "We will be back in Spring",
+      "romaji": "",
+      "zh": "我們春天就會回來"
+    },
+    {
+      "t": 55,
+      "section": "Chorus",
+      "jp": "待っていてね　Japan",
+      "romaji": "Matte ite ne Japan",
+      "zh": "要等著我們喔 日本"
+    },
+    {
+      "t": 63,
+      "section": "Verse 2",
+      "jp": "写真の中の　二人の笑顔",
+      "romaji": "Shashin no naka no futari no egao",
+      "zh": "照片裡 我們兩人的笑容"
+    },
+    {
+      "t": 67,
+      "section": "Verse 2",
+      "jp": "眺めながら　家に帰ろう",
+      "romaji": "Nagamunagara ie ni kaerou",
+      "zh": "一邊看著 一邊回家吧"
+    },
+    {
+      "t": 73,
+      "section": "Verse 2",
+      "jp": "次の旅の計画を　もう始めようか",
+      "romaji": "Tsugi no tabi no keikaku wo mou hajimeyou ka",
+      "zh": "是不是該開始計畫 下一次的旅程了呢？"
+    },
+    {
+      "t": 83,
+      "section": "Outro",
+      "jp": "See you again... Spring is coming...",
+      "romaji": "",
+      "zh": "再見囉……春天就要來了……"
+    },
+    {
+      "t": 91,
+      "section": "Outro",
+      "jp": "じゃあね、またね",
+      "romaji": "Jaa ne, mata ne",
+      "zh": "那，下次見囉"
+    }
+  ]
+}

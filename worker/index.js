@@ -3,12 +3,45 @@ export { RoomDO };
 
 const ROOM_RE = /^\/(ws|export|whereami)\/([A-Za-z0-9]{4,8})$/;
 
+// 背景模式的音檔要走這裡，不能直接讓靜態資源服務。
+// Cloudflare 的 assets handler 不理 Range，而瀏覽器拿到不支援 Range 的音檔會
+// 把它當成「這次載入不可跳轉」——點進度條完全沒反應，歌詞當然也跟不上。
+// 同樣的坑 family-feast 也踩過，解法一樣：自己讀出來、自己回 206。
+const AUDIO_PREFIX = '/audio/';
+async function serveAudio(req, env, url) {
+  const name = decodeURIComponent(url.pathname.slice(AUDIO_PREFIX.length));
+  // 只放行 public/ambient/music/ 底下的檔名，別讓路徑跑出去
+  if (!/^[\w .,'()\u4e00-\u9fff-]+\.mp3$/.test(name)) return new Response('bad name', { status: 400 });
+  const asset = new URL('/ambient/music/' + encodeURIComponent(name), url.origin);
+  const res = await env.ASSETS.fetch(new Request(asset.toString(), { headers: { 'accept-encoding': 'identity' } }));
+  if (!res.ok) return new Response('not found', { status: 404 });
+  const buf = await res.arrayBuffer();
+  const len = buf.byteLength;
+  const head = {
+    'content-type': 'audio/mpeg',
+    'accept-ranges': 'bytes',
+    'cache-control': 'public, max-age=31536000, immutable',
+  };
+  const range = req.headers.get('range');
+  const m = range && /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+  if (!m) return new Response(buf, { headers: { ...head, 'content-length': String(len) } });
+  let start = m[1] === '' ? len - Number(m[2]) : Number(m[1]);
+  let end = m[1] === '' || m[2] === '' ? len - 1 : Number(m[2]);
+  start = Math.max(0, Math.min(start, len - 1));
+  end = Math.max(start, Math.min(end, len - 1));
+  return new Response(buf.slice(start, end + 1), {
+    status: 206,
+    headers: { ...head, 'content-length': String(end - start + 1), 'content-range': `bytes ${start}-${end}/${len}` },
+  });
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     if (url.pathname === '/') {
       return Response.redirect(url.origin + '/host', 302);
     }
+    if (url.pathname.startsWith(AUDIO_PREFIX)) return serveAudio(req, env, url);
     const m = url.pathname.match(ROOM_RE);
     if (m) {
       const roomId = m[2].toUpperCase();
