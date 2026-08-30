@@ -117,21 +117,35 @@
   #dock {
     position: fixed; right: 22px; bottom: 22px; z-index: 3; display: none;
     width: 400px; max-width: calc(100vw - 44px);
-    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
-    backdrop-filter: blur(14px); box-shadow: 0 18px 50px rgba(0,0,0,.5); overflow: hidden;
-    /* 它要在旁邊掛一整場，預設就該淡一點。滑鼠移上去才變回全實心，
-       不然要調東西的時候看不清楚自己在按什麼。 */
-    opacity: var(--dockOpa, .78); transition: opacity .18s ease;
+    border-radius: 18px; overflow: hidden;
+    /* 它要在旁邊掛一整場，預設就該淡一點。
+       ⚠️ 淡的只有**卡片本身**（底、框、陰影、毛玻璃），字一律維持不透明——
+       整塊 opacity 一起降的話歌詞會先看不見，那是最不該淡掉的東西。
+       所以透明度是一個變數，只餵給幾個顏色的 alpha，可以一路拉到 0＝字浮在照片上。 */
+    background: rgba(10,14,24, calc(var(--dockA, .78) * .82));
+    border: 1px solid rgba(150,175,210, calc(var(--dockA, .78) * .3));
+    backdrop-filter: blur(calc(var(--dockA, .78) * 16px));
+    box-shadow: 0 18px 50px rgba(0,0,0, calc(var(--dockA, .78) * .5));
+    /* 卡片愈透明，字愈需要自己的底。這層陰影在卡片實心時幾乎看不出來。 */
+    text-shadow: 0 1px 5px rgba(0,0,0, calc(.9 - var(--dockA, .78) * .5));
+    transition: background .18s ease, border-color .18s ease, box-shadow .18s ease;
   }
-  #dock:hover, #dock:focus-within { opacity: 1; }
+  /* 滑鼠移上去才變回全實心，不然要調東西的時候看不清楚自己在按什麼 */
+  #dock:hover, #dock:focus-within { --dockA: 1; }
   /* widget 的抬頭：歌名不是主角，當下那句歌詞才是。
      所以歌名縮小、變成跟時間戳同一階的灰，日文副標整個拿掉，按鈕平常淡著。 */
   body.m-widget #dockHead { padding: 10px 14px 7px; gap: 10px; }
   body.m-widget #dockTitle b { font-size: .82rem; font-weight: 600; color: var(--dim); letter-spacing: .02em; }
   body.m-widget #dockTitle span { display: none; }
-  body.m-widget #dockHead .ico, body.m-widget #dockFoot { opacity: .42; transition: opacity .18s ease; }
-  #dock:hover #dockHead .ico, #dock:hover #dockFoot,
-  #dock:focus-within #dockHead .ico, #dock:focus-within #dockFoot { opacity: 1; }
+  body.m-widget #dockHead .ico, body.m-widget #dockFoot > * { opacity: .42; transition: opacity .18s ease; }
+  #dock:hover #dockHead .ico, #dock:hover #dockFoot > *,
+  #dock:focus-within #dockHead .ico, #dock:focus-within #dockFoot > * { opacity: 1; }
+  /* 滑桿推到最左邊就真的只剩歌詞浮在照片上：卡片以外的東西（歌名、按鈕、
+     進度條、底下那排）跟著退場。--dockA 低於 1/3 才開始退，所以預設的 0.78
+     跟最右邊的 1 完全一樣，看不出差別。縮小模式不套——那時候歌名是唯一的內容。 */
+  body.m-widget #dockHead, body.m-widget #dockTrack, body.m-widget #dockFoot {
+    opacity: clamp(0, calc(var(--dockA, .78) * 3), 1); transition: opacity .18s ease;
+  }
   #dockOpa { width: 62px; margin-left: auto; accent-color: var(--accent); }
   body.m-mini #dock, body.m-widget #dock { display: block; }
   body.m-mini #dock { width: auto; }
@@ -141,6 +155,11 @@
   #dockTitle span { display: block; color: var(--dim); font-size: .76rem; letter-spacing: .1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.m-mini #dockTitle span, body.m-mini #dockBody, body.m-mini #dockTrack { display: none; }
   #dockTrack { height: 3px; background: rgba(150,175,210,.18); }
+  /* 卡片裡的小底（按鈕、分段控制、進度條的槽）也跟著濃淡走，
+     不然把卡片拉到 0 之後會剩下一堆浮在照片上的圓角方塊 */
+  #dock .ico, #dock .seg { background: rgba(120,150,190, calc(var(--dockA, .78) * .16)); }
+  #dock .ico:hover { background: rgba(120,150,190,.24); }
+  #dock #dockTrack { background: rgba(150,175,210, calc(var(--dockA, .78) * .24)); }
   #dockTrack i { display: block; height: 100%; width: 0%; background: var(--accent); }
   #dockBody { max-height: 46vh; overflow-y: auto; padding: 12px 16px 14px; scrollbar-width: thin; }
   /* widget 的跟隨模式只留當下那一句：它是背景，不是歌詞本。
@@ -242,7 +261,7 @@
       <button data-l="follow">跟隨歌詞</button>
       <button data-l="all">完整歌詞</button>
     </div>
-    <input type="range" id="dockOpa" min="0.3" max="1" step="0.02" value="0.78" title="透明度（[ ]）">
+    <input type="range" id="dockOpa" min="0" max="1" step="0.02" value="0.78" title="卡片底的濃淡（[ ]）－ 字不會跟著淡">
     <button class="ico" id="dMini" title="只留歌名">▁</button>
   </div>
 </div>
@@ -253,7 +272,7 @@
   <h1>背景模式</h1>
   <p id="gateNote">載入中…</p>
   <button id="gateGo">▶ 開始播放</button>
-  <p style="font-size:.78rem; opacity:.6">空白鍵 播放／暫停・← → 換歌・1 2 3 換歌單<br>S 舞台・W widget・M 縮小・L 歌詞模式・B 換背景・F 全螢幕・[ ] 透明度</p>
+  <p style="font-size:.78rem; opacity:.6">空白鍵 播放／暫停・← → 換歌・1 2 3 換歌單<br>S 舞台・W widget・M 縮小・L 歌詞模式・B 換背景・F 全螢幕・[ ] 卡片濃淡</p>
 </div>
 
 <audio id="au" preload="metadata"></audio>
@@ -279,20 +298,55 @@
   // ---- 背景輪播 ----
   // 兩層交叉淡入。圖是直接連對方圖床的，載不到就跳過那張，畫面不會空白。
   const layers = [$('#bgA'), $('#bgB')];
-  let layerTop = 0, bgPool = [], bgAt = -1, bgTimer = 0, bgIdx = 0;
-  function bgShow(url) {
+  let layerTop = 0, bgPool = [], bgAt = -1, bgTimer = 0, bgIdx = 0, bgCur = null;
+  // 清單裡可以是一條網址，也可以是 { url, trim: [x, y, 寬, 高] }（比例）。
+  // trim 是給「把直式照片貼在白底上」的那種圖用的——民宿相簿九張裡有五張是這樣，
+  // 左右各一大條純白，不切的話電視上就是照片浮在中間、兩側刷白。
+  const bgUrl = (it) => (typeof it === 'string' ? it : it && it.url) || '';
+  const bgTrim = (it) => (it && typeof it === 'object' && it.trim) || null;
+  // 把裁切框鋪成 contain 或 cover。背景圖沒辦法直接指定「只顯示這一塊」，
+  // 所以自己算：整張圖要放多大、要往哪邊推，才會剛好只露出那一框。
+  function layerFit(el, url, iw, ih, trim, mode) {
+    el.style.backgroundImage = `url("${url}")`;
+    if (!trim) { el.style.backgroundSize = ''; el.style.backgroundPosition = ''; el.style.clipPath = ''; return; }
+    const W = innerWidth, H = innerHeight;
+    const cx = iw * trim[0], cy = ih * trim[1], cw = iw * trim[2], ch = ih * trim[3];
+    const s = mode === 'cover' ? Math.max(W / cw, H / ch) : Math.min(W / cw, H / ch);
+    const dw = cw * s, dh = ch * s, ox = (W - dw) / 2, oy = (H - dh) / 2;
+    el.style.backgroundSize = `${iw * s}px ${ih * s}px`;
+    el.style.backgroundPosition = `${ox - cx * s}px ${oy - cy * s}px`;
+    // ⚠️ 只挪位置是不夠的。background 畫的是**整張圖**，被裁掉的白邊還是會畫在
+    // 框框的左右兩側——結果照片是對的，兩邊照樣刷白。要再切一刀把框外的蓋掉。
+    const px = (n) => Math.max(0, n).toFixed(1) + 'px';
+    el.style.clipPath = `inset(${px(oy)} ${px(W - ox - dw)} ${px(H - oy - dh)} ${px(ox)})`;
+  }
+  function dressLayer(el, item, img) {
+    const url = bgUrl(item), trim = bgTrim(item);
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    // ⚠️ 長寬比要用**裁完**的框算。白底那五張原圖是 1280×853 的橫式，
+    // 照原尺寸判斷就會被當成橫的鋪滿，裡面那張直式照片還是浮在中間。
+    const cw = iw * (trim ? trim[2] : 1), ch = ih * (trim ? trim[3] : 1);
+    // 鋪滿（cover）會裁掉多少？看得到的比例是 min(圖的長寬比 ÷ 螢幕, 螢幕 ÷ 圖)。
+    //   3:2 的橫照放 16:9 → 0.84，少掉 16%，橫照裁一點沒關係，鋪滿比較好看
+    //   2:3 的直照放 16:9 → 0.38，少掉六成，人臉直接不見
+    // 界線放 0.72：裁掉超過約三成就不裁，改成完整顯示＋左右留那塊灰底。
+    // ⚠️ 不能用「比螢幕瘦就不裁」——3:2 的橫照也比 16:9 瘦，那樣連橫照都會留邊。
+    const a = cw / ch, sc = innerWidth / innerHeight;
+    const fit = Math.min(a / sc, sc / a) < 0.72;
+    el.classList.toggle('fit', fit);
+    layerFit(el.querySelector('.main'), url, iw, ih, trim, fit ? 'contain' : 'cover');
+    layerFit(el.querySelector('.fill'), url, iw, ih, trim, 'cover');
+  }
+  function bgShow(item) {
+    const url = bgUrl(item);
     const img = new Image();
     img.onload = () => {
       const next = layers[1 - layerTop];
-      next.querySelector('.main').style.backgroundImage = `url("${url}")`;
-      next.querySelector('.fill').style.backgroundImage = `url("${url}")`;
-      // 比螢幕「瘦」的就別裁了——直式照片橫著切等於把人切掉。0.92 是給
-      // 幾乎方形的照片一點寬容，那種裁一點點反而比留兩條邊好看。
-      const shot = img.naturalWidth / img.naturalHeight;
-      next.classList.toggle('fit', shot < (innerWidth / innerHeight) * 0.92);
+      dressLayer(next, item, img);
       next.classList.add('on');
       layers[layerTop].classList.remove('on');
       layerTop = 1 - layerTop;
+      bgCur = { item, img };
     };
     img.onerror = () => bgNext();          // 這張掛了就換下一張，不要卡住
     img.src = url;
@@ -302,7 +356,7 @@
     bgAt = (bgAt + 1) % bgPool.length;
     bgShow(bgPool[bgAt]);
     const nx = bgPool[(bgAt + 1) % bgPool.length];   // 下一張先抓，切換才不會空一拍
-    if (nx) new Image().src = nx;
+    if (nx) new Image().src = bgUrl(nx);
   }
   // 背景來源有兩種：固定網址清單（場地官網），或一份清單檔（自己挑過的相簿）。
   // 相簿的清單放本機、圖片本體讀 family-feast 的 /media/——都是自己的東西，
@@ -474,10 +528,11 @@
     $('#romaji').style.opacity = on ? 1 : .45;
     store.set('romaji', on ? '1' : '0');
   }
-  // 透明度：widget／縮小掛在旁邊一整場，太實心會一直搶眼睛
+  // 卡片底的濃淡：widget／縮小掛在旁邊一整場，太實心會一直搶眼睛。
+  // 只動底、框、陰影、毛玻璃，字不跟著淡，所以可以一路拉到 0（字直接浮在照片上）。
   function setOpa(v) {
-    opa = Math.max(0.3, Math.min(1, +v || 0.78));
-    document.documentElement.style.setProperty('--dockOpa', opa.toFixed(2));
+    opa = Math.max(0, Math.min(1, isFinite(+v) ? +v : 0.78));
+    document.documentElement.style.setProperty('--dockA', opa.toFixed(2));
     $('#dockOpa').value = opa;
     store.set('opa', opa.toFixed(2));
   }
@@ -498,7 +553,11 @@
     if (mode === 'stage') idleTimer = setTimeout(() => document.body.classList.add('idle'), 3500);
   }
   ['mousemove', 'keydown', 'pointerdown'].forEach((e) => addEventListener(e, idlePoke));
-  addEventListener('resize', () => { if (active >= 0) paint(active); });
+  addEventListener('resize', () => {
+    if (active >= 0) paint(active);
+    // trim 的 background-size／position 是算成 px 的，視窗一變就要重算
+    if (bgCur && bgTrim(bgCur.item)) dressLayer(layers[layerTop], bgCur.item, bgCur.img);
+  });
 
   // ---- 綁事件 ----
   const toggle = () => (au.paused ? au.play().catch(() => {}) : au.pause());
