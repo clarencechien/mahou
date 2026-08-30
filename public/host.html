@@ -470,6 +470,9 @@
         <button id="tReset">回預設</button>
         <button id="tCopy">複製設定</button>
       </div>
+      <div style="color:#475569; font-size:.7rem; text-align:center; padding:6px 0 2px">
+        點面板外面、按 Esc 都可以關・按 <b style="color:#7dd3fc">T</b> 隨時開關
+      </div>
     </div>
     <div id="brief">
       <div class="box">
@@ -1470,13 +1473,13 @@
   // 實測：1 格與 8 格同樣 4.3ms —— 分割數不是成本，總像素才是。
   // ---- 手感旋鈕：定案速度前先讓人現場調 ----
   const TUNE_DEF = { speed: 3.2, tex: 3.5, fov: 1.0, dur: 60,
-                     huntDiff: 1, huntSec: 45, huntTheme: 0, huntBlock: 3,
+                     huntDiff: 1, huntSec: 45, huntTheme: 0, huntBlock: 1,
                      huntRounds: 8, huntMax: 10, huntCrop: 60,
                      huntSize: 0, huntDepth: 0, huntEdge: 0, huntBlink: 0,   // 0 = 照關卡曲線
                      cansRefill: 4.5, cansSec: 45, cansFun: 50 };
   // 改預設值的時候把 TUNE_VER 加一：舊瀏覽器存的設定會蓋掉新預設，
   // 之前就中過——像素大小預設早就改成 3 了，現場那台還是拿舊的 6 在跑，看起來像沒改到。
-  const TUNE_VER = 2;
+  const TUNE_VER = 3;
   const TUNE = Object.assign({}, TUNE_DEF, (() => {
     try {
       const st = JSON.parse(localStorage.getItem('mahou-tune') || '{}');
@@ -1553,10 +1556,33 @@
     catch (e) { prompt('把這行貼給我：', txt); }
     setTimeout(() => { $('#tCopy').textContent = '複製設定'; }, 1600);
   });
+  function closeTune() {
+    $('#tune').classList.remove('on');
+    $('#tuneBtn').classList.remove('on');
+  }
   $('#tuneBtn').addEventListener('click', () => {
     setView('game');                       // 面板疊在遊戲畫面上，要先切回去才看得到
     const on = $('#tune').classList.toggle('on');
     $('#tuneBtn').classList.toggle('on', on);
+  });
+  // 點面板外面就收起來。原本要「切回測試 → 再按一次 ⚙︎」才關得掉，
+  // 現場調個滑桿要來回兩次檢視切換，太煩。
+  // 用 pointerdown 而不是 click：拖滑桿拖到面板外面放開時，click 的 target 會是外面，
+  // 面板會在你剛調完的瞬間消失。
+  addEventListener('pointerdown', (e) => {
+    if (!$('#tune').classList.contains('on')) return;
+    if (e.target.closest('#tune') || e.target.closest('#tuneBtn')) return;
+    closeTune();
+  }, true);
+  addEventListener('keydown', (e) => {
+    if (e.target.closest && e.target.closest('input, select, textarea, button')) return;
+    if (e.key === 'Escape') { closeTune(); return; }
+    // T 直接開關面板。⚙︎ 那顆在「測試」檢視裡，關掉之後要再調就得「測試 → ⚙︎」繞一圈；
+    // 現場一邊玩一邊調的時候這個來回很煩。
+    if (e.key === 't' || e.key === 'T') {
+      if ($('#tune').classList.contains('on')) closeTune();
+      else { setView('game'); $('#tune').classList.add('on'); $('#tuneBtn').classList.add('on'); }
+    }
   });
   renderTune();
 
@@ -1954,7 +1980,7 @@
       blink: fix(TUNE.huntBlink, t.blink * Math.sqrt(d)),
     };
   }
-  const huntBlock = () => Math.max(1, Math.min(16, TUNE.huntBlock | 0 || 3));
+  const huntBlock = () => Math.max(1, Math.min(16, TUNE.huntBlock | 0 || 1));
 
   // 預載名畫：說明卡打開時就開始抓，載不到用程序化抽象畫
   // 說明卡一開就把整場要用的畫全部抓下來，不是只抓第一張。
