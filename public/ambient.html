@@ -159,6 +159,13 @@
   #dockTitle b { display: block; font-size: 1rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #dockTitle span { display: block; color: var(--dim); font-size: .76rem; letter-spacing: .1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.m-mini #dockTitle span, body.m-mini #dockBody, body.m-mini #dockTrack { display: none; }
+  /* 縮小模式就是一顆只寫著歌名的藥丸。底下那排（跟隨歌詞／完整歌詞）在這裡
+     沒有意義——根本沒有歌詞可看——整排收掉。
+     濃淡拉到最低時連播放鈕都退場，真的只剩歌名；滑鼠移上去全部回來。 */
+  body.m-mini #dockFoot { display: none; }
+  body.m-mini #dockHead .ico {
+    opacity: clamp(0, calc(var(--dockA, .78) * 3), 1); transition: opacity .18s ease;
+  }
   #dockTrack { height: 3px; background: rgba(150,175,210,.18); }
   /* 卡片裡的小底（按鈕、分段控制、進度條的槽）也跟著濃淡走，
      不然把卡片拉到 0 之後會剩下一堆浮在照片上的圓角方塊 */
@@ -277,7 +284,7 @@
   <h1>背景模式</h1>
   <p id="gateNote">載入中…</p>
   <button id="gateGo">▶ 開始播放</button>
-  <p style="font-size:.78rem; opacity:.6">空白鍵 播放／暫停・← → 換歌・1 2 3 換歌單<br>S 舞台・W widget・M 縮小・L 歌詞模式・B 換背景・F 全螢幕・[ ] 卡片濃淡</p>
+  <p style="font-size:.78rem; opacity:.6">空白鍵 播放／暫停・← → 換歌・1 2 3 換歌單<br>S 舞台・W widget・M 縮小／還原・L 歌詞模式・B 換背景・F 全螢幕・[ ] 卡片濃淡</p>
 </div>
 
 <audio id="au" preload="metadata"></audio>
@@ -601,7 +608,9 @@
     else if (e.key === 'ArrowLeft') loadSong(songIdx - 1, !au.paused);
     else if (k === 's') setMode('stage');
     else if (k === 'w') setMode('widget');
-    else if (k === 'm') setMode('mini');
+    // ⚠️ M 一定要是切換。縮小之後底下那排收起來了，▁ 鈕不在畫面上，
+    // 濃淡再拉到 0 的話只剩一個歌名——沒有這個切換就得繞「⤢ 回舞台 → 按 Widget」才回得來。
+    else if (k === 'm') setMode(mode === 'mini' ? 'widget' : 'mini');
     else if (k === 'l') setLyrMode(lyrMode === 'follow' ? 'all' : 'follow');
     else if (k === 'r') setRomaji(!romaji);
     else if (k === 'f') $('#fs').click();
