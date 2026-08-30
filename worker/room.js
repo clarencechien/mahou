@@ -15,7 +15,33 @@ const MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const FREEZE_GRACE_MS = 250;   // 轉身後給人類的煞車時間，超過才算犯規
 const MEANINGFUL = new Set(['join', 'deviceUpdate', 'tap', 'spamStart', 'spamDone', 'shake', 'batch', 'stage',
   'colorRound', 'colorPick', 'colorEnd', 'skiStart', 'skiRun', 'skiDone',
-  'freezeStart', 'freezeRound', 'freezeTurn', 'freezeAct', 'freezeEnd', 'skiEnd', 'ready']);
+  'freezeStart', 'freezeRound', 'freezeTurn', 'freezeAct', 'freezeEnd', 'skiEnd', 'ready',
+  'pointer', 'stampAct', 'huntRound', 'huntRoundEnd', 'huntEnd',
+  'cansStart', 'canAim', 'canThrow', 'canScoreEvt', 'cansLevel', 'cansEnd']);
+
+// 變色龍藏匿位置。⚠️ 跟 public/engine/paint.js 的 P.place 是同一份演算法，
+// 改一邊一定要改另一邊——DO 用它判定命中，host 用它渲染，位置必須一模一樣。
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function placeChams(seed, count) {
+  const rnd = mulberry32(seed);
+  const out = [];
+  let guard = 0;
+  while (out.length < count && guard++ < 400) {
+    const x = 0.08 + rnd() * 0.84, y = 0.24 + rnd() * 0.70;
+    let ok = true;
+    for (const p of out) { if (Math.abs(p.x - x) < 0.14 && Math.abs(p.y - y) < 0.16) { ok = false; break; } }
+    if (ok) out.push({ x, y, pose: Math.floor(rnd() * 5) });
+  }
+  return out;
+}
 
 export class RoomDO {
   constructor(state, env) {
@@ -28,6 +54,8 @@ export class RoomDO {
     this.colorRound = null; // {round, deltaE, targetIdx, tShow, picks:Set, correctN}
     this.freeze = null;     // {round, cmd, tGreen, tTurn, players:Map<id,{progress,violations,done}>}
     this.ski = null;        // {startAt, duration, seed, results:Map}
+    this.hunt = null;       // {round, chams, hNorm, tEnd, scores:Map, claims:Map}
+    this.cans = null;       // {level, scores:Map}
     this.events = [];
     this.createdAt = Date.now();
     this.lastActivity = Date.now();
@@ -107,6 +135,12 @@ export class RoomDO {
     const now = Date.now();
     if (now - this.lastActivity > IDLE_LIMIT_MS) this.endRoom('idle', 4001);
     else if (now - this.createdAt > MAX_AGE_MS) this.endRoom('max-age', 4001);
+  }
+
+  huntScores() {
+    return [...this.hunt.scores.entries()]
+      .map(([id, sc]) => ({ clientId: id, name: this.clients.get(id)?.name || '?', score: sc }))
+      .sort((a, b) => b.score - a.score);
   }
 
   endRoom(reason, code = 4000) {
@@ -410,6 +444,155 @@ export class RoomDO {
         this.log({ type: 'skiEnd', rank });
         this.broadcastAll({ type: 'skiEnd', rank });
         this.ski = null;
+        return;
+      }
+
+      // ---- 遊戲三：名畫變色龍（搶快）----
+      // host 驅動回合；DO 用種子長出跟 host 一樣的位置，只負責命中判定與搶快結算。
+      case 'huntRound': {
+        if (ws._role !== 'host') return;
+        const seed = (Math.random() * 0x7fffffff) | 0;
+        const count = Math.max(1, Math.min(10, msg.count | 0 || 4));
+        const hNorm = Math.max(0.04, Math.min(0.3, +msg.hNorm || 0.12));
+        const duration = Math.min(msg.duration | 0 || 45000, 120000);
+        const startAt = now + 3000;
+        const chams = placeChams(seed, count).map((c) => ({ ...c, found: null }));
+        this.hunt = this.hunt && msg.round > 1
+          ? { ...this.hunt, round: msg.round, chams, hNorm, tEnd: startAt + duration, claims: new Map() }
+          : { round: msg.round || 1, chams, hNorm, tEnd: startAt + duration, scores: new Map(), claims: new Map() };
+        this.log({ type: 'huntRound', round: this.hunt.round, seed, count, hNorm, duration, artIndex: msg.artIndex });
+        this.broadcastAll({ type: 'huntRound', round: this.hunt.round, seed, count, hNorm, duration, startAt,
+                            artIndex: msg.artIndex, totalRounds: msg.totalRounds });
+        return;
+      }
+
+      case 'pointer': {                                // 15Hz 游標，只轉發不記錄
+        const c = this.clients.get(ws._clientId);
+        if (!c) return;
+        this.toHosts({ type: 'pointer', clientId: ws._clientId, name: c.name, x: msg.x, y: msg.y });
+        return;
+      }
+
+      case 'stampAct': {
+        const c = this.clients.get(ws._clientId);
+        const h = this.hunt;
+        if (!c || !h) return;
+        const tc = typeof msg.tClient === 'number' ? msg.tClient : now;
+        if (now > h.tEnd + 500) return;
+        // 命中：x 半寬 0.30h、上緣 y−1.15h（含派對容忍值），先中先審
+        let hitIdx = -1;
+        for (let i = 0; i < h.chams.length; i++) {
+          const ch = h.chams[i];
+          if (ch.found !== null) continue;
+          if (Math.abs(msg.x - ch.x) > h.hNorm * 0.30 * 1.2) continue;
+          if (msg.y < ch.y - h.hNorm * 1.15 || msg.y > ch.y + 0.03) continue;
+          hitIdx = i; break;
+        }
+        this.log({ type: 'stampAct', clientId: ws._clientId, x: msg.x, y: msg.y, tClient: tc,
+                   tServerRecv: now, hit: hitIdx });
+        if (hitIdx < 0) {
+          this.send(ws, { type: 'huntMiss', x: msg.x, y: msg.y });
+          this.toHosts({ type: 'huntMiss', clientId: ws._clientId, x: msg.x, y: msg.y });
+          return;
+        }
+        // 搶快結算窗：第一筆命中後收 250ms，比 client 時間戳——網路快慢不影響輸贏
+        let claim = h.claims.get(hitIdx);
+        if (!claim) {
+          claim = { stamps: [] };
+          h.claims.set(hitIdx, claim);
+          claim.timer = setTimeout(() => {
+            const hh = this.hunt;
+            if (!hh || hh.claims.get(hitIdx) !== claim) return;
+            const ch = hh.chams[hitIdx];
+            if (!ch || ch.found !== null) return;
+            claim.stamps.sort((a, b) => a.t - b.t);
+            const winner = claim.stamps[0];
+            ch.found = winner.id;
+            hh.scores.set(winner.id, (hh.scores.get(winner.id) || 0) + 2);
+            const wc = this.clients.get(winner.id);
+            this.log({ type: 'huntFound', round: hh.round, idx: hitIdx, clientId: winner.id,
+                       contenders: claim.stamps.length });
+            this.broadcastAll({ type: 'huntFound', idx: hitIdx, x: ch.x, y: ch.y,
+                                clientId: winner.id, name: wc ? wc.name : '?',
+                                score: hh.scores.get(winner.id),
+                                left: hh.chams.filter((q) => q.found === null).length });
+          }, 250);
+        }
+        claim.stamps.push({ id: ws._clientId, t: tc });
+        return;
+      }
+
+      case 'huntRoundEnd': {                           // host 的回合計時到
+        if (ws._role !== 'host' || !this.hunt) return;
+        const h = this.hunt;
+        const left = h.chams.map((c2, i) => ({ i, ...c2 })).filter((c2) => c2.found === null);
+        this.log({ type: 'huntRoundEnd', round: h.round, left: left.length });
+        this.broadcastAll({ type: 'huntRoundDone', round: h.round,
+                            reveal: left.map((c2) => ({ idx: c2.i, x: c2.x, y: c2.y })),
+                            scores: this.huntScores() });
+        return;
+      }
+
+      case 'huntEnd': {
+        if (ws._role !== 'host' || !this.hunt) return;
+        const rank = this.huntScores();
+        this.log({ type: 'huntEnd', rank });
+        this.broadcastAll({ type: 'huntEnd', rank });
+        for (const cl of this.hunt.claims.values()) clearTimeout(cl.timer);
+        this.hunt = null;
+        return;
+      }
+
+      // ---- 遊戲四：砸罐子（全員齊砸，host 模擬物理、DO 記帳）----
+      case 'cansStart': {
+        if (ws._role !== 'host') return;
+        this.cans = { level: 1, scores: new Map() };
+        const startAt = now + 4000;
+        this.log({ type: 'cansStart', startAt });
+        this.broadcastAll({ type: 'cansStart', startAt, refill: msg.refill || 4500, levels: msg.levels || 5 });
+        return;
+      }
+      case 'canAim': {                                 // 瞄準箭頭，只轉發
+        const c = this.clients.get(ws._clientId);
+        if (!c) return;
+        this.toHosts({ type: 'canAim', clientId: ws._clientId, angle: msg.angle, active: !!msg.active });
+        return;
+      }
+      case 'canThrow': {
+        const c = this.clients.get(ws._clientId);
+        if (!c || !this.cans) return;
+        const uplinkMs = typeof msg.tClient === 'number' ? now - msg.tClient : null;
+        this.log({ type: 'canThrow', clientId: ws._clientId, angle: msg.angle, power: msg.power,
+                   mode: msg.mode, tClient: msg.tClient, tServerRecv: now, uplinkMs });
+        this.toHosts({ type: 'canThrow', clientId: ws._clientId, name: c.name,
+                       angle: msg.angle, power: msg.power });
+        return;
+      }
+      case 'canScoreEvt': {                            // host 模擬出來的得分事件
+        if (ws._role !== 'host' || !this.cans) return;
+        const id = msg.clientId;
+        if (id) this.cans.scores.set(id, (this.cans.scores.get(id) || 0) + (msg.pts | 0));
+        this.log({ type: 'canScoreEvt', clientId: id, pts: msg.pts, kind: msg.kind, level: this.cans.level });
+        const c = id ? this.clients.get(id) : null;
+        this.broadcastAll({ type: 'canScore', clientId: id, name: c ? c.name : '?',
+                            pts: msg.pts, kind: msg.kind, total: id ? this.cans.scores.get(id) : 0 });
+        return;
+      }
+      case 'cansLevel': {
+        if (ws._role !== 'host' || !this.cans) return;
+        this.cans.level = msg.level | 0;
+        this.log({ type: 'cansLevel', level: this.cans.level });
+        this.broadcastAll({ type: 'cansLevel', level: this.cans.level, levels: msg.levels || 5 });
+        return;
+      }
+      case 'cansEnd': {
+        if (ws._role !== 'host' || !this.cans) return;
+        const rank = [...this.cans.scores.entries()]
+          .map(([id, sc]) => ({ clientId: id, name: this.clients.get(id)?.name || '?', score: sc }))
+          .sort((a, b) => b.score - a.score);
+        this.log({ type: 'cansEnd', rank });
+        this.broadcastAll({ type: 'cansEnd', rank });
+        this.cans = null;
         return;
       }
 

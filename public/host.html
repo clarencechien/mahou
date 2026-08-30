@@ -164,6 +164,19 @@
   .paneTag .d { font-family: ui-monospace, monospace; font-weight: 600; color: #cbd5e1; }
   .paneTag .cb { color: #fda4af; font-weight: 800; }
 
+  /* 變色龍：每人一個游標（DOM，名字永遠清晰——鐵律 3） */
+  .hcur { position: absolute; pointer-events: none; z-index: 4; transform: translate(-50%, -50%); transition: opacity .3s; }
+  .hcur .ring { width: 30px; height: 30px; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 0 0 2px rgba(0,0,0,.55), inset 0 0 0 2px rgba(0,0,0,.55); margin: 0 auto; }
+  .hcur .dot2 { position: absolute; left: 50%; top: 15px; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: #fff; }
+  .hcur .nm { margin-top: 3px; text-align: center; font-size: .82rem; font-weight: 800; text-shadow: 0 1px 4px rgba(0,0,0,.9); white-space: nowrap; }
+  .hcur.cool { opacity: .35; filter: grayscale(1); }
+  .hstamp { position: absolute; z-index: 3; transform: translate(-50%, -50%); pointer-events: none;
+    font-size: .85rem; font-weight: 800; background: rgba(6,10,20,.8); border-radius: 8px; padding: 3px 8px;
+    border: 2px solid #22c55e; }
+  .floatPts { position: absolute; z-index: 5; transform: translate(-50%, -50%); pointer-events: none;
+    font-weight: 900; font-size: 1.1rem; text-shadow: 0 2px 6px rgba(0,0,0,.9); animation: floatUp 1.3s forwards; }
+  @keyframes floatUp { from { opacity: 1; margin-top: 0; } to { opacity: 0; margin-top: -60px; } }
+
   #joinCard { cursor: pointer; transition: transform .25s cubic-bezier(.2,1.2,.4,1), opacity .25s; }
   #joinCard .hintline { color: #64748b; font-size: .7rem; margin-top: 3px; }
   #qrBig {
@@ -247,6 +260,8 @@
 <div id="gameView" class="view on">
   <div id="gameWrap">
     <canvas id="gameCv"></canvas>
+    <canvas id="huntCv" width="960" height="540" style="display:none; width:100%; height:100%; object-fit:contain; image-rendering:pixelated"></canvas>
+    <canvas id="cansCv" width="960" height="600" style="display:none; width:100%; height:100%; object-fit:contain; image-rendering:pixelated"></canvas>
     <div id="nameLayer" class="ovl" style="inset:0"></div>
     <div id="hudTop" class="ovl">
       <div id="hudRound">ROUND 00/10</div>
@@ -293,6 +308,24 @@
         <div class="lab"><span>廣角</span><b id="tvFov">1.0×</b></div>
         <input type="range" id="tFov" min="0.6" max="1.6" step="0.05" value="1">
         <div class="d">越廣角，兩側掃得越兇；太廣會像魚眼。</div>
+      </div>
+      <div class="k" style="border-top:1px solid #24365a; padding-top:10px">
+        <div class="lab"><span>變色龍難度</span><b id="tvHuntDiff">1.0×</b></div>
+        <input type="range" id="tHuntDiff" min="0.6" max="1.6" step="0.05" value="1">
+        <div class="d">越高越難找（更小、更平、更少破綻）。長輩多就調低。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>變色龍每輪秒數</span><b id="tvHuntSec">45 秒</b></div>
+        <input type="range" id="tHuntSec" min="20" max="90" step="5" value="45">
+      </div>
+      <div class="k" style="border-top:1px solid #24365a; padding-top:10px">
+        <div class="lab"><span>砸罐子回充秒數</span><b id="tvCansRefill">4.5 秒</b></div>
+        <input type="range" id="tCansRefill" min="2" max="8" step="0.5" value="4.5">
+        <div class="d">每幾秒補一顆球。人多調長一點，畫面才不會亂成一團。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>砸罐子每關秒數</span><b id="tvCansSec">45 秒</b></div>
+        <input type="range" id="tCansSec" min="20" max="90" step="5" value="45">
       </div>
       <div class="btns">
         <button id="tReset">回預設</button>
@@ -392,6 +425,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="/engine/chara.js"></script>
 <script src="/engine/course.js"></script>
+<script src="/engine/paint.js"></script>
+<script src="/engine/cans.js"></script>
 <script src="/engine/sfx.js"></script>
 <script src="/engine/mode7.js"></script>
 <script src="/shared.js"></script>
@@ -641,7 +676,10 @@
 
   // 遊戲檢視的開始鈕＝管理檢視那顆的同義詞
   // 遊戲選擇：大螢幕上直接切，不用回管理分頁
-  const GAMES = [{ key: 'freeze', label: '木頭人' }, { key: 'ski', label: '滑雪下坡' }];
+  const GAMES = [
+    { key: 'freeze', label: '木頭人' }, { key: 'ski', label: '滑雪下坡' },
+    { key: 'hunt', label: '名畫變色龍' }, { key: 'cans', label: '砸罐子' },
+  ];
   let pickedGame = 0;
   function renderGamePick() {
     $('#gamePick').innerHTML = GAMES.map((g, i) =>
@@ -674,6 +712,26 @@
         { ic: '🔥', h: '連三次跳台＝超加速', d: '跳台往上抬手機。連中三次解鎖更高的速度上限，撞到或跳空就從頭算' },
       ],
     },
+  };
+  BRIEF.hunt = {
+    title: '名畫變色龍',
+    lead: '大家一起找・誰先蓋到就是誰的',
+    say: '名畫裡躲了幾隻變色龍。用手機移動你的游標，找到了就按蓋章，誰先蓋到就是誰的。蓋錯的話會被罰兩秒不能動。眼睛放亮，牠們會眨眼睛。',
+    rules: [
+      { ic: '🔍', h: '找變色龍', d: '牠們偽裝成畫的一部分，但會眨眼睛' },
+      { ic: '📱', h: '手機當雷射筆', d: '揮手機移游標；會漂就按歸零，也可以切成觸控板' },
+      { ic: '🖐', h: '蓋章搶快', d: '誰先蓋到就是誰的；蓋錯罰 2 秒不能動' },
+    ],
+  };
+  BRIEF.cans = {
+    title: '砸罐子',
+    lead: '全員齊砸同一座塔・砸壞什麼算誰的',
+    say: '大家一起砸同一座塔。傾斜手機瞄準，看到自己顏色的箭頭，用力往前揮就把球丟出去。砸壞的東西就是你的分數，小心炸彈會連環爆。',
+    rules: [
+      { ic: '🎯', h: '傾斜瞄準', d: '左右傾斜調角度，電視上有你顏色的箭頭' },
+      { ic: '💪', h: '用力揮＝丟球', d: '球每幾秒補一顆；也可以用拉弓模式拖著丟' },
+      { ic: '💣', h: '砸壞算你的', d: '每一下都是你的分數，炸彈會連環爆整片算你的' },
+    ],
   };
   let briefOpen = false;
   const readySet = new Set();
@@ -724,6 +782,7 @@
     // 先把手機切到這一關，大家才能在說明期間設好感應器
     sock.send({ type: 'stage', stage: g.key });
     setActiveBtn(g.key);
+    if (g.key === 'hunt') huntPreload();       // 說明期間預載名畫，開打不用等
     speak(b.say);
   }
   function closeBrief() {
@@ -736,7 +795,10 @@
   $('#briefGo').addEventListener('click', () => {
     closeBrief();
     SFX.go();
-    if (GAMES[pickedGame].key === 'ski') $('#skiStartBtn').click();
+    const key = GAMES[pickedGame].key;
+    if (key === 'ski') $('#skiStartBtn').click();
+    else if (key === 'hunt') huntStartGame();
+    else if (key === 'cans') cansStartGame();
     else $('#freezeStartBtn').click();
   });
 
@@ -746,8 +808,10 @@
     openBrief();
   });
   $('#gStop').addEventListener('click', () => {
-    FZ.running = false;
-    sock.send({ type: curStage === 'ski' ? 'skiEnd' : 'freezeEnd' });
+    FZ.running = false; HUNT.running = false; HUNT.roundActive = false; CANSG.running = false;
+    sock.send({ type: curStage === 'ski' ? 'skiEnd'
+      : curStage === 'hunt' ? 'huntEnd'
+      : curStage === 'cans' ? 'cansEnd' : 'freezeEnd' });
   });
 
   function renderPlayerStrip() {
@@ -761,6 +825,12 @@
           sc = (p.final != null ? p.final : Math.round((p.wy - COURSE.START_Y) / WPM())) + 'm';
           if (p.combo > 1 && p.final == null) sc = `<span style="color:#f43f5e">${p.combo}連</span> ` + sc;
         }
+      } else if (curStage === 'hunt') {
+        const found = HUNT.chams ? HUNT.chams.filter((q) => q.found === c.clientId).length : 0;
+        const total = (HUNT.scores || []).find((r) => r.clientId === c.clientId);
+        sc = (total ? total.score : found * 2) + '分';
+      } else if (curStage === 'cans') {
+        sc = (CANSG.scores.get(c.clientId) || 0) + '分';
       } else {
         const st = FZ.players.find((p) => p.clientId === c.clientId);
         if (st) sc = st.progress + (st.violations ? ' ✗' + st.violations : '');
@@ -773,8 +843,10 @@
     const n = roster.filter((c) => c.connected).length;
     const skiLive = SKI.race && (hostClock.serverNow() ?? Date.now()) < SKI.race.startAt + SKI.race.duration + 2000;
     let title = '', sub = '';
-    if (FZ.running || skiLive) { /* 比賽中：中央淨空 */ }
+    if (FZ.running || skiLive || HUNT.running || CANSG.running) { /* 比賽中：中央淨空 */ }
     else if (curStage === 'ski' && SKI.rankText) { title = '🏁 結果'; sub = SKI.rankText; }
+    else if (curStage === 'hunt' && HUNT.rankText) { title = '🏁 結果'; sub = HUNT.rankText; }
+    else if (curStage === 'cans' && CANSG.rankText) { title = '🏁 結果'; sub = CANSG.rankText; }
     else if (!n) { title = '掃 QR 加入'; sub = '手機掃左下角的 QR code'; }
     else { title = n + ' 人已加入'; sub = '按「開始 ' + GAMES[pickedGame].label + '」'; }
     $('#bcTitle').textContent = title;
@@ -783,7 +855,8 @@
   }
   // 大廳時把加入卡放大置中，開場後縮回左下（真正的派對遊戲都這樣做）
   function updateShell() {
-    const playing = FZ.running || !!(SKI.race && (hostClock.serverNow() ?? Date.now()) < SKI.race.startAt + SKI.race.duration + 2500);
+    const playing = FZ.running || HUNT.running || CANSG.running ||
+      !!(SKI.race && (hostClock.serverNow() ?? Date.now()) < SKI.race.startAt + SKI.race.duration + 2500);
     $('#gStart').style.display = playing ? 'none' : '';
     $('#gStop').style.display = playing ? '' : 'none';
     $('#gamePick').style.display = playing ? 'none' : 'flex';
@@ -859,11 +932,22 @@
   setActiveBtn = function (st) { curStage = st; oldSetActive(st); };
   sock.on('stage', (m) => { curStage = m.stage; oldSetActive(m.stage); });
 
+  // 三張 canvas 輪流當主畫面：gameCv（木頭人/滑雪 384×216）、huntCv（960×540）、cansCv（960×600）
+  function showCanvas(which) {
+    $('#gameCv').style.display = which === 'game' ? '' : 'none';
+    $('#huntCv').style.display = which === 'hunt' ? '' : 'none';
+    $('#cansCv').style.display = which === 'cans' ? '' : 'none';
+  }
   function sceneLoop() {
-    if (curStage === 'ski') { lastItems = []; skiDraw(); }
-    else if (curStage === 'freeze') freezeDraw();
-    else if (GAMES[pickedGame].key === 'ski') { lastItems = []; skiIdle(); }
-    else freezeDraw();                       // 大廳＝選中遊戲的待機畫面，別留一整片黑
+    const idleKey = GAMES[pickedGame].key;
+    if (curStage === 'ski') { showCanvas('game'); lastItems = []; skiDraw(); }
+    else if (curStage === 'freeze') { showCanvas('game'); freezeDraw(); }
+    else if (curStage === 'hunt') { showCanvas('hunt'); lastItems = []; huntDraw(); }
+    else if (curStage === 'cans') { showCanvas('cans'); lastItems = []; cansDraw(); }
+    else if (idleKey === 'ski') { showCanvas('game'); lastItems = []; skiIdle(); }
+    else if (idleKey === 'hunt') { showCanvas('hunt'); huntIdle(); }
+    else if (idleKey === 'cans') { showCanvas('cans'); cansIdle(); }
+    else { showCanvas('game'); freezeDraw(); }   // 大廳＝選中遊戲的待機畫面，別留一整片黑
     requestAnimationFrame(sceneLoop);
   }
   requestAnimationFrame(sceneLoop);
@@ -946,11 +1030,56 @@
 
     // 頂部 HUD
     const cmdEl = $('#hudCmd'), bar = $('#hudBar').firstElementChild;
-    if (curStage !== 'ski' && curStage !== 'freeze' && !FZ.running) {
+    const inGame = ['ski', 'freeze', 'hunt', 'cans'].includes(curStage);
+    if (!inGame && !FZ.running) {
       renderPaneTags(ox, oy, k);
       $('#hudRound').textContent = GAMES[pickedGame].label;   // 大廳：顯示選中的遊戲
       cmdEl.textContent = ''; cmdEl.classList.remove('red'); bar.style.width = '0%';
       chantEl.classList.remove('show');
+      requestAnimationFrame(updateOverlay);
+      return;
+    }
+    if (curStage === 'hunt') {
+      const now2 = hostClock.serverNow() ?? Date.now();
+      $('#hudRound').textContent = HUNT.artName ? `名畫變色龍 R${HUNT.round}/${HUNT.totalRounds}・${HUNT.artName}` : '名畫變色龍';
+      if (HUNT.roundActive && HUNT.startAt) {
+        const pre = HUNT.startAt - now2;
+        const remain = HUNT.startAt + HUNT.duration - now2;
+        const left = HUNT.chams.filter((c2) => c2.found === null).length;
+        cmdEl.textContent = pre > 0 ? '準備… ' + Math.ceil(pre / 1000)
+          : remain > 0 ? `剩 ${left} 隻・${Math.ceil(remain / 1000)} 秒` : '時間到！';
+        cmdEl.classList.toggle('red', remain > 0 && remain < 10500);
+        bar.style.width = (HUNT.duration ? Math.max(0, Math.min(1, remain / HUNT.duration)) * 100 : 0) + '%';
+        bar.style.background = '#65d6cf';
+        // 時間到：host 收單並排下一輪
+        if (remain <= 0 && !HUNT.roundEndSent) {
+          HUNT.roundEndSent = true;
+          sock.send({ type: 'huntRoundEnd' });
+          setTimeout(huntNextRound, 3600);
+          HUNT.roundActive = false;
+        }
+      } else if (HUNT.running) {
+        cmdEl.textContent = HUNT.reveal.length ? '時間到！黃框是漏掉的' : '全部找到了！';
+        cmdEl.classList.remove('red'); bar.style.width = '0%';
+      } else { cmdEl.textContent = ''; cmdEl.classList.remove('red'); bar.style.width = '0%'; }
+      chantEl.classList.remove('show');
+      lastGreen = null;
+      requestAnimationFrame(updateOverlay);
+      return;
+    }
+    if (curStage === 'cans') {
+      const now2 = hostClock.serverNow() ?? Date.now();
+      $('#hudRound').textContent = `砸罐子 STAGE ${Math.min(CANSG.level, CANSG.levels)}/${CANSG.levels}`;
+      if (CANSG.running && CANSG.world) {
+        const remain = CANSG.levelEndAt - now2;
+        cmdEl.textContent = CANSG.betweenLevels ? '過關！' : Math.max(0, Math.ceil(remain / 1000)) + ' 秒';
+        cmdEl.classList.toggle('red', !CANSG.betweenLevels && remain < 8000);
+        const total = (TUNE.cansSec | 0 || 45) * 1000;
+        bar.style.width = Math.max(0, Math.min(1, remain / total)) * 100 + '%';
+        bar.style.background = '#e98336';
+      } else { cmdEl.textContent = ''; cmdEl.classList.remove('red'); bar.style.width = '0%'; }
+      chantEl.classList.remove('show');
+      lastGreen = null;
       requestAnimationFrame(updateOverlay);
       return;
     }
@@ -1147,7 +1276,7 @@
   // 每格一個獨立視野，全部寫進同一張 ImageData 再一次 putImageData。
   // 實測：1 格與 8 格同樣 4.3ms —— 分割數不是成本，總像素才是。
   // ---- 手感旋鈕：定案速度前先讓人現場調 ----
-  const TUNE_DEF = { speed: 3.2, tex: 3.5, fov: 1.0, dur: 60 };
+  const TUNE_DEF = { speed: 3.2, tex: 3.5, fov: 1.0, dur: 60, huntDiff: 1, huntSec: 45, cansRefill: 4.5, cansSec: 45 };
   const TUNE = Object.assign({}, TUNE_DEF, (() => {
     try { return JSON.parse(localStorage.getItem('mahou-tune') || '{}'); } catch (e) { return {}; }
   })());
@@ -1157,8 +1286,13 @@
     $('#tTex').value = TUNE.tex;     $('#tvTex').textContent = (+TUNE.tex).toFixed(1) + '×';
     $('#tFov').value = TUNE.fov;     $('#tvFov').textContent = (+TUNE.fov).toFixed(2) + '×';
     $('#tDur').value = TUNE.dur;     $('#tvDur').textContent = (TUNE.dur | 0) + ' 秒';
+    $('#tHuntDiff').value = TUNE.huntDiff; $('#tvHuntDiff').textContent = (+TUNE.huntDiff).toFixed(2).replace(/0$/,'') + '×';
+    $('#tHuntSec').value = TUNE.huntSec;   $('#tvHuntSec').textContent = (TUNE.huntSec | 0) + ' 秒';
+    $('#tCansRefill').value = TUNE.cansRefill; $('#tvCansRefill').textContent = (+TUNE.cansRefill).toFixed(1) + ' 秒';
+    $('#tCansSec').value = TUNE.cansSec;   $('#tvCansSec').textContent = (TUNE.cansSec | 0) + ' 秒';
   }
-  [['tSpeed', 'speed'], ['tTex', 'tex'], ['tFov', 'fov'], ['tDur', 'dur']].forEach(([id, key]) => {
+  [['tSpeed', 'speed'], ['tTex', 'tex'], ['tFov', 'fov'], ['tDur', 'dur'],
+   ['tHuntDiff', 'huntDiff'], ['tHuntSec', 'huntSec'], ['tCansRefill', 'cansRefill'], ['tCansSec', 'cansSec']].forEach(([id, key]) => {
     $('#' + id).addEventListener('input', (e) => { TUNE[key] = +e.target.value; saveTune(); renderTune(); });
   });
   $('#tReset').addEventListener('click', () => { Object.assign(TUNE, TUNE_DEF); saveTune(); renderTune(); });
@@ -1513,6 +1647,321 @@
       `最差狂點掉包率：<b>${worstLoss}%</b>（門檻 1%）<br>` +
       `搖動計數：${roster.map((c) => `${esc(c.name)} ${stat(c.clientId).shake}`).join('、') || '–'}（同一人換裝置比差異 %）`;
   }
+  // ================= 遊戲三：名畫變色龍（搶快） =================
+  // DO 發種子與位置演算法（同 paint.js 的 P.place），host 只負責畫；
+  // 命中與搶快結算全在 DO（250ms claim window 比 client 時間戳）。
+  const HUNT = {
+    running: false, round: 0, totalRounds: 4, bg: null, fit: null, chams: [],
+    hNorm: .12, tEnd: 0, artIndex: 0, img: null, imgIdx: -1, reveal: [],
+    stamps: [], rankText: '',
+  };
+  const hcv = $('#huntCv'), hctx = hcv.getContext('2d');
+  hctx.imageSmoothingEnabled = false;
+  const cursors = new Map();   // clientId -> {x,y,el,at,cool}
+
+  // 難度曲線：輪次 → 角色高度(佔畫高)/立體感/輪廓破綻/眨眼平均秒
+  function huntParams(round) {
+    const T = [
+      { hNorm: .165, depth: .45, edge: .15, blink: 2.5 },
+      { hNorm: .135, depth: .30, edge: .08, blink: 3.2 },
+      { hNorm: .108, depth: .22, edge: .05, blink: 4.0 },
+      { hNorm: .088, depth: .12, edge: .02, blink: 5.0 },
+      { hNorm: .080, depth: .10, edge: .01, blink: 5.5 },
+    ];
+    const t = T[Math.min(round - 1, T.length - 1)];
+    const d = +TUNE.huntDiff || 1;            // 難度倍率 >1 = 更難（更小、更平、更少破綻）
+    return {
+      hNorm: Math.max(.05, t.hNorm / d),
+      depth: Math.max(0, Math.min(1, t.depth / d)),
+      edge: Math.max(0, t.edge / d),
+      blink: t.blink * Math.sqrt(d),
+    };
+  }
+
+  // 預載名畫：說明卡打開時就開始抓，載不到用程序化抽象畫
+  let huntArtPool = [];
+  function huntPreload() {
+    huntArtPool = [...Array(PAINT.ARTS.length).keys()].sort(() => Math.random() - .5).slice(0, 6);
+    PAINT.load(huntArtPool[0], (img) => { HUNT.img = img; HUNT.imgIdx = huntArtPool[0]; });
+  }
+  function huntStartGame() {
+    HUNT.running = true; HUNT.round = 0; HUNT.rankText = ''; HUNT.stamps = []; HUNT.reveal = [];
+    sock.send({ type: 'stage', stage: 'hunt' });
+    setActiveBtn('hunt');
+    huntNextRound();
+  }
+  function huntNextRound() {
+    HUNT.round++;
+    if (HUNT.round > HUNT.totalRounds) { sock.send({ type: 'huntEnd' }); return; }
+    const prm = huntParams(HUNT.round);
+    HUNT.prm = prm;
+    const n = Math.max(2, Math.min(10, Math.round(roster.filter((c) => c.connected).length * 0.8) + 1));
+    const artIdx = huntArtPool[(HUNT.round - 1) % huntArtPool.length] ?? 0;
+    sock.send({ type: 'huntRound', round: HUNT.round, count: n, hNorm: prm.hNorm,
+                duration: (TUNE.huntSec | 0 || 45) * 1000, artIndex: artIdx, totalRounds: HUNT.totalRounds });
+  }
+  sock.on('huntRound', (m) => {
+    clearStampEls();
+    HUNT.roundActive = true;
+    HUNT.hNorm = m.hNorm; HUNT.tEnd = 0; HUNT.reveal = []; HUNT.stamps = [];
+    HUNT.startAt = m.startAt; HUNT.duration = m.duration;
+    HUNT.chams = PAINT.place(m.seed, m.count).map((c) => ({ ...c, found: null, blink: false, nextBlink: 0 }));
+    HUNT.roundEndSent = false;
+    // 畫作：預載好就用，沒好／載失敗就程序化
+    const buildBg = () => {
+      const r = PAINT.pixelize(HUNT.img, hcv.width, hcv.height, { block: 6, seed: m.seed });
+      HUNT.bg = r.bg; HUNT.fit = r.fit;
+      const meta = HUNT.img ? PAINT.ARTS[HUNT.imgIdx] : { name: '抽象 No.' + (m.seed % 97), meta: 'mahou 程序生成' };
+      HUNT.artName = meta.name;
+      // 下一輪的畫先抓
+      const nextIdx = huntArtPool[HUNT.round % huntArtPool.length];
+      if (nextIdx != null) PAINT.load(nextIdx, (img) => { HUNT.img = img; HUNT.imgIdx = nextIdx; });
+    };
+    if (HUNT.imgIdx === m.artIndex || HUNT.img) buildBg();
+    else PAINT.load(m.artIndex, (img) => { HUNT.img = img; HUNT.imgIdx = m.artIndex; buildBg(); });
+    if (!HUNT.bg) buildBg();
+    SFX.go();
+  });
+  sock.on('pointer', (m) => {
+    let cur = cursors.get(m.clientId);
+    if (!cur) {
+      const el = document.createElement('div');
+      el.className = 'hcur';
+      const idx = roster.findIndex((c) => c.clientId === m.clientId);
+      const col = CHARA.PLAYERS[(idx < 0 ? cursors.size : idx) % 8].accent1;
+      el.innerHTML = `<div class="ring" style="border-color:${col}"></div><div class="dot2"></div><div class="nm" style="color:${col}">${esc(m.name)}</div>`;
+      $('#gameWrap').appendChild(el);
+      cur = { el, x: m.x, y: m.y, tx: m.x, ty: m.y, at: 0, cool: 0 };
+      cursors.set(m.clientId, cur);
+    }
+    cur.tx = m.x; cur.ty = m.y; cur.at = performance.now();
+  });
+  sock.on('huntMiss', (m) => {
+    if (m.clientId) { const cur = cursors.get(m.clientId); if (cur) cur.cool = 1.5; }
+    HUNT.stamps.push({ x: m.x, y: m.y, miss: true, t: performance.now() });
+    SFX.bad();
+  });
+  const stampEls = [];
+  function addStampEl(nx, ny, name) {
+    const el = document.createElement('div');
+    el.className = 'hstamp';
+    const p2 = huntToScreen(nx, ny);
+    el.style.left = p2.x + 'px'; el.style.top = p2.y + 'px';
+    el.textContent = '✓ ' + name;
+    $('#gameWrap').appendChild(el);
+    stampEls.push(el);
+  }
+  function clearStampEls() { for (const el of stampEls) el.remove(); stampEls.length = 0; }
+  sock.on('huntFound', (m) => {
+    const ch = HUNT.chams[m.idx];
+    if (ch) ch.found = m.clientId;
+    HUNT.stamps.push({ x: m.x, y: m.y, name: m.name, t: performance.now() });
+    addStampEl(m.x, m.y, m.name);
+    floatPts(huntToScreen(m.x, m.y), '+2 ' + m.name, '#4ade80');
+    SFX.ok();
+    if (m.left === 0 && HUNT.roundActive && !HUNT.roundEndSent) {
+      HUNT.roundEndSent = true;
+      sock.send({ type: 'huntRoundEnd' });
+      setTimeout(huntNextRound, 3200);
+      HUNT.roundActive = false;
+    }
+  });
+  sock.on('huntRoundDone', (m) => {
+    HUNT.reveal = m.reveal || [];
+    HUNT.scores = m.scores;
+  });
+  sock.on('huntEnd', (m) => {
+    clearStampEls();
+    HUNT.running = false; HUNT.roundActive = false;
+    SFX.win();
+    HUNT.rankText = (m.rank || []).slice(0, 3).map((r, i) => `${'🥇🥈🥉'.slice(i * 2, i * 2 + 2)} ${r.name} ${r.score}分`).join('　');
+    updateShell();
+  });
+
+  // 畫面座標換算：正規化（相對畫的矩形）→ wrap CSS px
+  function huntToScreen(nx, ny) {
+    const cr = hcv.getBoundingClientRect(), wr = $('#gameWrap').getBoundingClientRect();
+    // object-fit: contain 的實際繪製區
+    const scale = Math.min(cr.width / hcv.width, cr.height / hcv.height);
+    const dw = hcv.width * scale, dh = hcv.height * scale;
+    const dx = cr.left - wr.left + (cr.width - dw) / 2, dy = cr.top - wr.top + (cr.height - dh) / 2;
+    const f = HUNT.fit || { x: 0, y: 0, w: hcv.width, h: hcv.height };
+    return { x: dx + (f.x + nx * f.w) * scale, y: dy + (f.y + ny * f.h) * scale };
+  }
+  function floatPts(pos, text, color) {
+    const el = document.createElement('div');
+    el.className = 'floatPts';
+    el.style.left = pos.x + 'px'; el.style.top = pos.y + 'px'; el.style.color = color;
+    el.textContent = text;
+    $('#gameWrap').appendChild(el);
+    setTimeout(() => el.remove(), 1400);
+  }
+
+  function huntDrawScene(withChams) {
+    if (!HUNT.bg) { hctx.fillStyle = '#050609'; hctx.fillRect(0, 0, hcv.width, hcv.height); return; }
+    hctx.drawImage(HUNT.bg, 0, 0);
+    if (!withChams) return;
+    const prm = HUNT.prm || huntParams(1);
+    const nowP = performance.now();
+    for (const ch of HUNT.chams) {
+      if (ch.found !== null) continue;
+      // 各自的眨眼時鐘；最後 10 秒放水（眨更勤）
+      const lastTen = HUNT.tEnd && (HUNT.tEnd - (hostClock.serverNow() ?? Date.now())) < 10000;
+      if (nowP > ch.nextBlink) {
+        ch.blink = !ch.blink;
+        ch.nextBlink = nowP + (ch.blink ? 200 : (prm.blink * (lastTen ? 400 : 1000)) * (.65 + Math.random() * .9));
+      }
+      PAINT.drawChameleon(hctx, HUNT.bg, HUNT.fit, ch, { hNorm: HUNT.hNorm, depth: prm.depth, edge: prm.edge, eyeSize: 3 });
+    }
+    // 回合結束的揭曉：沒被找到的框出來
+    for (const r of HUNT.reveal) {
+      const f = HUNT.fit;
+      const w = HUNT.hNorm * f.h * .8, h = HUNT.hNorm * f.h * 1.2;
+      hctx.strokeStyle = '#f2c14e'; hctx.lineWidth = 3;
+      hctx.strokeRect(f.x + r.x * f.w - w / 2, f.y + r.y * f.h - h, w, h);
+    }
+  }
+  function huntDraw() {
+    HUNT.tEnd = HUNT.startAt ? HUNT.startAt + HUNT.duration : 0;
+    huntDrawScene(true);
+    // X 印章（miss）畫在 canvas 上，短暫顯示
+    const nowP = performance.now();
+    for (const st of HUNT.stamps) {
+      if (st.miss && nowP - st.t < 900) {
+        const f = HUNT.fit;
+        hctx.strokeStyle = '#ef4444'; hctx.lineWidth = 4;
+        const x = f.x + st.x * f.w, y = f.y + st.y * f.h;
+        hctx.beginPath(); hctx.moveTo(x - 11, y - 11); hctx.lineTo(x + 11, y + 11);
+        hctx.moveTo(x + 11, y - 11); hctx.lineTo(x - 11, y + 11); hctx.stroke();
+      }
+      if (!st.miss) {                             // 永久蓋章：綠框＋名字
+        const f = HUNT.fit;
+        const x = f.x + st.x * f.w, y = f.y + st.y * f.h;
+        hctx.strokeStyle = '#22c55e'; hctx.lineWidth = 3;
+        hctx.strokeRect(x - 16, y - 16, 32, 32);
+      }
+    }
+  }
+  window.__huntChams = () => HUNT.chams.map((c2) => ({ x: c2.x, y: c2.y, found: c2.found }));   // 測試鉤子
+  window.__huntState = () => ({ running: HUNT.running, roundActive: HUNT.roundActive, startAt: HUNT.startAt,
+    duration: HUNT.duration, artName: HUNT.artName, round: HUNT.round, hasBg: !!HUNT.bg, curStage });
+  let huntIdleSeed = null, huntIdleBg = null;
+  function huntIdle() {
+    if (!huntIdleBg) {
+      const r = PAINT.pixelize(HUNT.img, hcv.width, hcv.height, { block: 6, seed: 20260830 });
+      huntIdleBg = r.bg;
+    }
+    hctx.drawImage(huntIdleBg, 0, 0);
+  }
+
+  // 游標插值 + 冷卻
+  setInterval(() => {
+    const active = curStage === 'hunt';
+    for (const [id, cur] of cursors) {
+      const stale = performance.now() - cur.at > 4000;
+      cur.el.style.display = active && !stale ? '' : 'none';
+      if (!active || stale) continue;
+      cur.x += (cur.tx - cur.x) * .35;
+      cur.y += (cur.ty - cur.y) * .35;
+      if (cur.cool > 0) { cur.cool -= .033; cur.el.classList.add('cool'); }
+      else cur.el.classList.remove('cool');
+      const p2 = huntToScreen(cur.x, cur.y);
+      cur.el.style.left = p2.x + 'px';
+      cur.el.style.top = p2.y + 'px';
+    }
+  }, 33);
+
+  // ================= 遊戲四：砸罐子（全員齊砸同一座塔） =================
+  const CANSG = { running: false, level: 0, levels: 5, world: null, aims: new Map(), scores: new Map(),
+                  levelEndAt: 0, rankText: '', betweenLevels: false };
+  const ccv = $('#cansCv'), cctx = ccv.getContext('2d');
+  cctx.imageSmoothingEnabled = false;
+  const PLAYER_COLS = CHARA.PLAYERS.map((p2) => p2.accent1);
+
+  function cansStartGame() {
+    CANSG.running = true; CANSG.scores.clear(); CANSG.rankText = '';
+    sock.send({ type: 'stage', stage: 'cans' });
+    setActiveBtn('cans');
+    sock.send({ type: 'cansStart', refill: Math.round((+TUNE.cansRefill || 4.5) * 1000), levels: CANSG.levels });
+  }
+  sock.on('cansStart', (m) => {
+    CANSG.level = 0; CANSG.startAt = m.startAt;
+    cansNextLevel();
+  });
+  function cansNextLevel() {
+    CANSG.level++;
+    CANSG.betweenLevels = false;
+    if (CANSG.level > CANSG.levels) { sock.send({ type: 'cansEnd' }); return; }
+    CANSG.world = CANS.build(CANSG.level);
+    CANSG.levelEndAt = (hostClock.serverNow() ?? Date.now()) + (TUNE.cansSec | 0 || 45) * 1000;
+    sock.send({ type: 'cansLevel', level: CANSG.level, levels: CANSG.levels });
+    SFX.go();
+  }
+  sock.on('canAim', (m) => {
+    const idx = roster.findIndex((c) => c.clientId === m.clientId);
+    CANSG.aims.set(m.clientId, { idx: idx < 0 ? 0 : idx, angle: m.angle, active: m.active, at: performance.now() });
+  });
+  sock.on('canThrow', (m) => {
+    if (!CANSG.world) return;
+    const idx = roster.findIndex((c) => c.clientId === m.clientId);
+    CANS.throwBall(CANSG.world, m.angle, m.power, idx < 0 ? 0 : idx, m.clientId);
+    SFX.turn();
+  });
+  sock.on('canScore', (m) => {
+    if (m.clientId) CANSG.scores.set(m.clientId, m.total);
+  });
+  sock.on('cansEnd', (m) => {
+    CANSG.running = false; CANSG.world = null;
+    SFX.win();
+    CANSG.rankText = (m.rank || []).slice(0, 3).map((r, i) => `${'🥇🥈🥉'.slice(i * 2, i * 2 + 2)} ${r.name} ${r.score}分`).join('　');
+    updateShell();
+  });
+
+  function cansToScreen(x, y) {
+    const cr = ccv.getBoundingClientRect(), wr = $('#gameWrap').getBoundingClientRect();
+    const scale = Math.min(cr.width / ccv.width, cr.height / ccv.height);
+    const dw = ccv.width * scale, dh = ccv.height * scale;
+    return { x: cr.left - wr.left + (cr.width - dw) / 2 + x * scale, y: cr.top - wr.top + (cr.height - dh) / 2 + y * scale };
+  }
+
+  let cansLast = performance.now();
+  function cansDraw() {
+    const nowP = performance.now();
+    const dt = Math.min(.05, (nowP - cansLast) / 1000);
+    cansLast = nowP;
+    if (!CANSG.world) { cctx.fillStyle = '#111116'; cctx.fillRect(0, 0, ccv.width, ccv.height); return; }
+    const evts = CANS.step(CANSG.world, dt);
+    for (const e of evts) {
+      if (e.ownerId) sock.send({ type: 'canScoreEvt', clientId: e.ownerId, pts: e.pts, kind: e.kind });
+      const c = roster.find((r) => r.clientId === e.ownerId);
+      const col = e.kind === 'boom' || e.kind === 'chain' ? '#f2c14e' : '#4ade80';
+      floatPts(cansToScreen(e.x, e.y), `+${e.pts}${c ? ' ' + c.name : ''}`, col);
+      if (e.kind === 'boom') SFX.caught();
+      else if (e.kind === 'break' || e.kind === 'knock') SFX.ok();
+    }
+    const aims = [];
+    for (const [, a] of CANSG.aims) {
+      if (performance.now() - a.at < 2500 && a.active) aims.push(a);
+    }
+    CANS.render(cctx, CANSG.world, PLAYER_COLS, aims);
+
+    // 關卡推進：85% 摧毀或時間到
+    if (CANSG.running && !CANSG.betweenLevels) {
+      const now2 = hostClock.serverNow() ?? Date.now();
+      const done = CANS.destroyedRatio(CANSG.world) >= 0.85;
+      if (done || now2 > CANSG.levelEndAt) {
+        CANSG.betweenLevels = true;
+        setTimeout(cansNextLevel, 2600);
+        if (done) SFX.win();
+      }
+    }
+  }
+  let cansIdleWorld = null;
+  function cansIdle() {
+    if (!cansIdleWorld) cansIdleWorld = CANS.build(2);
+    CANS.render(cctx, cansIdleWorld, PLAYER_COLS, []);
+  }
+
   const feedEl = $('#feed');
   function feed(text) {
     const line = document.createElement('div');
