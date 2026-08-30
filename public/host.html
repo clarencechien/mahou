@@ -34,26 +34,56 @@
   /* ---- 產品外殼：頂列 + 遊戲/管理 兩種檢視 ---- */
   body { padding: 0; }
   .appbar {
-    display: flex; align-items: center; gap: 14px; padding: 10px 18px;
+    display: flex; align-items: center; gap: 12px; padding: 8px 16px; white-space: nowrap;
     background: #0d1424; border-bottom: 1px solid #1c2942; position: sticky; top: 0; z-index: 20;
   }
   .brand { font-weight: 800; letter-spacing: .06em; font-size: 1.05rem; color: #e2e8f0; }
-  .brand span { color: #64748b; font-weight: 600; font-size: .8rem; margin-left: 6px; letter-spacing: 0; }
-  .roompill {
-    font-family: ui-monospace, monospace; font-size: 1.15rem; font-weight: 700; letter-spacing: .18em;
-    background: #16233c; border: 1px solid #27395c; border-radius: 8px; padding: 5px 12px; color: #7dd3fc;
+  .appbar .right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+
+  /* 圓形圖示鈕：全螢幕與連線燈，一個字都不用 */
+  .iconbtn {
+    width: 34px; height: 34px; padding: 0; border-radius: 9px; background: #16233c;
+    border: 1px solid #27395c; font-size: 1rem; line-height: 1; display: flex;
+    align-items: center; justify-content: center; color: #cbd5e1;
   }
-  .tabs { display: flex; gap: 4px; background: #16233c; border-radius: 9px; padding: 3px; }
-  .tabs button { background: transparent; padding: 7px 16px; font-size: .92rem; border-radius: 7px; }
-  .tabs button.on { background: #2563eb; }
-  .appbar .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-  .appbar .right button { padding: 8px 14px; font-size: .9rem; }
-  .dot { font-size: .78rem; color: #64748b; font-family: ui-monospace, monospace; }
+  #connDot i { width: 11px; height: 11px; border-radius: 50%; background: #64748b; display: block; transition: background .2s; }
+  #connDot[data-state="open"] i { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,.6); }
+  #connDot[data-state="closed"] i { background: #ef4444; }
+  #connDot[data-state="ended"] i { background: #6b7280; }
+
+  /* 正式／測試：一格的滑動開關，取代兩個分頁 */
+  .modesw {
+    position: relative; width: 92px; height: 34px; padding: 0; border-radius: 9px;
+    background: #16233c; border: 1px solid #27395c; overflow: hidden;
+  }
+  .modesw b, .modesw span {
+    position: absolute; top: 0; height: 100%; width: 50%; display: flex; align-items: center;
+    justify-content: center; font-size: .82rem; font-weight: 700; transition: color .2s;
+  }
+  .modesw b { left: 0; color: #fff; }
+  .modesw span { right: 0; color: #64748b; }
+  .modesw::before {
+    content: ''; position: absolute; top: 3px; left: 3px; width: calc(50% - 3px); height: calc(100% - 6px);
+    background: #2563eb; border-radius: 7px; transition: transform .18s cubic-bezier(.3,1.3,.5,1);
+  }
+  .modesw.test::before { transform: translateX(100%); background: #7c3aed; }
+  .modesw.test b { color: #64748b; }
+  .modesw.test span { color: #fff; }
+
+  /* DO 落點：平常收著，點連線燈才展開 */
+  #netPop {
+    position: fixed; right: 14px; bottom: 14px; z-index: 30; display: none;
+    background: rgba(8,12,22,.94); border: 1px solid #2b4066; border-radius: 12px; padding: 10px 14px;
+    font-size: .82rem; min-width: 168px; backdrop-filter: blur(6px);
+  }
+  #netPop.on { display: block; }
+  #netPop .k { display: flex; justify-content: space-between; gap: 16px; padding: 2px 0; color: #94a3b8; }
+  #netPop .k b { color: #7dd3fc; font-family: ui-monospace, monospace; font-weight: 600; }
 
   /* 遊戲控制搬到頂列：底部留給畫面，不要再壓掉一條 */
-  #gameCtl { display: flex; gap: 8px; align-items: center; margin-left: 24px; }
+  #gameCtl { display: flex; gap: 8px; align-items: center; margin-left: 20px; flex-wrap: nowrap; }
   #gamePick { display: flex; gap: 5px; }
-  #gamePick button { padding: 7px 13px; font-size: .88rem; background: #16233c; border: 1px solid #27395c; }
+  #gamePick button { padding: 7px 13px; font-size: .88rem; background: #16233c; border: 1px solid #27395c; white-space: nowrap; }
   #gamePick button.on { background: #334d7a; border-color: #4a6ea8; color: #fff; }
   #gameCtl button.go { background: #2563eb; padding: 8px 20px; font-size: .95rem; font-weight: 700; }
   #gameCtl button#gStop { background: #7f1d1d; padding: 8px 20px; font-size: .95rem; }
@@ -178,6 +208,10 @@
   @keyframes floatUp { from { opacity: 1; margin-top: 0; } to { opacity: 0; margin-top: -60px; } }
 
   #joinCard { cursor: pointer; transition: transform .25s cubic-bezier(.2,1.2,.4,1), opacity .25s; }
+  /* 開打後只留房號：晚到的人還是掃得到（點一下放大 QR），但畫面乾淨 */
+  #joinCard.slim .qrbox, #joinCard.slim .u, #joinCard.slim .hintline { display: none; }
+  #joinCard.slim { padding: 6px 12px; }
+  #joinCard.slim .code { font-size: 1.3rem; color: #64748b; }
   #joinCard .hintline { color: #64748b; font-size: .7rem; margin-top: 3px; }
   #qrBig {
     position: absolute; inset: 0; background: rgba(4,7,14,.93); display: none;
@@ -239,22 +273,24 @@
 </head>
 <body>
 <div class="appbar">
-  <div class="brand">mahou <span>派對遊戲主控</span></div>
-  <div class="roompill" id="barRoom">····</div>
-  <div class="tabs">
-    <button id="tabGame" class="on">遊戲</button>
-    <button id="tabAdmin">管理・測試</button>
-  </div>
+  <div class="brand">mahou</div>
   <div id="gameCtl">
     <span id="gamePick"></span>
-    <button class="go" id="gStart">開始 木頭人</button>
+    <button class="go" id="gStart">開始</button>
     <button id="gStop" style="display:none">停止</button>
   </div>
   <div class="right">
-    <span class="dot" id="connState"></span>
-    <button id="tuneBtn">⚙︎ 手感</button>
-    <button id="fsBtn">⛶ 全螢幕</button>
+    <!-- 平常只有一顆燈；點了才展開 DO 落點（右下浮窗） -->
+    <button id="connDot" class="iconbtn" title="連線狀態"><i></i></button>
+    <button id="fsBtn" class="iconbtn" title="全螢幕">⛶</button>
+    <!-- 正式／測試：一格的切換開關，取代兩個分頁 -->
+    <button id="modeSw" class="modesw" title="切換正式／測試"><b>正式</b><span>測試</span></button>
   </div>
+</div>
+<div id="netPop">
+  <div class="k"><span>DO</span><b id="npDo">–</b></div>
+  <div class="k"><span>邊緣</span><b id="npEdge">–</b></div>
+  <div class="k"><span>狀態</span><b id="npState">–</b></div>
 </div>
 
 <div id="gameView" class="view on">
@@ -375,6 +411,7 @@
     <option value="apac">DO區域：亞太 apac</option>
     <option value="weur">DO區域：西歐 weur</option>
   </select>
+  <button id="tuneBtn">⚙︎ 手感調校</button>
   <button class="export" id="exportBtn">匯出 JSON</button>
   <button id="endBtn" style="background:#7f1d1d">結束房間</button>
 </div>
@@ -461,12 +498,20 @@
 
   const sock = new Mahou.Sock(roomId, 'host', `&hint=${encodeURIComponent(hint)}`);
   let roomEnded = false;
-  sock.onOpen(() => { $('#connState').textContent = '🟢' + ($('#connState').dataset.colo || ''); });
-  sock.ws.addEventListener('close', () => { if (!roomEnded) $('#connState').textContent = '🔴'; });
+  const net = { state: 'connecting', doColo: '–', edgeColo: '–' };
+  function renderNet() {
+    const dot = $('#connDot');
+    dot.dataset.state = net.state;
+    $('#npDo').textContent = net.doColo;
+    $('#npEdge').textContent = net.edgeColo;
+    $('#npState').textContent = { open: '已連線', closed: '斷線', ended: '已結束', connecting: '連線中' }[net.state] || net.state;
+  }
+  sock.onOpen(() => { net.state = 'open'; renderNet(); });
+  sock.ws.addEventListener('close', () => { if (!roomEnded) { net.state = 'closed'; renderNet(); } });
+  $('#connDot').addEventListener('click', () => $('#netPop').classList.toggle('on'));
   // DO 落點診斷：doColo 離現場越遠，RTT 地板越高
   fetch(`/whereami/${roomId}?hint=${encodeURIComponent(hint)}`).then((r) => r.json()).then((w) => {
-    $('#connState').dataset.colo = ` DO@${w.doColo}·邊緣@${w.edgeColo}`;
-    $('#connState').textContent += $('#connState').dataset.colo;
+    net.doColo = w.doColo; net.edgeColo = w.edgeColo; renderNet();
   }).catch(() => {});
 
   // ---- per-client 即席統計（host 端自己累積，正式數據看匯出檔） ----
@@ -540,7 +585,7 @@
   });
   sock.onEnded((reason) => {
     roomEnded = true;                 // 讓 ws close 不要把這行訊息蓋掉
-    $('#connState').textContent = `⏹ 已結束（${reason}）`;
+    net.state = 'ended'; renderNet();
     document.querySelectorAll('button[data-stage], #endBtn, #gStart, #gStop').forEach((b) => (b.disabled = true));
   });
 
@@ -628,7 +673,6 @@
   });
 
   // ---------------- 產品外殼：檢視切換 / 全螢幕 / 加入卡 / 玩家條 ----------------
-  $('#barRoom').textContent = roomId;
   $('#gameRoom').textContent = roomId;
   $('#gameUrl').textContent = clientUrl.replace(/^https?:\/\//, '');
   try { new QRCode($('#qrGame'), { text: clientUrl, width: 104, height: 104 }); }
@@ -637,8 +681,7 @@
   function setView(v) {
     $('#gameView').classList.toggle('on', v === 'game');
     $('#adminView').classList.toggle('on', v === 'admin');
-    $('#tabGame').classList.toggle('on', v === 'game');
-    $('#tabAdmin').classList.toggle('on', v === 'admin');
+    $('#modeSw').classList.toggle('test', v === 'admin');
     if (v === 'game') fitCanvas();
   }
   // QR：點一下放大讓全場掃，開場自動縮小
@@ -650,8 +693,7 @@
   $('#joinCard').addEventListener('click', () => showQR(true));
   $('#qrBig').addEventListener('click', () => showQR(false));
 
-  $('#tabGame').addEventListener('click', () => setView('game'));
-  $('#tabAdmin').addEventListener('click', () => setView('admin'));
+  $('#modeSw').addEventListener('click', () => setView($('#adminView').classList.contains('on') ? 'game' : 'admin'));
   // 全螢幕吃整個頁面（不是只有 #gameWrap），頂列才留得住；
   // 之後頂列自己收起來，畫面上就只剩遊戲跟分數。
   $('#fsBtn').addEventListener('click', () => {
@@ -669,7 +711,7 @@
   document.addEventListener('fullscreenchange', () => {
     const on = !!document.fullscreenElement;
     document.body.classList.toggle('fs', on);
-    $('#fsBtn').textContent = on ? '⛶ 離開全螢幕' : '⛶ 全螢幕';
+    $('#fsBtn').textContent = on ? '⤢' : '⛶';
     if (on) pokeBar(); else { clearTimeout(barTimer); document.body.classList.remove('showbar'); }
     setTimeout(fitCanvas, 60);
   });
@@ -686,7 +728,7 @@
       `<button data-g="${i}" class="${i === pickedGame ? 'on' : ''}">${g.label}</button>`).join('');
     $('#gamePick').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
       pickedGame = +b.dataset.g; renderGamePick();
-      $('#gStart').textContent = '開始 ' + GAMES[pickedGame].label;
+      $('#gStart').textContent = '開始';
     }));
   }
   renderGamePick();
@@ -848,7 +890,7 @@
     else if (curStage === 'hunt' && HUNT.rankText) { title = '🏁 結果'; sub = HUNT.rankText; }
     else if (curStage === 'cans' && CANSG.rankText) { title = '🏁 結果'; sub = CANSG.rankText; }
     else if (!n) { title = '掃 QR 加入'; sub = '手機掃左下角的 QR code'; }
-    else { title = n + ' 人已加入'; sub = '按「開始 ' + GAMES[pickedGame].label + '」'; }
+    else { title = n + ' 人'; sub = GAMES[pickedGame].label; }
     $('#bcTitle').textContent = title;
     $('#bcSub').textContent = sub;
     $('#bigCenter').classList.toggle('has', !!(title || sub));
@@ -860,6 +902,7 @@
     $('#gStart').style.display = playing ? 'none' : '';
     $('#gStop').style.display = playing ? '' : 'none';
     $('#gamePick').style.display = playing ? 'none' : 'flex';
+    $('#joinCard').classList.toggle('slim', playing);   // 開打後只留房號
     document.body.classList.toggle('playing', playing);
     $('#joinCard').style.transform = playing ? 'scale(.62)' : 'scale(1)';
     $('#joinCard').style.opacity = playing ? '.75' : '1';
@@ -1033,7 +1076,7 @@
     const inGame = ['ski', 'freeze', 'hunt', 'cans'].includes(curStage);
     if (!inGame && !FZ.running) {
       renderPaneTags(ox, oy, k);
-      $('#hudRound').textContent = GAMES[pickedGame].label;   // 大廳：顯示選中的遊戲
+      $('#hudRound').textContent = '';        // 大廳：選單上就寫著了，不重複
       cmdEl.textContent = ''; cmdEl.classList.remove('red'); bar.style.width = '0%';
       chantEl.classList.remove('show');
       requestAnimationFrame(updateOverlay);
@@ -1041,7 +1084,7 @@
     }
     if (curStage === 'hunt') {
       const now2 = hostClock.serverNow() ?? Date.now();
-      $('#hudRound').textContent = HUNT.artName ? `名畫變色龍 R${HUNT.round}/${HUNT.totalRounds}・${HUNT.artName}` : '名畫變色龍';
+      $('#hudRound').textContent = HUNT.artName ? `${HUNT.round}/${HUNT.totalRounds}・${HUNT.artName}` : '';
       if (HUNT.roundActive && HUNT.startAt) {
         const pre = HUNT.startAt - now2;
         const remain = HUNT.startAt + HUNT.duration - now2;
@@ -1069,7 +1112,7 @@
     }
     if (curStage === 'cans') {
       const now2 = hostClock.serverNow() ?? Date.now();
-      $('#hudRound').textContent = `砸罐子 STAGE ${Math.min(CANSG.level, CANSG.levels)}/${CANSG.levels}`;
+      $('#hudRound').textContent = `${Math.min(CANSG.level, CANSG.levels)}/${CANSG.levels}`;
       if (CANSG.running && CANSG.world) {
         const remain = CANSG.levelEndAt - now2;
         cmdEl.textContent = CANSG.betweenLevels ? '過關！' : Math.max(0, Math.ceil(remain / 1000)) + ' 秒';
@@ -1090,7 +1133,7 @@
       if (r) {
         const pre = r.startAt - now2;
         const remain = r.startAt + r.duration - now2;
-        $('#hudRound').textContent = '滑雪 ' + Math.round(r.duration / 1000) + ' 秒比距離';
+        $('#hudRound').textContent = '';        // 倒數就在正中央，不用再寫一次
         cmdEl.textContent = pre > 0 ? '準備… ' + Math.ceil(pre / 1000)
           : remain > 0 ? Math.ceil(remain / 1000) + ' 秒' : '結束！';
         // 時間到就自動收單：留 1.2 秒等最後一批 skiDone 進來再要排名
@@ -1098,13 +1141,13 @@
         cmdEl.classList.toggle('red', remain > 0 && remain < 5500);
         bar.style.width = (r.duration ? Math.max(0, Math.min(1, remain / r.duration)) * 100 : 0) + '%';
         bar.style.background = '#38bdf8';
-      } else { $('#hudRound').textContent = '滑雪下坡'; cmdEl.textContent = ''; bar.style.width = '0%'; }
+      } else { $('#hudRound').textContent = ''; cmdEl.textContent = ''; bar.style.width = '0%'; }
       chantEl.classList.remove('show');
       lastGreen = null;
       requestAnimationFrame(updateOverlay);
       return;
     }
-    $('#hudRound').textContent = FZ.running ? 'ROUND ' + String(FZ.round).padStart(2, '0') + '/10' : '一二三木頭人';
+    $('#hudRound').textContent = FZ.running ? FZ.round + '/10' : '';
     if (!FZ.running) { cmdEl.textContent = ''; cmdEl.classList.remove('red'); }
     else if (FZ.green) { cmdEl.textContent = FZ.cmd ? FZ.cmd.label : ''; cmdEl.classList.remove('red'); }
     else { cmdEl.textContent = '不要動！'; cmdEl.classList.add('red'); }
@@ -1303,6 +1346,7 @@
     setTimeout(() => { $('#tCopy').textContent = '複製設定'; }, 1600);
   });
   $('#tuneBtn').addEventListener('click', () => {
+    setView('game');                       // 面板疊在遊戲畫面上，要先切回去才看得到
     const on = $('#tune').classList.toggle('on');
     $('#tuneBtn').classList.toggle('on', on);
   });
