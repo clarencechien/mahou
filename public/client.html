@@ -1300,14 +1300,13 @@
     const now = clock.serverNow() ?? Date.now();
     return cansStartAt > 0 && now >= cansStartAt && now - cansBallAt >= CANSC.REFILL;
   }
-  // 補到球的那一瞬間把游標拉回正中央：每一球都從同一個起點瞄，
-  // 陀螺儀漂掉的量也在這裡一併歸零，不用玩家自己記得按「游標回中央」
+  // 球一出手就把游標拉回正中央，不是等補到球才拉。
+  // 等補球才歸零的話，玩家在等球那幾秒已經先瞄好了，球一到手卻被拉回中間——白瞄一場。
   let cansWasReady = false;
   function cansRefillTick() {
     const ready = ballReady();
     if (ready && !cansWasReady) {
-      ptrZero();
-      $('#cansPadTitle').textContent = '補到球了・游標回中央';
+      $('#cansPadTitle').textContent = '球來了';
       $('#cansPadSub').textContent = '瞄好按①確定';
       navigator.vibrate?.(12);
     }
@@ -1319,6 +1318,7 @@
     cansBallAt = clock.serverNow() ?? Date.now();
     sock.send({ type: 'canThrow', x: +nx.toFixed(4), y: +ny.toFixed(4),
                 power: +power.toFixed(2), mode: ptrMode, tClient: clock.serverNow() });
+    ptrZero();          // 出手就歸零：陀螺儀漂掉的量在這裡清掉，等球的時候瞄的才算數
     $('#cansPowerBar').style.width = (power * 100) + '%';
     $('#cansPadTitle').textContent = power > .72 ? '全力砸出去！' : '丟出去了！';
     navigator.vibrate?.(Math.round(20 + power * 40));
