@@ -761,7 +761,8 @@
   const SKI = {
     TAP_ACC: 2.4, DECAY: 1.0, TAP_CAP: 11, DRIFT: 4.0, HARD_CAP: 24,
     RAMP_SURGE: 7.0, SURGE_DECAY: 0.5, RAMP_AIR: 1.0, HOP_AIR: 0.5, ARM_S: 0.9,
-    ROLL_AIR: 0.3, ROLL_SURGE: 1.2,        // 沒抬手機直接輾過跳台：小彈一下，不是撞到
+    ROLL_AIR: 0.28,                        // 輾過跳台的小彈：純手感，不給速度也不吃掉跳台
+    LATE_S: 0.7,                           // 輾過去之後還可以補抬手機的補救窗
     COMBO_EVERY: 3, COMBO_CAP_STEP: 7, COMBO_SURGE: 6, COMBO_MAX_LV: 3,
     HIT_MUL: 0.45, STUN: 0.5,
     STEER: 260, TILT_DEAD: 3.5, TILT_RANGE: 26, TILT_EMA: 0.16,
@@ -858,7 +859,8 @@
     ski = {
       startAt: m.startAt, duration: m.duration, obs: COURSE.build(m.seed, m.speedMul || 1), scan: 0,
       x: 0, wy: COURSE.START_Y, vx: 0, speed: SKI.DRIFT, boost: 0, surge: 0,
-      air: 0, airMax: 0, rot: 0, stun: 0, arm: 0, armScored: false, rolls: 0,
+      air: 0, airMax: 0, rot: 0, stun: 0, arm: 0, armScored: false,
+      rolls: 0, rolling: false, lateRamp: null, lateT: 0,
       jumps: 0, misses: 0, hits: 0, combo: 0, lv: 0, bestCombo: 0, superT: 0,
       tapBase: tapCount, liftBase: liftCount, done: false, tick: 0, last: performance.now(),
     };
@@ -870,10 +872,15 @@
   // 跳躍先起跳、後結算。起跳後 0.9 秒內壓到跳台就算數——這段「容忍值」是關鍵，
   // 提示提早出現，人的反應又有快有慢，要在起跳當下判定的話幾乎沒人跳得到。
   function skiJump() {
-    if (!ski || ski.done || ski.air > 0 || ski.stun > 0) return;
+    if (!ski || ski.done || ski.stun > 0) return;
+    // 真跳台的滯空中不能再跳；小彈的滯空可以——不然輾過去那 0.28 秒剛好把補救的機會擋掉
+    if (ski.air > 0 && !ski.rolling) return;
     const now = clock.serverNow() ?? Date.now();
     if (now < ski.startAt) return;
+    // 剛剛輾過去的那座跳台還在補救窗內 → 直接升級成正式跳台，不用再找一次
+    if (ski.lateRamp != null && ski.lateT > 0) { skiRampHit(ski.lateRamp); return; }
     ski.air = ski.airMax = SKI.HOP_AIR;
+    ski.rolling = false;
     ski.arm = SKI.ARM_S;
     ski.armScored = false;
     navigator.vibrate?.(15);
@@ -884,6 +891,8 @@
   function skiRampHit(i) {
     ski.obs[i].used = true;                                    // 同一座跳台只吃一次
     ski.air = ski.airMax = SKI.RAMP_AIR;
+    ski.rolling = false;
+    ski.lateRamp = null; ski.lateT = 0;
     ski.rot = 0;
     ski.jumps++;
     ski.combo++;
@@ -905,6 +914,12 @@
     }
   }
   function breakCombo() { ski.combo = 0; ski.lv = 0; }
+  // 撞到只砍一半：連段砍半、等級跟著重算。全部歸零的話，
+  // 60 秒撞五次（實測）＝超加速永遠撐不過兩秒，玩家根本感覺不到有這個狀態。
+  function dentCombo() {
+    ski.combo = Math.floor(ski.combo / 2);
+    ski.lv = Math.min(SKI.COMBO_MAX_LV, Math.floor(ski.combo / SKI.COMBO_EVERY));
+  }
 
   function skiTick() {
     if (ended || !ski) return;
@@ -943,7 +958,10 @@
     ski.tapBase = tapCount;
     ski.boost = Math.min(SKI.TAP_CAP, ski.boost + newTaps * SKI.TAP_ACC);
     ski.boost = Math.max(0, ski.boost - ski.boost * SKI.DECAY * dt * (ski.stun > 0 ? 5 : 1));
-    ski.surge = Math.max(0, ski.surge - ski.surge * SKI.SURGE_DECAY * dt * (ski.stun > 0 ? 5 : 1));
+    // 超加速是一個「檔位」，不是一次性的推力：等級越高 surge 掉得越慢，
+    // 所以只要連段還在，速度就一直維持在高檔，斷了才滑回來。
+    const surgeDecay = SKI.SURGE_DECAY / (1 + ski.lv * 0.7);
+    ski.surge = Math.max(0, ski.surge - ski.surge * surgeDecay * dt * (ski.stun > 0 ? 5 : 1));
     const target = Math.min(comboCap(), SKI.DRIFT + ski.boost + ski.surge);
     if (ski.superT > 0) ski.superT -= dt;
     ski.speed += (target - ski.speed) * Math.min(1, dt * 4);
@@ -959,25 +977,39 @@
     if (ski.air > 0) {
       ski.air -= dt;
       // 真跳台才轉一圈；輾過去的小彈只是離地，轉圈會看起來像被撞飛
-      ski.rot = ski.airMax <= SKI.ROLL_AIR ? 0 : (1 - ski.air / ski.airMax) * Math.PI * 2;
+      ski.rot = ski.rolling ? 0 : (1 - ski.air / ski.airMax) * Math.PI * 2;
       if (ski.air <= 0) { ski.air = 0; ski.rot = 0; }
     }
 
     ski.scan = COURSE.advance(ski.obs, ski.scan, ski.wy);
 
-    // 沒抬手機就輾過跳台：小彈一下（0.3 秒滯空、一點點加速），不扣速度、不斷連段。
+    // 沒抬手機就輾過跳台：小彈一下（0.28 秒滯空），不扣速度、不斷連段。
     // 跳台是坡不是牆，輾過去該是「咚一下彈起來」，絕對不能有撞到的感覺。
-    if (ski.arm <= 0 && ski.air <= 0 && ski.stun <= 0) {
+    //
+    // ⚠️ 小彈**不可以**把跳台吃掉，也不可以擋住跳躍。第一版兩件都犯了：
+    // 標成 used → rampAt 再也找不到它；air=0.28 → skiJump 直接 return。
+    // 結果抬手機晚了零點幾秒，跳台就永久消失，實測 60 秒只跳到 1 座。
+    // 現在小彈只是「預設動作」，補救窗內抬手機就升級成正式跳台。
+    if (ski.arm <= 0 && ski.stun <= 0 && (ski.air <= 0 || ski.rolling)) {
       const ri = COURSE.rampAt(ski.obs, ski.scan, ski.x, ski.wy);
-      if (ri >= 0) {
-        ski.obs[ri].used = true;
+      if (ri >= 0 && !ski.obs[ri].rolled) {
+        ski.obs[ri].rolled = true;                             // 同一座只彈一次，但沒被吃掉
+        ski.rolling = true;
         ski.air = ski.airMax = SKI.ROLL_AIR;
         ski.rolls = (ski.rolls || 0) + 1;
-        ski.surge = Math.min(comboCap(), ski.surge + SKI.ROLL_SURGE);
-        $('#skiPadTitle').textContent = '輾過跳台・下次抬手機';
+        ski.lateRamp = ri; ski.lateT = SKI.LATE_S;
+        $('#skiPadTitle').textContent = '現在抬手機還來得及！';
         navigator.vibrate?.(12);
       }
     }
+    if (ski.lateT > 0) {
+      ski.lateT -= dt;
+      if (ski.lateT <= 0) {                                    // 補救窗過了才算真的錯過
+        ski.lateRamp = null;
+        if (ski.arm <= 0 && ski.air <= 0) $('#skiPadTitle').textContent = '錯過跳台了';
+      }
+    }
+    if (ski.air <= 0) ski.rolling = false;
 
     // 跳台結算：容忍期內壓到跳台就算跳成功
     if (ski.arm > 0) {
@@ -1000,7 +1032,8 @@
       ski.hits++;
       ski.boost *= SKI.HIT_MUL; ski.surge *= SKI.HIT_MUL; ski.speed *= SKI.HIT_MUL;
       ski.stun = SKI.STUN; ski.arm = 0; ski.superT = 0;
-      breakCombo();
+      ski.rolling = false; ski.lateRamp = null; ski.lateT = 0;
+      dentCombo();
       ski.obs[hit].wy = -1e9;                                  // 同一棵只撞一次
       $('#skiPadTitle').textContent = '撞到了！';
       navigator.vibrate?.([50, 30, 50]);
@@ -1010,7 +1043,7 @@
     // 跳台預警：用當前速度換算，固定給 0.9 秒的抬手機反應時間
     const r = COURSE.nextRamp(ski.obs, ski.scan, ski.x, ski.wy, ski.speed * WPM() * 0.55 + 110 * COURSE.SPEED_MUL);
     const near = !!r;
-    if (ski.stun <= 0 && ski.air <= 0 && ski.arm <= 0) {
+    if (ski.stun <= 0 && ski.air <= 0 && ski.arm <= 0 && ski.lateT <= 0) {
       $('#skiPadTitle').textContent = near ? '抬起手機！' : '連點加速';
       $('#skiPadSub').textContent = near
         ? (Math.abs(r.wx - ski.x) < COURSE.RAMP_X ? '正對跳台' : (r.wx < ski.x ? '跳台在左邊 ←' : '→ 跳台在右邊'))
@@ -1043,7 +1076,8 @@
   window.__testLift = () => { liftCount++; };
   window.__testTilt = (deg) => { gammaF = deg; gammaZero = 0; };
   window.__skiState = () => (ski ? { x: Math.round(ski.x), wy: Math.round(ski.wy),
-    speed: +ski.speed.toFixed(1), jumps: ski.jumps, misses: ski.misses, hits: ski.hits, rolls: ski.rolls,
+    speed: +ski.speed.toFixed(1), jumps: ski.jumps, misses: ski.misses, hits: ski.hits,
+    rolls: ski.rolls, lv: ski.lv, bestCombo: ski.bestCombo,
     arm: +(ski.arm || 0).toFixed(2) } : null);
 
   sock.on('skiEnd', (m) => {
