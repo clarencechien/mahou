@@ -94,22 +94,28 @@
   body:not(.showRomaji) .rm { display: none; }
 
   /* ---- 控制列 ---- */
+  /* 控制列是**兩層**，不是一長排擠不下才換行。兩者的差別是「多久碰一次」：
+       上層＝放的時候會碰的（前後首、播放、進度、拼音、音量、全螢幕）
+       下層＝開場設一次就不太動的（歌單、背景、歌詞模式、版面模式）
+     之前全部排成一列，寬度不夠時 flex 只能去壓唯一肯縮的 #seek，把它壓到 0 寬，
+     裡面不能縮的「2:22」就溢出去疊在歌單按鈕上。分層之後每一層都有自己的預算，
+     而且下層那四組各自帶小標，才看得出「家宴原創」跟「家宴相簿」不是同一件事。 */
   #bar {
-    position: relative; z-index: 2; display: flex; align-items: center; gap: 14px;
+    position: relative; z-index: 2; display: flex; flex-direction: column; gap: 0;
     background: var(--card); border: 1px solid var(--line); border-radius: 16px;
-    padding: 12px 18px; backdrop-filter: blur(10px);
+    padding: 12px 18px 13px; backdrop-filter: blur(10px);
     transition: opacity .35s, transform .35s;
-    /* ⚠️ 一定要能換行。這排東西會愈長愈多（歌單名一改長就多幾十 px），
-       不換行的話 flex 會去壓唯一肯縮的 #seek，把它壓到 0 寬，
-       裡面不能縮的 2:22 就整個溢出去疊在歌單按鈕上——實測 1280px 就會發生。 */
-    flex-wrap: wrap; row-gap: 10px;
   }
+  .barRow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; row-gap: 10px; }
+  #barPick { margin-top: 11px; padding-top: 11px; border-top: 1px solid rgba(150,175,210,.13); gap: 18px; }
+  .pick { display: flex; align-items: center; gap: 9px; }
+  .pickLabel { color: var(--dim); font-size: .7rem; letter-spacing: .18em; white-space: nowrap; }
   body.idle #bar { opacity: 0; transform: translateY(14px); pointer-events: none; }
   .ico { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
          font-size: 1.1rem; background: rgba(120,150,190,.12); }
   .ico:hover { background: rgba(120,150,190,.24); }
   #play { width: 52px; height: 52px; font-size: 1.4rem; background: rgba(125,211,252,.18); color: #cdefff; }
-  /* 進度條給一個下限：縮到比這窄就自己換到下一列，不要繼續被壓 */
+  /* 進度條吃掉上層剩下的空間，但給一個下限：縮到比這窄就自己換到下一列 */
   #seek { flex: 1 1 260px; display: flex; align-items: center; gap: 12px; min-width: 200px; }
   #track { flex: 1; min-width: 60px; height: 6px; background: rgba(150,175,210,.2); border-radius: 4px; position: relative; cursor: pointer; }
   #track i { display: block; height: 100%; width: 0%; background: var(--accent); border-radius: 4px; }
@@ -271,28 +277,38 @@
   </div>
   <div id="lyrics"><div id="lyricsInner"></div></div>
   <div id="bar">
-    <button class="ico" id="prev" title="上一首（←）">⏮</button>
-    <button class="ico" id="play" title="播放／暫停（空白鍵）">▶</button>
-    <button class="ico" id="next" title="下一首（→）">⏭</button>
-    <div id="seek">
-      <span class="tnum" id="tNow">0:00</span>
-      <div id="track"><i></i></div>
-      <span class="tnum" id="tEnd">0:00</span>
+    <!-- 上層：放的時候會碰的 -->
+    <div class="barRow" id="barPlay">
+      <button class="ico" id="prev" title="上一首（←）">⏮</button>
+      <button class="ico" id="play" title="播放／暫停（空白鍵）">▶</button>
+      <button class="ico" id="next" title="下一首（→）">⏭</button>
+      <div id="seek">
+        <span class="tnum" id="tNow">0:00</span>
+        <div id="track"><i></i></div>
+        <span class="tnum" id="tEnd">0:00</span>
+      </div>
+      <button class="ico" id="romaji" title="羅馬拼音（R）">あ</button>
+      <input type="range" id="vol" min="0" max="1" step="0.02" value="0.7" title="音量">
+      <button class="ico" id="fs" title="全螢幕（F）">⛶</button>
     </div>
-    <div class="seg" id="plSeg"></div>
-    <div class="seg" id="bgSeg"></div>
-    <div class="seg" id="lyrSeg">
-      <button data-l="follow">跟隨</button>
-      <button data-l="all">完整</button>
+    <!-- 下層：開場設一次就不太動的 -->
+    <div class="barRow" id="barPick">
+      <div class="pick"><span class="pickLabel">歌單</span><div class="seg" id="plSeg"></div></div>
+      <div class="pick"><span class="pickLabel">背景</span><div class="seg" id="bgSeg"></div></div>
+      <div class="pick"><span class="pickLabel">歌詞</span>
+        <div class="seg" id="lyrSeg">
+          <button data-l="follow">跟隨</button>
+          <button data-l="all">完整</button>
+        </div>
+      </div>
+      <div class="pick"><span class="pickLabel">版面</span>
+        <div class="seg" id="modeSeg">
+          <button data-m="stage">舞台</button>
+          <button data-m="widget">Widget</button>
+          <button data-m="mini">縮小</button>
+        </div>
+      </div>
     </div>
-    <div class="seg" id="modeSeg">
-      <button data-m="stage">舞台</button>
-      <button data-m="widget">Widget</button>
-      <button data-m="mini">縮小</button>
-    </div>
-    <button class="ico" id="romaji" title="羅馬拼音（R）">あ</button>
-    <input type="range" id="vol" min="0" max="1" step="0.02" value="0.7" title="音量">
-    <button class="ico" id="fs" title="全螢幕（F）">⛶</button>
   </div>
 </div>
 
