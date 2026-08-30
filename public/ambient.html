@@ -149,6 +149,11 @@
   #dockOpa { width: 62px; margin-left: auto; accent-color: var(--accent); }
   body.m-mini #dock, body.m-widget #dock { display: block; }
   body.m-mini #dock { width: auto; }
+  /* widget 擺畫面正下方的正中間，不是右下角。歌詞落在視線的中線上，
+     位置跟電視字幕一樣，眼睛不用往角落瞄。裡面的歌詞也跟著置中。
+     縮小模式維持在右下角——那個模式的用意就是滾去角落不佔畫面。 */
+  body.m-widget #dock { left: 50%; right: auto; transform: translateX(-50%); }
+  body.m-widget #dockBody .ln { text-align: center; }
   #dockHead { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
   #dockTitle { min-width: 0; flex: 1; }
   #dockTitle b { display: block; font-size: 1rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
