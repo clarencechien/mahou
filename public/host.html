@@ -196,6 +196,8 @@
 
   /* 變色龍：每人一個游標（DOM，名字永遠清晰——鐵律 3） */
   .hcur { position: absolute; pointer-events: none; z-index: 4; transform: translate(-50%, -50%); transition: opacity .3s; }
+  /* 說明／測試畫面時，游標要浮在說明卡（z-index 10）之上，玩家才看得到自己在哪 */
+  .hcur.over { z-index: 12; }
   .hcur .ring { width: 30px; height: 30px; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 0 0 2px rgba(0,0,0,.55), inset 0 0 0 2px rgba(0,0,0,.55); margin: 0 auto; }
   .hcur .dot2 { position: absolute; left: 50%; top: 15px; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: #fff; }
   .hcur .nm { margin-top: 3px; text-align: center; font-size: .82rem; font-weight: 800; text-shadow: 0 1px 4px rgba(0,0,0,.9); white-space: nowrap; }
@@ -770,10 +772,10 @@
   BRIEF.cans = {
     title: '砸罐子',
     lead: '全員齊砸同一座塔・瞄哪就砸哪',
-    say: '大家一起砸同一座塔。手機當雷射筆，先瞄你想砸的東西，電視上有你顏色的圈圈。按住蓄力放開就丟，或者直接用力往前揮。瞄哪就打哪，不用調角度。砸壞的都是你的分數，炸彈會連環爆。',
+    say: '大家一起砸同一座塔。現在揮揮手機，電視上就有你顏色的圈圈，先玩一下抓手感。正式開始以後，先瞄好想砸的東西，按確定把位子釘住，這樣手抖也不會跑掉。釘好之後連點畫面或用力搖手機蓄力，力量夠了就自己飛出去。搖一下等於點兩下的力，只有用搖的才砸得出全力。',
     rules: [
-      { ic: '🔴', h: '雷射筆瞄準', d: '揮手機移動你的圈圈，瞄哪就打哪，不用算角度' },
-      { ic: '💪', h: '蓄力或用力揮', d: '按住放開＝蓄力丟；也可以直接把手機往前揮。球每幾秒補一顆' },
+      { ic: '🔴', h: '① 瞄準・按確定', d: '揮手機移動你的圈圈，瞄好按「確定位置」釘住，手再抖也不會漂掉' },
+      { ic: '💪', h: '② 連點或用力搖', d: '釘好之後連點畫面或搖手機蓄力，搖一下＝點兩下的力，滿力只有搖得出來' },
       { ic: '💣', h: '砸壞算你的', d: '瞄底層可以整座垮，瞄炸彈整片飛——都算你的分' },
     ],
   };
@@ -1771,7 +1773,7 @@
   sock.on('pointer', (m) => {
     // 砸罐子也用同一組 pointer：雷射點畫進 canvas，不用 DOM 游標
     CANSG.aims.set(m.clientId, { x: m.x, y: m.y, name: m.name, at: performance.now() });
-    if (curStage !== 'hunt') return;
+    if (curStage !== 'hunt' && curStage !== 'cans') return;
     let cur = cursors.get(m.clientId);
     if (!cur) {
       const el = document.createElement('div');
@@ -1847,6 +1849,7 @@
   }
 
   function huntDrawScene(withChams) {
+    huntEnsureBg();
     if (!HUNT.bg) { hctx.fillStyle = '#050609'; hctx.fillRect(0, 0, hcv.width, hcv.height); return; }
     hctx.drawImage(HUNT.bg, 0, 0);
     if (!withChams) return;
@@ -1894,36 +1897,46 @@
   window.__huntChams = () => HUNT.chams.map((c2) => ({ x: c2.x, y: c2.y, found: c2.found }));   // 測試鉤子
   window.__huntState = () => ({ running: HUNT.running, roundActive: HUNT.roundActive, startAt: HUNT.startAt,
     duration: HUNT.duration, artName: HUNT.artName, round: HUNT.round, hasBg: !!HUNT.bg, curStage });
-  let huntIdleSeed = null, huntIdleBg = null;
-  function huntIdle() {
-    if (!huntIdleBg) {
-      const r = PAINT.pixelize(HUNT.img, hcv.width, hcv.height, { block: 6, seed: 20260830 });
-      huntIdleBg = r.bg;
-    }
-    hctx.drawImage(huntIdleBg, 0, 0);
+  // 說明／測試畫面也要有底圖與 fit：沒有 fit 的話 DOM 游標會定位到整張 canvas，跟畫作對不上
+  function huntEnsureBg() {
+    if (HUNT.bg) return;
+    const r = PAINT.pixelize(HUNT.img, hcv.width, hcv.height, { block: 6, seed: 20260830 });
+    HUNT.bg = r.bg; HUNT.fit = r.fit;
   }
+  function huntIdle() { huntEnsureBg(); hctx.drawImage(HUNT.bg, 0, 0); }
 
   // 游標插值 + 冷卻
   setInterval(() => {
-    const active = curStage === 'hunt';
+    // 砸罐子開打後雷射點改畫進 canvas（會跟著震動），說明／測試階段先用 DOM 游標浮在說明卡上
+    const cansPrep = curStage === 'cans' && !CANSG.world;
+    const active = curStage === 'hunt' || cansPrep;
     for (const [id, cur] of cursors) {
       const stale = performance.now() - cur.at > 4000;
       cur.el.style.display = active && !stale ? '' : 'none';
       if (!active || stale) continue;
+      cur.el.classList.toggle('over', briefOpen);
       cur.x += (cur.tx - cur.x) * .35;
       cur.y += (cur.ty - cur.y) * .35;
       if (cur.cool > 0) { cur.cool -= .033; cur.el.classList.add('cool'); }
       else cur.el.classList.remove('cool');
-      const p2 = huntToScreen(cur.x, cur.y);
+      const p2 = cansPrep ? cansPtrToScreen(cur.x, cur.y) : huntToScreen(cur.x, cur.y);
       cur.el.style.left = p2.x + 'px';
       cur.el.style.top = p2.y + 'px';
     }
   }, 33);
+  // 砸罐子的正規化座標 → wrap CSS px（整張 canvas，沒有畫作的 fit 矩形）
+  function cansPtrToScreen(nx, ny) {
+    const cr = ccv.getBoundingClientRect(), wr = $('#gameWrap').getBoundingClientRect();
+    const scale = Math.min(cr.width / ccv.width, cr.height / ccv.height);
+    const dw = ccv.width * scale, dh = ccv.height * scale;
+    return { x: cr.left - wr.left + (cr.width - dw) / 2 + nx * dw,
+             y: cr.top - wr.top + (cr.height - dh) / 2 + ny * dh };
+  }
 
   // ================= 遊戲四：砸罐子（第一人稱假 3D，全員齊砸） =================
   // 鏡頭不動，飛走的是物件。雷射筆選位子 → 力量決定破壞力，不用調角度。
-  const CANSG = { running: false, level: 0, levels: 5, world: null, aims: new Map(), scores: new Map(),
-                  levelEndAt: 0, rankText: '', betweenLevels: false };
+  const CANSG = { running: false, level: 0, levels: 5, world: null, aims: new Map(), locks: new Map(),
+                  scores: new Map(), levelEndAt: 0, rankText: '', betweenLevels: false };
   const ccv = $('#cansCv'), cctx = ccv.getContext('2d');
   cctx.imageSmoothingEnabled = false;
   const PLAYER_COLS = CHARA.PLAYERS.map((p2) => p2.accent1);
@@ -1944,15 +1957,21 @@
     sock.send({ type: 'cansLevel', level: CANSG.level, levels: CANSG.levels });
     SFX.go();
   }
+  sock.on('canLock', (m) => {
+    CANSG.locks.set(m.clientId, { x: m.x, y: m.y });
+    if (!CANSG.aims.has(m.clientId)) CANSG.aims.set(m.clientId, { x: m.x, y: m.y, name: m.name, at: performance.now() });
+    SFX.ok?.();
+  });
   sock.on('canThrow', (m) => {
+    CANSG.locks.delete(m.clientId);                 // 這球出手，準心解除
+    CANSG.lastThrow = { clientId: m.clientId, x: m.x, y: m.y, power: m.power };
     if (!CANSG.world) return;
-    const idx = roster.findIndex((c) => c.clientId === m.clientId);
-    CANS.throwBall(CANSG.world, m.x, m.y, m.power, idx < 0 ? 0 : idx, m.clientId);
+    CANS.throwBall(CANSG.world, m.x, m.y, m.power, playerIdx(m.clientId), m.clientId);
     SFX.turn();
   });
   sock.on('canScore', (m) => { if (m.clientId) CANSG.scores.set(m.clientId, m.total); });
   sock.on('cansEnd', (m) => {
-    CANSG.running = false; CANSG.world = null;
+    CANSG.running = false; CANSG.world = null; CANSG.locks.clear();
     SFX.win();
     CANSG.rankText = (m.rank || []).slice(0, 3).map((r, i) => `${'🥇🥈🥉'.slice(i * 2, i * 2 + 2)} ${r.name} ${r.score}分`).join('　');
     updateShell();
@@ -1974,7 +1993,7 @@
     const nowP = performance.now();
     const dt = Math.min(.05, (nowP - cansLast) / 1000);
     cansLast = nowP;
-    if (!CANSG.world) { cctx.fillStyle = '#101018'; cctx.fillRect(0, 0, ccv.width, ccv.height); return; }
+    if (!CANSG.world) { cansIdle(); return; }        // 說明／測試畫面：先讓大家看到自己的雷射點
     const evts = CANS.step(CANSG.world, dt);
     for (const e of evts) {
       if (e.ownerId) sock.send({ type: 'canScoreEvt', clientId: e.ownerId, pts: e.pts, kind: e.kind });
@@ -1987,14 +2006,7 @@
       if (e.kind === 'boom') SFX.caught();
       else if (e.kind === 'break' || e.kind === 'knock') SFX.ok();
     }
-    // 雷射點：跟變色龍共用 pointer 協定
-    const aims = [];
-    for (const [id, a] of CANSG.aims) {
-      if (nowP - a.at > 3500) continue;
-      const idx = roster.findIndex((c) => c.clientId === id);
-      aims.push({ idx: idx < 0 ? 0 : idx, nx: a.x, ny: a.y, name: a.name });
-    }
-    CANS.render(cctx, CANSG.world, PLAYER_COLS, aims);
+    CANS.render(cctx, CANSG.world, PLAYER_COLS, cansAims());
 
     if (CANSG.running && !CANSG.betweenLevels) {
       const now2 = hostClock.serverNow() ?? Date.now();
@@ -2006,11 +2018,27 @@
       }
     }
   }
+  // 雷射點：跟變色龍共用 pointer 協定。已按「確定」的畫成準心，還在飄的畫成圓點
+  function cansAims() {
+    const nowP = performance.now();
+    const aims = [];
+    for (const [id, a] of CANSG.aims) {
+      const lock = CANSG.locks.get(id);
+      if (lock) aims.push({ idx: playerIdx(id), nx: lock.x, ny: lock.y, name: a.name, lock: true });
+      if (nowP - a.at > 3500) continue;
+      aims.push({ idx: playerIdx(id), nx: a.x, ny: a.y, name: lock ? '' : a.name });
+    }
+    return aims;
+  }
+  function playerIdx(id) { const i = roster.findIndex((c) => c.clientId === id); return i < 0 ? 0 : i; }
+  window.__cansHostState = () => ({ aims: CANSG.aims.size, locks: CANSG.locks.size,
+    lastThrow: CANSG.lastThrow || null, hasWorld: !!CANSG.world, level: CANSG.level });   // 測試鉤子
   let cansIdleWorld = null;
   function cansIdle() {
+    // 說明／測試階段也要照常畫雷射點，玩家一舉手機就看得到自己在哪
     if (!cansGroundReady) { CANS.buildGround(MODE7.buildWorld('dirt')); cansGroundReady = true; }
     if (!cansIdleWorld) cansIdleWorld = CANS.build(3);
-    CANS.render(cctx, cansIdleWorld, PLAYER_COLS, []);
+    CANS.render(cctx, cansIdleWorld, PLAYER_COLS, cansAims());
   }
 
   const feedEl = $('#feed');
