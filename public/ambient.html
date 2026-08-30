@@ -13,6 +13,11 @@
     --dim: #9fb0c9;
     --line: rgba(150,175,210,.22);
     --card: rgba(10,14,24,.72);
+    /* widget 歌詞：日文跟中文同一個級數（固定兩行），各自墊一塊灰 */
+    --lyrSize: .98rem;
+    --lyrLine: 1.4;
+    --lyrPad: 3px;
+    --lyrGap: 3px;
     --accent: #7dd3fc;
   }
   html, body { height: 100%; margin: 0; }
@@ -159,6 +164,13 @@
   #dockTitle b { display: block; font-size: 1rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #dockTitle span { display: block; color: var(--dim); font-size: .76rem; letter-spacing: .1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.m-mini #dockTitle span, body.m-mini #dockBody, body.m-mini #dockTrack { display: none; }
+  /* 縮小模式就是一顆只寫著歌名的藥丸。底下那排（跟隨歌詞／完整歌詞）在這裡
+     沒有意義——根本沒有歌詞可看——整排收掉。
+     濃淡拉到最低時連播放鈕都退場，真的只剩歌名；滑鼠移上去全部回來。 */
+  body.m-mini #dockFoot { display: none; }
+  body.m-mini #dockHead .ico {
+    opacity: clamp(0, calc(var(--dockA, .78) * 3), 1); transition: opacity .18s ease;
+  }
   #dockTrack { height: 3px; background: rgba(150,175,210,.18); }
   /* 卡片裡的小底（按鈕、分段控制、進度條的槽）也跟著濃淡走，
      不然把卡片拉到 0 之後會剩下一堆浮在照片上的圓角方塊 */
@@ -172,11 +184,10 @@
   body.m-widget.oneLine #dockBody {
     /* **高度寫死兩行**（有羅馬拼音就三行）。不寫死的話，有中譯的句子兩行、
        純日文的句子一行、間奏只有一個音符——卡片會一直上下跳，比歌詞本還吵。 */
-    height: calc(1.02rem * 1.4 + .84rem * 1.4 + 20px);
+    height: calc(2 * (var(--lyrSize) * var(--lyrLine) + var(--lyrPad) * 2) + var(--lyrGap) + 20px);
     max-height: none; overflow: hidden; padding: 8px 16px 12px;
     display: flex; flex-direction: column; justify-content: center;
   }
-  body.m-widget.oneLine.showRomaji #dockBody { height: calc(1.02rem * 1.4 + .84rem * 1.4 + .72rem * 1.4 + 20px); }
   body.m-widget.oneLine #dockBody .sec,
   body.m-widget.oneLine #dockBody .ln:not(.cur) { display: none; }
   body.m-widget.oneLine #dockBody .ln.cur { opacity: 1; padding: 0; }
@@ -187,9 +198,25 @@
     content: '♪'; color: var(--dim); font-size: .9rem;
   }
   #dockBody .ln { text-align: left; padding: 5px 0; }
-  #dockBody .ln .jp { font-size: 1.02rem; line-height: 1.4; }
-  #dockBody .ln .zh { font-size: .84rem; line-height: 1.4; }
-  #dockBody .ln .rm { font-size: .72rem; line-height: 1.4; }
+  /* 日文跟中文同一個級數——中文不再是附註級的小字。
+     每一行底下再墊一塊灰：照片是白的時候（白天花板、白紗）白字會整個看不見，
+     卡片濃淡拉到 0 時更是完全沒東西擋。
+     墊子只包住字本身（inline-block），不是整條橫的，所以拉到 0 的時候
+     看起來仍然是「歌詞浮在照片上」，不是多了一根灰色的長條。 */
+  #dockBody .ln .jp, #dockBody .ln .zh {
+    display: inline-block; max-width: 100%;
+    padding: var(--lyrPad) 10px; border-radius: 8px;
+    background: rgba(30,35,44,.62);
+  }
+  #dockBody .ln .jp { font-size: var(--lyrSize); line-height: var(--lyrLine); }
+  /* 舞台那邊當下那句會放大 4%，卡片裡不要——說好兩行一樣大就一樣大 */
+  #dockBody .ln.cur .jp { transform: none; }
+  #dockBody .ln .zh { font-size: var(--lyrSize); line-height: var(--lyrLine); margin-top: var(--lyrGap); }
+  /* 卡片就是日文＋中文兩行，不放羅馬拼音——這麼小的卡片塞三行只是變吵。
+     ⚠️ 這一行不能省。上面那條 `#dockBody .ln .jp, .zh` 帶了一個 id，
+     權重比 `body:not(.showRomaji) .rm` 高，早期把 .rm 一起寫進去的時候，
+     羅馬拼音沒開也會冒出來。舞台模式的あ鈕不受影響。 */
+  #dockBody .ln .rm { display: none; }
   #dockBody .sec { margin: 10px 0 0; }
   #dockFoot { display: flex; align-items: center; gap: 8px; padding: 0 14px 12px; }
   #dockFoot .seg button { padding: 5px 10px; font-size: .74rem; }
@@ -277,7 +304,7 @@
   <h1>背景模式</h1>
   <p id="gateNote">載入中…</p>
   <button id="gateGo">▶ 開始播放</button>
-  <p style="font-size:.78rem; opacity:.6">空白鍵 播放／暫停・← → 換歌・1 2 3 換歌單<br>S 舞台・W widget・M 縮小・L 歌詞模式・B 換背景・F 全螢幕・[ ] 卡片濃淡</p>
+  <p style="font-size:.78rem; opacity:.6">空白鍵 播放／暫停・← → 換歌・1 2 3 換歌單<br>S 舞台・W widget・M 縮小／還原・L 歌詞模式・B 換背景・F 全螢幕・[ ] 卡片濃淡</p>
 </div>
 
 <audio id="au" preload="metadata"></audio>
@@ -601,7 +628,9 @@
     else if (e.key === 'ArrowLeft') loadSong(songIdx - 1, !au.paused);
     else if (k === 's') setMode('stage');
     else if (k === 'w') setMode('widget');
-    else if (k === 'm') setMode('mini');
+    // ⚠️ M 一定要是切換。縮小之後底下那排收起來了，▁ 鈕不在畫面上，
+    // 濃淡再拉到 0 的話只剩一個歌名——沒有這個切換就得繞「⤢ 回舞台 → 按 Widget」才回得來。
+    else if (k === 'm') setMode(mode === 'mini' ? 'widget' : 'mini');
     else if (k === 'l') setLyrMode(lyrMode === 'follow' ? 'all' : 'follow');
     else if (k === 'r') setRomaji(!romaji);
     else if (k === 'f') $('#fs').click();
