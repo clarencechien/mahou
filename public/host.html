@@ -416,6 +416,12 @@
           拉高＝藏人的面積變大、同一張畫每關都不一樣。</div>
       </div>
       <div class="k">
+        <div class="lab"><span>小人長相</span><b id="tvHuntChar">方頭人</b></div>
+        <div style="display:flex; gap:6px; margin-top:2px" id="charBtns"></div>
+        <div class="d">立刻生效。芽芽人＝大眼睛＋頭上一根莖，剪影比較圓。
+          畫上偽裝之後兩者差別不大，主要看得出來的是說明卡跟前幾關。</div>
+      </div>
+      <div class="k">
         <div class="lab"><span>每場幾幅畫</span><b id="tvHuntRounds">8 幅</b></div>
         <input type="range" id="tHuntRounds" min="3" max="8" step="1" value="8">
         <div class="d" id="tHuntRoundsD">一幅畫＝一關。下一場生效。</div>
@@ -1474,7 +1480,7 @@
   // ---- 手感旋鈕：定案速度前先讓人現場調 ----
   const TUNE_DEF = { speed: 3.2, tex: 3.5, fov: 1.0, dur: 60,
                      huntDiff: 1, huntSec: 45, huntTheme: 0, huntBlock: 1,
-                     huntRounds: 8, huntMax: 10, huntCrop: 60,
+                     huntRounds: 8, huntMax: 10, huntCrop: 60, huntChar: 'block',
                      huntSize: 0, huntDepth: 0, huntEdge: 0, huntBlink: 0,   // 0 = 照關卡曲線
                      cansRefill: 4.5, cansSec: 45, cansFun: 50 };
   // 改預設值的時候把 TUNE_VER 加一：舊瀏覽器存的設定會蓋掉新預設，
@@ -1523,6 +1529,15 @@
     $('#tHuntRoundsD').textContent = `一幅畫＝一關，${th.name}共 ${th.list.length} 張、每場隨機挑 ${R} 張。下一場生效。`;
     $('#tHuntMax').value = MX; $('#tvHuntMax').textContent = `${MX} 隻`;
     $('#tHuntMaxD').textContent = '每關的隻數：' + huntCountCurve(R, MX).join(' → ') + ' 隻';
+    PAINT.setCharset(TUNE.huntChar || 'block');
+    $('#tvHuntChar').textContent = (PAINT.CHARSETS.find((c) => c.key === PAINT.charset) || {}).name || '';
+    $('#charBtns').innerHTML = PAINT.CHARSETS.map((c) =>
+      `<button class="charBtn" data-c="${c.key}" style="flex:1; padding:8px 0; font-size:.84rem;
+        background:${c.key === PAINT.charset ? '#334d7a' : '#1e293b'}">${c.name}</button>`).join('');
+    $('#charBtns').querySelectorAll('.charBtn').forEach((btn) => btn.addEventListener('click', () => {
+      TUNE.huntChar = btn.dataset.c; saveTune(); renderTune();
+      if (briefOpen) drawBriefChams();               // 說明卡上的示範也要跟著換
+    }));
     $('#tHuntCrop').value = TUNE.huntCrop;
     $('#tvHuntCrop').textContent = (TUNE.huntCrop | 0) === 0 ? '不裁切' : (TUNE.huntCrop | 0);
     const isCustom = th.key === 'custom';
