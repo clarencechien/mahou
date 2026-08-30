@@ -99,14 +99,19 @@
     background: var(--card); border: 1px solid var(--line); border-radius: 16px;
     padding: 12px 18px; backdrop-filter: blur(10px);
     transition: opacity .35s, transform .35s;
+    /* ⚠️ 一定要能換行。這排東西會愈長愈多（歌單名一改長就多幾十 px），
+       不換行的話 flex 會去壓唯一肯縮的 #seek，把它壓到 0 寬，
+       裡面不能縮的 2:22 就整個溢出去疊在歌單按鈕上——實測 1280px 就會發生。 */
+    flex-wrap: wrap; row-gap: 10px;
   }
   body.idle #bar { opacity: 0; transform: translateY(14px); pointer-events: none; }
   .ico { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
          font-size: 1.1rem; background: rgba(120,150,190,.12); }
   .ico:hover { background: rgba(120,150,190,.24); }
   #play { width: 52px; height: 52px; font-size: 1.4rem; background: rgba(125,211,252,.18); color: #cdefff; }
-  #seek { flex: 1; display: flex; align-items: center; gap: 12px; min-width: 0; }
-  #track { flex: 1; height: 6px; background: rgba(150,175,210,.2); border-radius: 4px; position: relative; cursor: pointer; }
+  /* 進度條給一個下限：縮到比這窄就自己換到下一列，不要繼續被壓 */
+  #seek { flex: 1 1 260px; display: flex; align-items: center; gap: 12px; min-width: 200px; }
+  #track { flex: 1; min-width: 60px; height: 6px; background: rgba(150,175,210,.2); border-radius: 4px; position: relative; cursor: pointer; }
   #track i { display: block; height: 100%; width: 0%; background: var(--accent); border-radius: 4px; }
   .tnum { font-family: ui-monospace, monospace; font-size: .82rem; color: var(--dim); white-space: nowrap; }
   .seg { display: flex; gap: 3px; background: rgba(120,150,190,.12); border-radius: 11px; padding: 3px; }
