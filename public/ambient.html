@@ -210,10 +210,16 @@
      墊子只包住字本身（inline-block），不是整條橫的，所以拉到 0 的時候
      看起來仍然是「歌詞浮在照片上」，不是多了一根灰色的長條。 */
   #dockBody .ln .jp, #dockBody .ln .zh {
-    display: inline-block; max-width: 100%;
+    /* ⚠️ 不能用 inline-block。墊子要「只包住字」，直覺會想到 inline-block，
+       但兩個 inline-block 只要**擠得下同一行就會並排**——長句子看起來正常
+       （被擠到換行），短句子（〈湖畔の家宴〉最後那幾句）日文跟中文就黏成一行了。
+       block ＋ width: fit-content 一樣只包住字，但每一行永遠是自己一行。 */
+    display: block; width: fit-content; max-width: 100%;
     padding: var(--lyrPad) 10px; border-radius: 8px;
     background: rgba(30,35,44,.62);
   }
+  /* 置中的是「墊子這個盒子」，不是盒子裡的字 */
+  body.m-widget #dockBody .ln .jp, body.m-widget #dockBody .ln .zh { margin-inline: auto; }
   #dockBody .ln .jp { font-size: var(--lyrSize); line-height: var(--lyrLine); }
   /* 舞台那邊當下那句會放大 4%，卡片裡不要——說好兩行一樣大就一樣大 */
   #dockBody .ln.cur .jp { transform: none; }
