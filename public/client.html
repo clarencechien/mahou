@@ -1117,6 +1117,7 @@
   // 60Hz 更新游標；有動才上報（15Hz 上限），閒置手機不養房間
   setInterval(() => {
     if (ended || !joined || (stage !== 'hunt' && stage !== 'cans')) return;
+    if (cansPhase === 'charge') return;   // 位置已鎖定：不再上報，電視上只留準心，不會有第二個點在飄
     if (ptrMode === 'gyro' && oOn && oAlpha0 !== null) {
       ptrX = Math.max(0, Math.min(1, 0.5 - wrap180(oAlpha - oAlpha0) / (HUNTC.GYRO_RANGE * 2)));
       ptrY = Math.max(0, Math.min(1, 0.5 - (oBeta - oBeta0) / (HUNTC.GYRO_RANGE * 2)));
@@ -1263,7 +1264,7 @@
     $('#cansPadSub').textContent = '用力搖＝點兩下的力';
     navigator.vibrate?.(15);
     clearTimeout(fireTimer);
-    fireTimer = setTimeout(fireLocked, 2200);        // 鎖了不動也會出手，不會卡住
+    fireTimer = setTimeout(unlockAim, 4000);         // 鎖了一直沒蓄力就放掉重瞄，不浪費這顆球
     renderCansBtn(true);
   }
   // ② 連點／搖手機蓄力，最後一次輸入 0.52 秒後自動出手
@@ -1276,6 +1277,13 @@
     $('#cansPowerBar').style.background = p > .72 ? '#dc2626' : '#e98336';
     clearTimeout(fireTimer);
     fireTimer = setTimeout(fireLocked, CANSC.FIRE_MS);
+  }
+  function unlockAim() {
+    if (cansPhase !== 'charge') return;
+    cansPhase = 'aim';
+    $('#cansPadTitle').textContent = '沒蓄力，重瞄一次';
+    $('#cansPadSub').textContent = '球還在，瞄好再按①';
+    renderCansBtn(true);
   }
   function fireLocked() {
     if (cansPhase !== 'charge') return;
@@ -1292,6 +1300,20 @@
     const now = clock.serverNow() ?? Date.now();
     return cansStartAt > 0 && now >= cansStartAt && now - cansBallAt >= CANSC.REFILL;
   }
+  // 補到球的那一瞬間把游標拉回正中央：每一球都從同一個起點瞄，
+  // 陀螺儀漂掉的量也在這裡一併歸零，不用玩家自己記得按「游標回中央」
+  let cansWasReady = false;
+  function cansRefillTick() {
+    const ready = ballReady();
+    if (ready && !cansWasReady) {
+      ptrZero();
+      $('#cansPadTitle').textContent = '補到球了・游標回中央';
+      $('#cansPadSub').textContent = '瞄好按①確定';
+      navigator.vibrate?.(12);
+    }
+    cansWasReady = ready;
+    return ready;
+  }
   function doThrow(power, nx, ny) {
     if (!ballReady()) { $('#cansPadSub').textContent = '球還沒好'; return; }
     cansBallAt = clock.serverNow() ?? Date.now();
@@ -1306,6 +1328,7 @@
   function renderCansStat(total) { $('#cansStat').innerHTML = `得分 <b>${total}</b>`; }
   function renderCansBtn(force) {
     const btn = $('#cansThrowBtn');
+    cansRefillTick();
     if (cansPhase === 'charge') {
       btn.disabled = false; btn.style.opacity = 1;
       btn.textContent = '② 連點／搖手機';
@@ -1330,7 +1353,7 @@
 
   sock.on('cansStart', (m) => {
     cansStartAt = m.startAt; CANSC.REFILL = m.refill || 4500; cansBallAt = 0;
-    cansPhase = 'aim'; clearTimeout(fireTimer);
+    cansPhase = 'aim'; clearTimeout(fireTimer); cansWasReady = false;
     $('#cansMsg').textContent = '開始！';
   });
   sock.on('cansLevel', (m) => { $('#cansMsg').textContent = `第 ${m.level}/${m.levels || 5} 關`; });

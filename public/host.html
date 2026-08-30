@@ -244,6 +244,7 @@
   #brief .rule .ic { font-size: 2rem; line-height: 1; margin-bottom: 8px; }
   #brief .rule .h { font-weight: 800; font-size: 1.1rem; margin-bottom: 4px; }
   #brief .rule .d { color: #94a3b8; font-size: .92rem; line-height: 1.55; }
+  #brief #briefShow.on { display: flex !important; }
   #brief .ready { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
   #brief .rbar { flex: 1; min-width: 200px; height: 8px; background: #1e293b; border-radius: 5px; overflow: hidden; }
   #brief .rbar i { display: block; height: 100%; width: 0%; background: #16a34a; transition: width .3s; }
@@ -355,8 +356,42 @@
         <div class="d">越高越難找（更小、更平、更少破綻）。長輩多就調低。</div>
       </div>
       <div class="k">
-        <div class="lab"><span>變色龍每輪秒數</span><b id="tvHuntSec">45 秒</b></div>
+        <div class="lab"><span>變色龍每輪秒數上限</span><b id="tvHuntSec">45 秒</b></div>
         <input type="range" id="tHuntSec" min="20" max="90" step="5" value="45">
+        <div class="d">實際秒數跟隻數走（10＋隻數×3.5 秒），這裡設的是上限。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>畫作主題</span><b id="tvHuntTheme">名畫系</b></div>
+        <div style="display:flex; gap:6px; margin-top:2px">
+          <button class="themeBtn" data-t="0" style="flex:1; padding:8px 0; font-size:.84rem">名畫系</button>
+          <button class="themeBtn" data-t="1" style="flex:1; padding:8px 0; font-size:.84rem">卡通系</button>
+        </div>
+        <div class="d">各 8 張。下一場生效。卡通系是戲畫／妖怪繪卷／國芳的貓這類公有領域作品。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>變色龍・像素大小</span><b id="tvHuntBlock">6 px</b></div>
+        <input type="range" id="tHuntBlock" min="2" max="16" step="1" value="6">
+        <div class="d">畫作被打成幾 px 一格。越大越糊、小人越好藏（但畫也越難認）。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>變色龍・大小</span><b id="tvHuntSize">照曲線</b></div>
+        <input type="range" id="tHuntSize" min="0" max="0.26" step="0.005" value="0">
+        <div class="d">佔畫高的比例。0＝照關卡曲線自己縮，拉開就整場固定。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>變色龍・立體感</span><b id="tvHuntDepth">照曲線</b></div>
+        <input type="range" id="tHuntDepth" min="0" max="1" step="0.02" value="0">
+        <div class="d">投影＋邊緣亮暗條。越高越立體＝越好找。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>變色龍・輪廓破綻</span><b id="tvHuntEdge">照曲線</b></div>
+        <input type="range" id="tHuntEdge" min="0" max="0.5" step="0.01" value="0">
+        <div class="d">身體整片微微發亮。長輩多就往上拉。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>變色龍・眨眼間隔</span><b id="tvHuntBlink">照曲線</b></div>
+        <input type="range" id="tHuntBlink" min="0" max="8" step="0.2" value="0">
+        <div class="d">平均幾秒眨一次。眨眼是唯一的破綻，越短越好找。</div>
       </div>
       <div class="k" style="border-top:1px solid #24365a; padding-top:10px">
         <div class="lab"><span>砸罐子回充秒數</span><b id="tvCansRefill">4.5 秒</b></div>
@@ -366,6 +401,12 @@
       <div class="k">
         <div class="lab"><span>砸罐子每關秒數</span><b id="tvCansSec">45 秒</b></div>
         <input type="range" id="tCansSec" min="20" max="90" step="5" value="45">
+      </div>
+      <div class="k">
+        <div class="lab"><span>砸罐子・歡樂度</span><b id="tvCansFun">50</b></div>
+        <input type="range" id="tCansFun" min="0" max="100" step="5" value="50">
+        <div class="d">一次放大打飛力道、朝鏡頭飛的比例、碎片、震動、定格與連鎖半徑。
+          50＝原本的物理；拉到 100 是大亂鬥，每個人都像有超能力。立刻生效。</div>
       </div>
       <div class="btns">
         <button id="tReset">回預設</button>
@@ -377,6 +418,16 @@
         <h1 id="briefTitle">遊戲說明</h1>
         <div class="lead" id="briefLead"></div>
         <div class="rules" id="briefRules"></div>
+        <div id="briefShow" style="display:none; align-items:center; gap:14px; margin-bottom:20px;
+             background:#f6f4ee; border-radius:12px; padding:12px 16px">
+          <div style="color:#1e293b; font-weight:800; font-size:.95rem; white-space:nowrap; line-height:1.5">
+            你要找的<br>就是這種小人
+          </div>
+          <canvas id="briefCham" width="480" height="112" style="flex:1; min-width:0; image-rendering:pixelated"></canvas>
+          <div style="color:#475569; font-size:.8rem; line-height:1.5; white-space:nowrap">
+            五種姿勢<br>會<b style="color:#b45309">眨眼睛</b>
+          </div>
+        </div>
         <div class="ready">
           <div style="font-weight:700; white-space:nowrap" id="briefReadyN">0 / 0 人已就緒</div>
           <div class="rbar"><i id="briefBar"></i></div>
@@ -761,12 +812,12 @@
   };
   BRIEF.hunt = {
     title: '名畫變色龍',
-    lead: '大家一起找・誰先蓋到就是誰的',
-    say: '名畫裡躲了幾隻變色龍。用手機移動你的游標，找到了就按蓋章，誰先蓋到就是誰的。蓋錯的話會被罰兩秒不能動。眼睛放亮，牠們會眨眼睛。',
+    lead: () => `${PAINT.THEMES[TUNE.huntTheme | 0].name}・8 關・第一關只有 1 隻，最後一關 24 隻`,
+    say: '畫裡躲了小人，長得就像螢幕上這五隻。第一關只有一隻，之後每一關會越來越多，最後一關有二十四隻。現在就揮揮手機，電視上會出現你顏色的游標，先玩一下抓手感。找到小人就按蓋章，誰先蓋到就是誰的，蓋錯會被罰兩秒不能動。眼睛放亮，牠們會眨眼睛。',
     rules: [
-      { ic: '🔍', h: '找變色龍', d: '牠們偽裝成畫的一部分，但會眨眼睛' },
-      { ic: '📱', h: '手機當雷射筆', d: '揮手機移游標；會漂就按歸零，也可以切成觸控板' },
-      { ic: '🖐', h: '蓋章搶快', d: '誰先蓋到就是誰的；蓋錯罰 2 秒不能動' },
+      { ic: '🔍', h: '找畫裡的小人', d: '牠們偽裝成畫的一部分，唯一的破綻是會眨眼睛' },
+      { ic: '📈', h: '每關越來越多', d: '1 → 2 → 3 → 5 → 8 → 12 → 17 → 24 隻，隻數多了體型才慢慢變小' },
+      { ic: '🖐', h: '雷射筆蓋章搶快', d: '揮手機移游標（會漂就按歸零）；誰先蓋到就是誰的，蓋錯罰 2 秒' },
     ],
   };
   BRIEF.cans = {
@@ -823,6 +874,8 @@
     $('#briefLead').textContent = typeof b.lead === 'function' ? b.lead() : b.lead;
     $('#briefRules').innerHTML = b.rules.map((r) =>
       `<div class="rule"><div class="ic">${r.ic}</div><div class="h">${r.h}</div><div class="d">${r.d}</div></div>`).join('');
+    $('#briefShow').classList.toggle('on', g.key === 'hunt');
+    if (g.key === 'hunt') drawBriefChams();
     $('#brief').classList.add('on');
     renderBrief();
     // 先把手機切到這一關，大家才能在說明期間設好感應器
@@ -830,6 +883,26 @@
     setActiveBtn(g.key);
     if (g.key === 'hunt') huntPreload();       // 說明期間預載名畫，開打不用等
     speak(b.say);
+  }
+  // 白底展示五種姿勢：畫上偽裝就看不出輪廓了，所以說明時先讓大家記住形狀。
+  // 借 PAINT.drawChameleon 本人畫（不是另外畫一張示意圖），才不會說明跟實際長得不一樣。
+  function drawBriefChams() {
+    const cv = $('#briefCham'), g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.fillStyle = '#f6f4ee'; g.fillRect(0, 0, cv.width, cv.height);
+    const white = document.createElement('canvas');
+    white.width = cv.width; white.height = cv.height;
+    const wg = white.getContext('2d');
+    wg.fillStyle = '#3d4657'; wg.fillRect(0, 0, white.width, white.height);   // 偽裝借的「畫」＝一片純色，等於看到剪影
+    const fit = { x: 0, y: 0, w: cv.width, h: cv.height };
+    const slotW = cv.width / 5 * 0.78;
+    for (let i = 0; i < 5; i++) {
+      // 第五種姿勢是趴著的，外框又寬又矮——只照高度算會撐出格子外，所以兩個方向都要夾
+      const b2 = PAINT.POSE_BOUNDS[i];
+      const u = Math.min(0.80 * cv.height / b2.h, slotW / b2.w);
+      PAINT.drawChameleon(g, white, fit, { x: (i + .5) / 5, y: .92, pose: i, blink: i === 2 },
+        { hNorm: u * b2.h / cv.height, depth: .35, edge: 0, eyeSize: 4, camoOffset: 0 });
+    }
   }
   function closeBrief() {
     briefOpen = false;
@@ -1088,7 +1161,8 @@
     }
     if (curStage === 'hunt') {
       const now2 = hostClock.serverNow() ?? Date.now();
-      $('#hudRound').textContent = HUNT.artName ? `${HUNT.round}/${HUNT.totalRounds}・${HUNT.artName}` : '';
+      $('#hudRound').textContent = HUNT.artName
+        ? `${HUNT.round}/${HUNT.totalRounds}・${HUNT.artName}・${HUNT.chams.length} 隻` : '';
       if (HUNT.roundActive && HUNT.startAt) {
         const pre = HUNT.startAt - now2;
         const remain = HUNT.startAt + HUNT.duration - now2;
@@ -1323,10 +1397,14 @@
   // 每格一個獨立視野，全部寫進同一張 ImageData 再一次 putImageData。
   // 實測：1 格與 8 格同樣 4.3ms —— 分割數不是成本，總像素才是。
   // ---- 手感旋鈕：定案速度前先讓人現場調 ----
-  const TUNE_DEF = { speed: 3.2, tex: 3.5, fov: 1.0, dur: 60, huntDiff: 1, huntSec: 45, cansRefill: 4.5, cansSec: 45 };
+  const TUNE_DEF = { speed: 3.2, tex: 3.5, fov: 1.0, dur: 60,
+                     huntDiff: 1, huntSec: 45, huntTheme: 0, huntBlock: 6,
+                     huntSize: 0, huntDepth: 0, huntEdge: 0, huntBlink: 0,   // 0 = 照關卡曲線
+                     cansRefill: 4.5, cansSec: 45, cansFun: 50 };
   const TUNE = Object.assign({}, TUNE_DEF, (() => {
     try { return JSON.parse(localStorage.getItem('mahou-tune') || '{}'); } catch (e) { return {}; }
   })());
+  TUNE.huntTheme = Math.max(0, Math.min(PAINT.THEMES.length - 1, TUNE.huntTheme | 0));
   function saveTune() { try { localStorage.setItem('mahou-tune', JSON.stringify(TUNE)); } catch (e) {} }
   function renderTune() {
     $('#tSpeed').value = TUNE.speed; $('#tvSpeed').textContent = (+TUNE.speed).toFixed(1) + '×';
@@ -1337,10 +1415,33 @@
     $('#tHuntSec').value = TUNE.huntSec;   $('#tvHuntSec').textContent = (TUNE.huntSec | 0) + ' 秒';
     $('#tCansRefill').value = TUNE.cansRefill; $('#tvCansRefill').textContent = (+TUNE.cansRefill).toFixed(1) + ' 秒';
     $('#tCansSec').value = TUNE.cansSec;   $('#tvCansSec').textContent = (TUNE.cansSec | 0) + ' 秒';
+    $('#tCansFun').value = TUNE.cansFun;   $('#tvCansFun').textContent = (TUNE.cansFun | 0) + (TUNE.cansFun >= 90 ? ' 大亂鬥' : TUNE.cansFun <= 10 ? ' 安靜' : '');
+    CANS.setFun((TUNE.cansFun | 0) / 100);
+    $('#tHuntBlock').value = TUNE.huntBlock; $('#tvHuntBlock').textContent = (TUNE.huntBlock | 0) + ' px';
+    const auto = (v, fmt) => (+v > 0 ? fmt(+v) : '照曲線');
+    $('#tHuntSize').value = TUNE.huntSize;   $('#tvHuntSize').textContent = auto(TUNE.huntSize, (v) => (v * 100).toFixed(1) + '%');
+    $('#tHuntDepth').value = TUNE.huntDepth; $('#tvHuntDepth').textContent = auto(TUNE.huntDepth, (v) => v.toFixed(2));
+    $('#tHuntEdge').value = TUNE.huntEdge;   $('#tvHuntEdge').textContent = auto(TUNE.huntEdge, (v) => v.toFixed(2));
+    $('#tHuntBlink').value = TUNE.huntBlink; $('#tvHuntBlink').textContent = auto(TUNE.huntBlink, (v) => v.toFixed(1) + ' 秒');
+    $('#tvHuntTheme').textContent = PAINT.THEMES[TUNE.huntTheme | 0].name;
+    document.querySelectorAll('.themeBtn').forEach((b) => {
+      b.style.background = (+b.dataset.t === (TUNE.huntTheme | 0)) ? '#334d7a' : '#1e293b';
+    });
   }
+  document.querySelectorAll('.themeBtn').forEach((b) => {
+    b.addEventListener('click', () => {
+      TUNE.huntTheme = +b.dataset.t; saveTune(); renderTune();
+      huntIdleReset(); huntPreload();          // 主題換了就重抓畫、重畫說明底圖
+    });
+  });
   [['tSpeed', 'speed'], ['tTex', 'tex'], ['tFov', 'fov'], ['tDur', 'dur'],
-   ['tHuntDiff', 'huntDiff'], ['tHuntSec', 'huntSec'], ['tCansRefill', 'cansRefill'], ['tCansSec', 'cansSec']].forEach(([id, key]) => {
-    $('#' + id).addEventListener('input', (e) => { TUNE[key] = +e.target.value; saveTune(); renderTune(); });
+   ['tHuntDiff', 'huntDiff'], ['tHuntSec', 'huntSec'], ['tHuntBlock', 'huntBlock'],
+   ['tHuntSize', 'huntSize'], ['tHuntDepth', 'huntDepth'], ['tHuntEdge', 'huntEdge'], ['tHuntBlink', 'huntBlink'],
+   ['tCansRefill', 'cansRefill'], ['tCansSec', 'cansSec'], ['tCansFun', 'cansFun']].forEach(([id, key]) => {
+    $('#' + id).addEventListener('input', (e) => {
+      TUNE[key] = +e.target.value; saveTune(); renderTune();
+      if (key === 'huntBlock' && !HUNT.roundActive) huntIdleReset();   // 說明畫面即時看到粗細
+    });
   });
   $('#tReset').addEventListener('click', () => { Object.assign(TUNE, TUNE_DEF); saveTune(); renderTune(); });
   $('#tCopy').addEventListener('click', async () => {
@@ -1699,7 +1800,7 @@
   // DO 發種子與位置演算法（同 paint.js 的 P.place），host 只負責畫；
   // 命中與搶快結算全在 DO（250ms claim window 比 client 時間戳）。
   const HUNT = {
-    running: false, round: 0, totalRounds: 4, bg: null, fit: null, chams: [],
+    running: false, round: 0, totalRounds: 8, bg: null, fit: null, chams: [],
     hNorm: .12, tEnd: 0, artIndex: 0, img: null, imgIdx: -1, reveal: [],
     stamps: [], rankText: '',
   };
@@ -1707,29 +1808,40 @@
   hctx.imageSmoothingEnabled = false;
   const cursors = new Map();   // clientId -> {x,y,el,at,cool}
 
-  // 難度曲線：輪次 → 角色高度(佔畫高)/立體感/輪廓破綻/眨眼平均秒
+  // 難度曲線：8 關。主要的難度來源是「隻數」——從 1 隻一路加到 24 隻，
+  // 所以體型只是慢慢縮，不然後段又小又多會直接變成找不到。
+  const HUNT_COUNT = [1, 2, 3, 5, 8, 12, 17, 24];
+  function huntCount(round) { return HUNT_COUNT[Math.min(round - 1, HUNT_COUNT.length - 1)]; }
   function huntParams(round) {
     const T = [
-      { hNorm: .165, depth: .45, edge: .15, blink: 2.5 },
-      { hNorm: .135, depth: .30, edge: .08, blink: 3.2 },
-      { hNorm: .108, depth: .22, edge: .05, blink: 4.0 },
-      { hNorm: .088, depth: .12, edge: .02, blink: 5.0 },
-      { hNorm: .080, depth: .10, edge: .01, blink: 5.5 },
+      { hNorm: .200, depth: .50, edge: .18, blink: 2.2 },
+      { hNorm: .175, depth: .42, edge: .14, blink: 2.6 },
+      { hNorm: .155, depth: .34, edge: .10, blink: 3.0 },
+      { hNorm: .135, depth: .27, edge: .07, blink: 3.5 },
+      { hNorm: .120, depth: .21, edge: .05, blink: 4.0 },
+      { hNorm: .105, depth: .16, edge: .03, blink: 4.5 },
+      { hNorm: .095, depth: .12, edge: .02, blink: 5.0 },
+      { hNorm: .088, depth: .10, edge: .01, blink: 5.5 },
     ];
     const t = T[Math.min(round - 1, T.length - 1)];
     const d = +TUNE.huntDiff || 1;            // 難度倍率 >1 = 更難（更小、更平、更少破綻）
+    // 手感面板可以直接壓過曲線：0 = 照曲線走，非 0 = 全場固定用這個值
+    const fix = (v, cur) => (+v > 0 ? +v : cur);
     return {
-      hNorm: Math.max(.05, t.hNorm / d),
-      depth: Math.max(0, Math.min(1, t.depth / d)),
-      edge: Math.max(0, t.edge / d),
-      blink: t.blink * Math.sqrt(d),
+      hNorm: Math.max(.03, fix(TUNE.huntSize, t.hNorm / d)),
+      depth: Math.max(0, Math.min(1, fix(TUNE.huntDepth, t.depth / d))),
+      edge: Math.max(0, fix(TUNE.huntEdge, t.edge / d)),
+      blink: fix(TUNE.huntBlink, t.blink * Math.sqrt(d)),
     };
   }
+  const huntBlock = () => Math.max(2, Math.min(16, TUNE.huntBlock | 0 || 6));
 
   // 預載名畫：說明卡打開時就開始抓，載不到用程序化抽象畫
   let huntArtPool = [];
   function huntPreload() {
-    huntArtPool = [...Array(PAINT.ARTS.length).keys()].sort(() => Math.random() - .5).slice(0, 6);
+    PAINT.setTheme(TUNE.huntTheme | 0);
+    HUNT.img = null; HUNT.imgIdx = -1; HUNT.bg = null;      // 換主題要重畫底圖
+    huntArtPool = [...Array(PAINT.ARTS.length).keys()].sort(() => Math.random() - .5);
     PAINT.load(huntArtPool[0], (img) => { HUNT.img = img; HUNT.imgIdx = huntArtPool[0]; });
   }
   function huntStartGame() {
@@ -1743,10 +1855,13 @@
     if (HUNT.round > HUNT.totalRounds) { sock.send({ type: 'huntEnd' }); return; }
     const prm = huntParams(HUNT.round);
     HUNT.prm = prm;
-    const n = Math.max(2, Math.min(10, Math.round(roster.filter((c) => c.connected).length * 0.8) + 1));
+    const n = huntCount(HUNT.round);
+    // 秒數跟隻數走：第一關只有 1 隻，給 45 秒會枯等；上限才是面板上設的值
+    const cap = TUNE.huntSec | 0 || 45;
+    const dur = Math.max(12, Math.min(cap, 10 + n * 3.5));
     const artIdx = huntArtPool[(HUNT.round - 1) % huntArtPool.length] ?? 0;
     sock.send({ type: 'huntRound', round: HUNT.round, count: n, hNorm: prm.hNorm,
-                duration: (TUNE.huntSec | 0 || 45) * 1000, artIndex: artIdx, totalRounds: HUNT.totalRounds });
+                duration: Math.round(dur * 1000), artIndex: artIdx, totalRounds: HUNT.totalRounds });
   }
   sock.on('huntRound', (m) => {
     clearStampEls();
@@ -1757,7 +1872,7 @@
     HUNT.roundEndSent = false;
     // 畫作：預載好就用，沒好／載失敗就程序化
     const buildBg = () => {
-      const r = PAINT.pixelize(HUNT.img, hcv.width, hcv.height, { block: 6, seed: m.seed });
+      const r = PAINT.pixelize(HUNT.img, hcv.width, hcv.height, { block: huntBlock(), seed: m.seed });
       HUNT.bg = r.bg; HUNT.fit = r.fit;
       const meta = HUNT.img ? PAINT.ARTS[HUNT.imgIdx] : { name: '抽象 No.' + (m.seed % 97), meta: 'mahou 程序生成' };
       HUNT.artName = meta.name;
@@ -1898,9 +2013,10 @@
   window.__huntState = () => ({ running: HUNT.running, roundActive: HUNT.roundActive, startAt: HUNT.startAt,
     duration: HUNT.duration, artName: HUNT.artName, round: HUNT.round, hasBg: !!HUNT.bg, curStage });
   // 說明／測試畫面也要有底圖與 fit：沒有 fit 的話 DOM 游標會定位到整張 canvas，跟畫作對不上
+  function huntIdleReset() { HUNT.bg = null; HUNT.fit = null; }
   function huntEnsureBg() {
     if (HUNT.bg) return;
-    const r = PAINT.pixelize(HUNT.img, hcv.width, hcv.height, { block: 6, seed: 20260830 });
+    const r = PAINT.pixelize(HUNT.img, hcv.width, hcv.height, { block: huntBlock(), seed: 20260830 });
     HUNT.bg = r.bg; HUNT.fit = r.fit;
   }
   function huntIdle() { huntEnsureBg(); hctx.drawImage(HUNT.bg, 0, 0); }
@@ -2024,13 +2140,15 @@
     const aims = [];
     for (const [id, a] of CANSG.aims) {
       const lock = CANSG.locks.get(id);
-      if (lock) aims.push({ idx: playerIdx(id), nx: lock.x, ny: lock.y, name: a.name, lock: true });
+      // 鎖定之後就只留準心：兩個點同時在畫面上會分不清哪個才是這一球
+      if (lock) { aims.push({ idx: playerIdx(id), nx: lock.x, ny: lock.y, name: a.name, lock: true }); continue; }
       if (nowP - a.at > 3500) continue;
-      aims.push({ idx: playerIdx(id), nx: a.x, ny: a.y, name: lock ? '' : a.name });
+      aims.push({ idx: playerIdx(id), nx: a.x, ny: a.y, name: a.name });
     }
     return aims;
   }
   function playerIdx(id) { const i = roster.findIndex((c) => c.clientId === id); return i < 0 ? 0 : i; }
+  window.__cansAims = () => cansAims().map((a) => ({ nx: +a.nx.toFixed(3), ny: +a.ny.toFixed(3), lock: !!a.lock, name: a.name }));
   window.__cansHostState = () => ({ aims: CANSG.aims.size, locks: CANSG.locks.size,
     lastThrow: CANSG.lastThrow || null, hasWorld: !!CANSG.world, level: CANSG.level });   // 測試鉤子
   let cansIdleWorld = null;

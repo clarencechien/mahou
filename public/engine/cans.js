@@ -154,15 +154,34 @@
     return T;
   };
 
+  // 歡樂度：一個旋鈕同時放大「打飛力道／朝鏡頭飛／碎片／震動／定格／連鎖半徑」。
+  // 0.5 = 原本的物理，往上是大亂鬥（每個人都像有超能力），往下是安靜的保齡球。
+  // 用分段線性而不是單一 lerp，就是為了讓 0.5 剛好等於調校前的手感，不會一開旋鈕就變樣。
+  const F = { kick: 1, cam: 1, debris: 1, debrisV: 1, shake: 1, stop: 1, blast: 1 };
+  C.setFun = function (v) {
+    const f = Math.max(0, Math.min(1, +v));
+    const m = (lo, hi) => (f < .5 ? lo + (1 - lo) * (f / .5) : 1 + (hi - 1) * ((f - .5) / .5));
+    F.kick = m(0.45, 3.0);       // 被打中飛多遠
+    F.cam = m(0.30, 2.6);        // 朝鏡頭飛的比例——「不會吧」就是這一項
+    F.debris = m(0.45, 2.6);     // 碎片數量
+    F.debrisV = m(0.60, 2.2);    // 碎片速度
+    F.shake = m(0.30, 2.0);
+    F.stop = m(0.60, 1.7);       // 定格越久越有重量
+    F.blast = m(0.60, 1.9);      // 爆炸連鎖半徑
+  };
+  C.setFun(0.5);
+  C.fun = () => ({ ...F });
+
   function award(world, ball, kind, pts, x, y, z) {
     world.events.push({ kind, pts, owner: ball ? ball.owner : null, ownerId: ball ? ball.ownerId : null, x, y, z });
   }
   function kick(world, e, dx, dy, dz, force, src) {
     e.loose = true;
     const inv = 1 / e.mass;
+    force *= F.kick;
     e.vx += dx * force * inv;
     e.vy += (dy * force + 140 * force / 400) * inv;
-    e.vz += dz * force * inv;
+    e.vz += dz * force * inv * (dz < 0 ? F.cam : 1);   // 只放大「朝鏡頭飛」那一側
     e.vr += (dx > 0 ? 1 : -1) * force * inv * 0.02;
     e.spin = 1;
     if (src) { e.lastHitBy = src; e.hitAt = 0; }
@@ -170,13 +189,15 @@
   function breakEnt(world, e, ball) {
     e.dead = true;
     award(world, ball, 'break', 2, e.x, e.y + e.h / 2, e.z);
-    world.hitstop = Math.max(world.hitstop, 0.07);      // 定格一下，砸碎才有重量
-    world.shake = Math.max(world.shake, 0.5 + e.mass * 0.12);
-    const n = 8 + e.mass * 3;
+    world.hitstop = Math.max(world.hitstop, 0.07 * F.stop);   // 定格一下，砸碎才有重量
+    world.shake = Math.max(world.shake, (0.5 + e.mass * 0.12) * F.shake);
+    const n = Math.min(90, Math.round((8 + e.mass * 3) * F.debris));   // 上限 90：再多就開始掉幀
+    const V = F.debrisV;
     for (let i = 0; i < n; i++) {
       world.debris.push({
         x: e.x + (Math.random() - .5) * e.w, y: e.y + Math.random() * e.h, z: e.z + (Math.random() - .5) * e.d,
-        vx: (Math.random() - .5) * 480, vy: Math.random() * 420 + 60, vz: (Math.random() - .5) * 300 - 80,
+        vx: (Math.random() - .5) * 480 * V, vy: (Math.random() * 420 + 60) * V,
+        vz: ((Math.random() - .5) * 300 - 80) * V * F.cam,
         s: 6 + Math.random() * 12, t: e.t, life: 1.5,
       });
     }
@@ -186,15 +207,16 @@
     ent.dead = true;
     const src = ent._killer || null;
     world.fx.push({ kind: 'boom', x: ent.x, y: ent.y + ent.h / 2, z: ent.z, t: 0, life: 0.55 });
-    world.shake = Math.max(world.shake, 1.6);
-    world.hitstop = Math.max(world.hitstop, 0.11);
+    world.shake = Math.max(world.shake, 1.6 * F.shake);
+    world.hitstop = Math.max(world.hitstop, 0.11 * F.stop);
     award(world, src, 'boom', 3, ent.x, ent.y + ent.h / 2, ent.z);
+    const R = 200 * F.blast;
     for (const o of world.ents) {
       if (o.dead || o === ent) continue;
       const dx = o.x - ent.x, dy = (o.y + o.h / 2) - (ent.y + ent.h / 2), dz = o.z - ent.z;
       const dist = Math.hypot(dx, dy, dz);
-      if (dist > 200) continue;
-      const kk = (200 - dist) / 200, inv = 1 / (dist || 1);
+      if (dist > R) continue;
+      const kk = (R - dist) / R, inv = 1 / (dist || 1);
       o.hp -= 2;
       kick(world, o, dx * inv, dy * inv + 0.8, dz * inv - 0.5, 900 * kk, src);
       if (src) award(world, src, 'chain', 1, o.x, o.y + o.h / 2, o.z);
@@ -232,7 +254,7 @@
         const dmg = b.power > 0.72 ? 2 : 1;
         e.hp -= dmg;
         award(world, b, 'chip', dmg, b.x, b.y, b.z);
-        world.shake = Math.max(world.shake, 0.25 + b.power * 0.4);
+        world.shake = Math.max(world.shake, (0.25 + b.power * 0.4) * F.shake);
         const sp = Math.hypot(b.vx, b.vy, b.vz) || 1;
         kick(world, e, b.vx / sp, b.vy / sp * 0.4 + 0.5, b.vz / sp * 0.5 - 0.35, 260 + b.power * 620, b);
         if (e.hp <= 0) { if (e.t === 'bomb') { e._killer = b; boomQ.push([world, e]); } else breakEnt(world, e, b); }
@@ -256,7 +278,7 @@
         if (Math.abs(e.vy) < 90) {                       // 落定
           e.vy = 0; e.vx *= .55; e.vz *= .55; e.vr *= .4;
           if (Math.hypot(e.vx, e.vz) < 18) { e.loose = false; e.vx = e.vz = e.vr = 0; }
-        } else { e.vy = -e.vy * .28; e.vr *= .7; world.shake = Math.max(world.shake, 0.18); }
+        } else { e.vy = -e.vy * .28; e.vr *= .7; world.shake = Math.max(world.shake, 0.18 * F.shake); }
       }
       // 衝出場外／衝過鏡頭 → 算擊落
       if (e.z < 12 || e.z > 900 || Math.abs(e.x) > 900 || e.y < -200) {

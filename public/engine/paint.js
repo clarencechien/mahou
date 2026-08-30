@@ -5,18 +5,42 @@
   const P = (window.PAINT = {});
 
   const FILE = (f) => 'https://commons.wikimedia.org/wiki/Special:Redirect/file/' + encodeURIComponent(f) + '?width=1600';
-  P.ARTS = [
-    { name: '星夜', meta: 'Vincent van Gogh · 1889', file: 'Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg' },
-    { name: '神奈川沖浪裏', meta: '葛飾北齋 · c.1830–31', file: 'The_Great_Wave_off_Kanagawa.jpg' },
-    { name: '蒙娜麗莎', meta: 'Leonardo da Vinci · c.1503–19', file: 'Leonardo_da_Vinci_-_Mona_Lisa.jpg' },
-    { name: '戴珍珠耳環的少女', meta: 'Johannes Vermeer · c.1665', file: 'Johannes_Vermeer_-_Girl_with_a_Pearl_Earring_-_WGA24666.jpg' },
-    { name: '吶喊', meta: 'Edvard Munch · 1893', file: 'Edvard_Munch_-_The_Scream.jpg' },
-    { name: '維納斯的誕生', meta: 'Sandro Botticelli · c.1484–86', file: 'Birth_of_Venus_Botticelli.jpg' },
-    { name: '最後的晚餐', meta: 'Leonardo da Vinci · c.1495–98', file: 'Last_Supper_by_Leonardo_da_Vinci.jpg' },
-    { name: '創造亞當', meta: 'Michelangelo · c.1511', file: 'The_Creation_of_Adam.jpg' },
-    { name: '夜巡', meta: 'Rembrandt · 1642', file: 'The_Night_Watch.jpg' },
-    { name: '睡蓮', meta: 'Claude Monet · 1920–26', file: 'Water_lilies_Monet.jpg' },
+  // 兩套主題各八張，全部是公有領域作品（Wikimedia 直連，載不到退程序化抽象畫）。
+  // 挑選標準是「好不好藏人」：畫面要夠花、明度層次多，純色大背景的畫藏不住小人。
+  P.THEMES = [
+    {
+      key: 'art', name: '名畫系',
+      list: [
+        { name: '星夜', meta: 'Vincent van Gogh · 1889', file: 'Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg' },
+        { name: '神奈川沖浪裏', meta: '葛飾北齋 · c.1830–31', file: 'The_Great_Wave_off_Kanagawa.jpg' },
+        { name: '蒙娜麗莎', meta: 'Leonardo da Vinci · c.1503–19', file: 'Leonardo_da_Vinci_-_Mona_Lisa.jpg' },
+        { name: '吶喊', meta: 'Edvard Munch · 1893', file: 'Edvard_Munch_-_The_Scream.jpg' },
+        { name: '維納斯的誕生', meta: 'Sandro Botticelli · c.1484–86', file: 'Birth_of_Venus_Botticelli.jpg' },
+        { name: '睡蓮', meta: 'Claude Monet · 1920–26', file: 'Water_lilies_Monet.jpg' },
+        { name: '吻', meta: 'Gustav Klimt · 1907–08', file: 'The_Kiss_-_Gustav_Klimt_-_Google_Cultural_Institute.jpg' },
+        { name: '大碗島的星期天下午', meta: 'Georges Seurat · 1884', file: 'A_Sunday_on_La_Grande_Jatte,_Georges_Seurat,_1884.jpg' },
+      ],
+    },
+    {
+      // 卡通系＝「看起來就像卡通」的公有領域作品：戲畫、妖怪繪卷、國芳的貓、
+      // 波希的怪物、盧梭的平塗叢林、布勒哲爾的一百個小人。
+      // ⚠️ 吉伊卡哇／皮克敏／寶可夢這類還在版權內的角色不能放進來。
+      key: 'toon', name: '卡通系',
+      list: [
+        { name: '鳥獸戲畫・相撲', meta: '傳鳥羽僧正 · 12 世紀', file: 'Chouju sumo2.jpg' },
+        { name: '百鬼夜行繪卷', meta: '室町時代 · 付喪神', file: 'Hyakki-Yagyo-Emaki Tsukumogami 1.jpg' },
+        { name: '貓飼好五十三疋', meta: '歌川國芳 · 1848', file: 'Cats suggested as the fifty-three stations of the Tokaido.jpg' },
+        { name: '東海道五十三對', meta: '歌川國芳 · c.1845', file: 'Kuniyoshi Utagawa, The fifty three stations of the tokaido.jpg' },
+        { name: '相馬の古內裏', meta: '歌川國芳 · c.1844 · 骸骨', file: 'Takiyasha the Witch and the Skeleton Spectre, by Utagawa Kuniyoshi.jpg' },
+        { name: '人間樂園', meta: 'Hieronymus Bosch · c.1500', file: 'The Garden of earthly delights.jpg' },
+        { name: '夢', meta: 'Henri Rousseau · 1910', file: 'Henri Rousseau - Il sogno.jpg' },
+        { name: '尼德蘭箴言', meta: 'Pieter Bruegel · 1559', file: 'Pieter Bruegel the Elder - The Dutch Proverbs - Google Art Project.jpg' },
+      ],
+    },
   ];
+  P.theme = 0;
+  P.setTheme = function (i) { P.theme = ((i | 0) % P.THEMES.length + P.THEMES.length) % P.THEMES.length; P.ARTS = P.THEMES[P.theme].list; };
+  P.ARTS = P.THEMES[0].list;
 
   // 載入名畫（8 秒超時當失敗）。cb(img|null)
   P.load = function (idx, cb) {
@@ -42,15 +66,21 @@
   // 變色龍藏匿位置：正規化座標（0-1 相對於畫的顯示矩形）。
   // ⚠️ 這段跟 worker/room.js 的 placeChams 是同一份演算法，改一邊一定要改另一邊——
   // DO 用它做命中判定，host 用它渲染，兩邊必須長出一模一樣的位置。
+  // best-candidate 撒點：每一隻都丟 12 個候選，挑「離已放的最遠」那個。
+  // 舊版是「隨機丟、太近就重試」，20 隻的時候會撞到重試上限而少放好幾隻，
+  // 而且剩下的會擠在同一區——正好是「小人一起躲」的原因。
   P.place = function (seed, count) {
     const rnd = mulberry32(seed);
     const out = [];
-    let guard = 0;
-    while (out.length < count && guard++ < 400) {
-      const x = 0.08 + rnd() * 0.84, y = 0.24 + rnd() * 0.70;
-      let ok = true;
-      for (const p of out) { if (Math.abs(p.x - x) < 0.14 && Math.abs(p.y - y) < 0.16) { ok = false; break; } }
-      if (ok) out.push({ x, y, pose: Math.floor(rnd() * 5) });
+    for (let i = 0; i < count; i++) {
+      let best = null, bestD = -1;
+      for (let k = 0; k < 12; k++) {
+        const x = 0.06 + rnd() * 0.88, y = 0.20 + rnd() * 0.74;
+        let d = 9;
+        for (const p of out) d = Math.min(d, Math.hypot((p.x - x) * 1.7, p.y - y));   // 1.7 = 畫面比例，讓橫向也算得夠開
+        if (d > bestD) { bestD = d; best = { x, y }; }
+      }
+      out.push({ x: best.x, y: best.y, pose: Math.floor(rnd() * 5) });
     }
     return out;
   };
@@ -151,7 +181,9 @@
     else if (kind === 1) { head(12, 6); rect(9, 10, 7, 11); line(10, 12, 4, 9, 3); line(4, 9, 4, 4, 3); line(15, 12, 20, 9, 3); line(20, 9, 20, 4, 3); line(11, 20, 10, 30, 3); line(14, 20, 15, 30, 3); }
     else if (kind === 2) { head(12, 8); rect(9, 12, 7, 10); line(10, 13, 7, 5, 3); line(7, 5, 10, 1, 3); line(15, 13, 17, 5, 3); line(17, 5, 14, 1, 3); line(11, 21, 10, 30, 3); line(14, 21, 15, 30, 3); }
     else if (kind === 3) { head(12, 6); rect(9, 10, 7, 9); line(10, 13, 2, 9, 3); line(15, 13, 22, 9, 3); line(10, 18, 4, 29, 3); line(15, 18, 21, 29, 3); }
-    else { head(17, 20); rect(8, 17, 9, 7); line(9, 19, 5, 23, 4); line(8, 23, 14, 25, 4); line(13, 22, 18, 26, 4); line(7, 18, 11, 14, 4); }
+    // 第五種：立正站好、手垂在身側。原本是趴著的姿勢，外框又寬又矮，
+    // 縮到畫上只剩一坨看不出是人——說明卡跟遊戲裡都認不出來，所以換掉。
+    else { head(12, 6); rect(9, 10, 7, 11); line(9, 12, 8, 20, 3); line(16, 12, 17, 20, 3); line(11, 21, 11, 30, 3); line(14, 21, 14, 30, 3); }
     return cells;
   }
   const POSE_CELLS = [0, 1, 2, 3, 4].map(buildPose);
@@ -163,7 +195,7 @@
     }
     return { minX, minY, maxX, maxY, w: maxX - minX + 1, h: maxY - minY + 1 };
   });
-  const EYES = [[[12, 7], [15, 7]], [[11, 6], [14, 6]], [[11, 8], [14, 8]], [[11, 6], [14, 6]], [[16, 20], [19, 20]]];
+  const EYES = [[[12, 7], [15, 7]], [[11, 6], [14, 6]], [[11, 8], [14, 8]], [[11, 6], [14, 6]], [[11, 6], [14, 6]]];
   P.POSE_BOUNDS = POSE_BOUNDS;
 
   function cellsPath(cells, px, py, u, ox = 0, oy = 0) {

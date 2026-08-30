@@ -30,15 +30,20 @@ function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+// ⚠️ 跟 public/engine/paint.js 的 P.place 是同一份演算法，改一邊一定要改另一邊。
+// best-candidate 撒點：每一隻丟 12 個候選，挑離已放的最遠那個——保證撒滿而且不會擠成一團。
 function placeChams(seed, count) {
   const rnd = mulberry32(seed);
   const out = [];
-  let guard = 0;
-  while (out.length < count && guard++ < 400) {
-    const x = 0.08 + rnd() * 0.84, y = 0.24 + rnd() * 0.70;
-    let ok = true;
-    for (const p of out) { if (Math.abs(p.x - x) < 0.14 && Math.abs(p.y - y) < 0.16) { ok = false; break; } }
-    if (ok) out.push({ x, y, pose: Math.floor(rnd() * 5) });
+  for (let i = 0; i < count; i++) {
+    let best = null, bestD = -1;
+    for (let k = 0; k < 12; k++) {
+      const x = 0.06 + rnd() * 0.88, y = 0.20 + rnd() * 0.74;
+      let d = 9;
+      for (const p of out) d = Math.min(d, Math.hypot((p.x - x) * 1.7, p.y - y));
+      if (d > bestD) { bestD = d; best = { x, y }; }
+    }
+    out.push({ x: best.x, y: best.y, pose: Math.floor(rnd() * 5) });
   }
   return out;
 }
@@ -452,8 +457,8 @@ export class RoomDO {
       case 'huntRound': {
         if (ws._role !== 'host') return;
         const seed = (Math.random() * 0x7fffffff) | 0;
-        const count = Math.max(1, Math.min(10, msg.count | 0 || 4));
-        const hNorm = Math.max(0.04, Math.min(0.3, +msg.hNorm || 0.12));
+        const count = Math.max(1, Math.min(40, msg.count | 0 || 4));   // 最後幾關會撒到二十幾隻
+        const hNorm = Math.max(0.03, Math.min(0.3, +msg.hNorm || 0.12));
         const duration = Math.min(msg.duration | 0 || 45000, 120000);
         const startAt = now + 3000;
         const chams = placeChams(seed, count).map((c) => ({ ...c, found: null }));
