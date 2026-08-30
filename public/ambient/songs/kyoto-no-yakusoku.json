@@ -1,0 +1,130 @@
+{
+  "id": "kyoto-no-yakusoku",
+  "title": "京都の約束",
+  "titleZh": "京都的約定",
+  "subtitle": "Kyoto no Yakusoku",
+  "audio": "music/Kyoto_no_Yakusoku.mp3",
+  "duration": 150,
+  "offset": 0,
+  "timing": {
+    "source": "gemini-3.6-flash+gemini-3.5-flash+ear",
+    "agreementMedianSec": 1,
+    "agreementWorstSec": 1,
+    "flagged": [],
+    "spotChecks": "5/5"
+  },
+  "lines": [
+    {
+      "t": 15,
+      "section": "Verse 1",
+      "jp": "鴨川の風が　少し冷たくて",
+      "romaji": "Kamogawa no kaze ga sukoshi tsumetakute",
+      "zh": "鴨川的風 稍微有點冷"
+    },
+    {
+      "t": 21,
+      "section": "Verse 1",
+      "jp": "コートのポケットに入れた",
+      "romaji": "Kooto no poketto ni ireta",
+      "zh": "放進了大衣口袋"
+    },
+    {
+      "t": 27,
+      "section": "Verse 1",
+      "jp": "長い長い　道のりだったね",
+      "romaji": "Nagai nagai michinori datta ne",
+      "zh": "真的是一段 好長好長的路呢"
+    },
+    {
+      "t": 34,
+      "section": "Verse 1",
+      "jp": "いくつもの夜を　乗り越えてきた",
+      "romaji": "Ikutsumo no yoru wo norikoete kita",
+      "zh": "我們跨越了 無數個夜晚"
+    },
+    {
+      "t": 41,
+      "section": "Pre-Chorus",
+      "jp": "カレンダーを　めくるたびに",
+      "romaji": "Karenda wo mekuru tabi ni",
+      "zh": "每當翻過日曆"
+    },
+    {
+      "t": 48,
+      "section": "Pre-Chorus",
+      "jp": "夢見た景色が　今ここにある",
+      "romaji": "Yumemita keshiki ga ima koko ni aru",
+      "zh": "夢見的景色 現在就在這裡"
+    },
+    {
+      "t": 55,
+      "section": "Chorus",
+      "jp": "やっと　辿り着いたね　京都の冬",
+      "romaji": "Yatto tadoritsuita ne Kyoto no fuyu",
+      "zh": "終於 抵達了呢 京都的冬天"
+    },
+    {
+      "t": 61,
+      "section": "Chorus",
+      "jp": "静かな灯り　二人を包む",
+      "romaji": "Shizukana akari futari wo tsutsumu",
+      "zh": "安靜的燈火 包圍著我們兩人"
+    },
+    {
+      "t": 68,
+      "section": "Chorus",
+      "jp": "もう何も　迷うことはないよ",
+      "romaji": "Mou nanimo mayou koto wa nai yo",
+      "zh": "再也不需要 感到迷惘了"
+    },
+    {
+      "t": 74,
+      "section": "Chorus",
+      "jp": "この瞬間を　永遠にしよう",
+      "romaji": "Kono shunkan wo eien ni shiyou",
+      "zh": "讓這個瞬間 成為永遠吧"
+    },
+    {
+      "t": 81,
+      "section": "Chorus",
+      "jp": "My Love, ここにいるよ",
+      "romaji": "My Love, koko ni iru yo",
+      "zh": "吾愛，我就在這裡"
+    },
+    {
+      "t": 99,
+      "section": "Verse 2",
+      "jp": "古い街並み　重なる足音",
+      "romaji": "Furui machinami kasanaru ashioto",
+      "zh": "古老的街道 重疊的腳步聲"
+    },
+    {
+      "t": 104,
+      "section": "Verse 2",
+      "jp": "言葉はなくても　心は通じ合う",
+      "romaji": "Kotoba wa nakutemo kokoro wa tsuujiau",
+      "zh": "即使不說話 心意也是相通的"
+    },
+    {
+      "t": 111,
+      "section": "Verse 2",
+      "jp": "これからの旅も　君と歩きたい",
+      "romaji": "Korekara no tabi mo kimi to arukitai",
+      "zh": "接下來的旅程 也想與妳同行"
+    },
+    {
+      "t": 121,
+      "section": "Outro",
+      "jp": "Sweet moonlight... Kyoto night...",
+      "romaji": "",
+      "zh": ""
+    },
+    {
+      "t": 127,
+      "section": "Outro",
+      "jp": "ずっと一緒だよ",
+      "romaji": "Zutto issho da yo",
+      "zh": "一直在一起喔"
+    }
+  ]
+}

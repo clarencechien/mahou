@@ -1,0 +1,44 @@
+{
+  "songs": [
+    {
+      "id": "fruit-cake-love",
+      "title": "フルーツケーキの恋",
+      "titleZh": "水果蛋糕之戀",
+      "subtitle": "Fruit Cake Love",
+      "duration": 139.9,
+      "lines": 26
+    },
+    {
+      "id": "kyoto-no-yakusoku",
+      "title": "京都の約束",
+      "titleZh": "京都的約定",
+      "subtitle": "Kyoto no Yakusoku",
+      "duration": 150,
+      "lines": 16
+    },
+    {
+      "id": "seiya-no-kotae",
+      "title": "聖夜の答え",
+      "titleZh": "聖夜的答案",
+      "subtitle": "Seiya no Kotae",
+      "duration": 125,
+      "lines": 16
+    },
+    {
+      "id": "start-of-forever-cover",
+      "title": "Start of Forever",
+      "titleZh": "永遠的起點",
+      "subtitle": "Start of Forever",
+      "duration": 128,
+      "lines": 21
+    },
+    {
+      "id": "jaa-ne-mata-ne-cover",
+      "title": "じゃあね、またね",
+      "titleZh": "那，下次見囉",
+      "subtitle": "Jaa ne, Mata ne",
+      "duration": 100,
+      "lines": 18
+    }
+  ]
+}

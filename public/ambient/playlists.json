@@ -1,0 +1,80 @@
+{
+  "_": "歌單設定。songs 填 ambient/songs/<id>.json 的 id。改這個檔就好，不用動 ambient.html。",
+  "audioBase": "/audio/",
+  "_audioBase": "mp3 在 public/ambient/music/（node tools/fetch-songs.mjs 抓的），但要走 Worker 的 /audio/ 才有 Range——直接吃靜態資源的話點進度條不會動。",
+  "playlists": [
+    {
+      "id": 1,
+      "name": "家宴原創",
+      "note": "family-feast 的五首",
+      "songs": [
+        "fruit-cake-love",
+        "kyoto-no-yakusoku",
+        "seiya-no-kotae",
+        "start-of-forever-cover",
+        "jaa-ne-mata-ne-cover"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "歌單 2",
+      "note": "還沒設定",
+      "songs": []
+    },
+    {
+      "id": 3,
+      "name": "歌單 3",
+      "note": "還沒設定",
+      "songs": []
+    }
+  ],
+  "backdrops": [
+    {
+      "id": "feast",
+      "name": "家宴相簿",
+      "credit": "家宴精選相簿",
+      "_": "180 張已經挑過的照片。清單（gallery.json）放本機，圖片本體從 family-feast 的 /media/ 讀——都是自己的東西。",
+      "manifest": "/ambient/gallery.json",
+      "urlBase": "https://family-feast.ai-apps.work/media/",
+      "suffix": "-full.jpg"
+    },
+    {
+      "id": "lake16",
+      "name": "十六湖",
+      "credit": "十六湖高質露營 lake16.tw",
+      "_": "直接連對方的圖床（就跟開著他們的網頁一樣），沒有複製到這個 repo。載不到會退到漸層背景。",
+      "images": [
+        "https://img.hiweb.tw/album_data/6074.jpg",
+        "https://img.hiweb.tw/album_data/6075.jpg",
+        "https://img.hiweb.tw/album_data/6076.jpg",
+        "https://img.hiweb.tw/album_data/6077.jpg",
+        "https://img.hiweb.tw/album_data/6078.jpg",
+        "https://img.hiweb.tw/album_data/6120.jpg",
+        "https://img.hiweb.tw/album_data/6121.jpg",
+        "https://img.hiweb.tw/album_data/6122.jpg",
+        "https://img.hiweb.tw/album_data/6123.jpg",
+        "https://img.hiweb.tw/album_data/6124.jpg",
+        "https://img.hiweb.tw/album_data/6125.jpg",
+        "https://img.hiweb.tw/album_data/6126.jpg",
+        "https://img.hiweb.tw/album_data/6128.jpg",
+        "https://img.hiweb.tw/album_data/6131.jpg",
+        "https://img.hiweb.tw/album_data/6132.jpg",
+        "https://img.hiweb.tw/album_data/6133.jpg",
+        "https://img.hiweb.tw/album_data/6134.jpg",
+        "https://img.hiweb.tw/album_data/6135.jpg",
+        "https://img.hiweb.tw/album_data/6136.jpg",
+        "https://img.hiweb.tw/album_data/6137.jpg",
+        "https://img.hiweb.tw/album_data/6138.jpg",
+        "https://img.hiweb.tw/album_data/8870.jpg",
+        "https://img.hiweb.tw/album_data/8871.jpg",
+        "https://img.hiweb.tw/album_data/8872.jpg",
+        "https://img.hiweb.tw/album_data/8873.jpg",
+        "https://img.hiweb.tw/album_data/8874.jpg",
+        "https://img.hiweb.tw/album_data/8875.jpg",
+        "https://img.hiweb.tw/album_data/8876.jpg",
+        "https://img.hiweb.tw/album_data/8877.jpg",
+        "https://img.hiweb.tw/album_data/8878.jpg"
+      ]
+    }
+  ]
+}

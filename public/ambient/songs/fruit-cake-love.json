@@ -1,0 +1,208 @@
+{
+  "id": "fruit-cake-love",
+  "title": "フルーツケーキの恋",
+  "titleZh": "水果蛋糕之戀",
+  "subtitle": "Fruit Cake Love",
+  "audio": "music/Fruit_Cake_Love.mp3",
+  "duration": 139.9,
+  "offset": 0,
+  "timing": {
+    "source": "gemini-3.6-flash+gemini-3.5-flash",
+    "agreementMedianSec": 0,
+    "agreementWorstSec": 1,
+    "flagged": [],
+    "spotChecks": "4/5"
+  },
+  "lines": [
+    {
+      "t": 9,
+      "section": "Verse 1: Separate Worlds",
+      "voice": "Male Vocals",
+      "jp": "僕の週末は　いつもの仲間と",
+      "romaji": "Boku no shuumatsu wa itsumo no nakama to",
+      "zh": "我的週末 總是跟那群死黨"
+    },
+    {
+      "t": 13,
+      "section": "Verse 1: Separate Worlds",
+      "voice": "Female Vocals",
+      "jp": "バカ騒ぎして　笑っていた",
+      "romaji": "Baka sawagi shite waratte ita",
+      "zh": "像傻瓜一樣吵鬧大笑"
+    },
+    {
+      "t": 18,
+      "section": "Verse 1: Separate Worlds",
+      "voice": "Male Vocals",
+      "jp": "私の午後は　静かなカフェで",
+      "romaji": "Watashi no gogo wa shizuka na kafe de",
+      "zh": "我的午後 總是待在安靜的咖啡廳"
+    },
+    {
+      "t": 22,
+      "section": "Verse 1: Separate Worlds",
+      "voice": "Male Vocals",
+      "jp": "友達と恋の　話をしてた",
+      "romaji": "Tomodachi to koi no hanashi wo shiteta",
+      "zh": "跟姐妹們聊著戀愛的話題"
+    },
+    {
+      "t": 27,
+      "section": "Pre-Chorus: The Meeting",
+      "voice": "Duet / Together",
+      "jp": "全然違う　二人の世界が",
+      "romaji": "Zenzen chigau futari no sekai ga",
+      "zh": "完全不同的 兩人世界"
+    },
+    {
+      "t": 31,
+      "section": "Pre-Chorus: The Meeting",
+      "jp": "あの日の　フルーツケーキみたいに",
+      "romaji": "Ano hi no furuutsu keeki mitai ni",
+      "zh": "就像那天的 水果蛋糕一樣"
+    },
+    {
+      "t": 36,
+      "section": "Pre-Chorus: The Meeting",
+      "jp": "甘く　不思議に　混ざり合った",
+      "romaji": "Amaku fushigi ni mazari atta",
+      "zh": "甜蜜地 不可思議地 混合在一起了"
+    },
+    {
+      "t": 40,
+      "section": "Chorus: Becoming One",
+      "jp": "Like a Fruit Cake, colorful days",
+      "romaji": "",
+      "zh": ""
+    },
+    {
+      "t": 43,
+      "section": "Chorus: Becoming One",
+      "jp": "君の友達が　僕の友達に",
+      "romaji": "Kimi no tomodachi ga boku no tomodachi ni",
+      "zh": "妳的朋友 變成了我的朋友"
+    },
+    {
+      "t": 48,
+      "section": "Chorus: Becoming One",
+      "jp": "僕の家族が　君の家族に",
+      "romaji": "Boku no kazoku ga kimi no kazoku ni",
+      "zh": "我的家人 變成了妳的家人"
+    },
+    {
+      "t": 52,
+      "section": "Chorus: Becoming One",
+      "jp": "ひとつの丸い　愛になったね",
+      "romaji": "Hitotsu no marui ai ni natta ne",
+      "zh": "烘焙成了 一份圓滿的愛"
+    },
+    {
+      "t": 57,
+      "section": "Chorus: Becoming One",
+      "jp": "Sweetest life, with you (美味しいね)",
+      "romaji": "",
+      "zh": "真好吃呢"
+    },
+    {
+      "t": 61,
+      "section": "Verse 2: Merging Lives",
+      "voice": "Female Vocals",
+      "jp": "初めて君の家　行った日は",
+      "romaji": "Hajimete kimi no ie itta hi wa",
+      "zh": "第一次去妳家的那天"
+    },
+    {
+      "t": 65,
+      "section": "Verse 2: Merging Lives",
+      "voice": "Male Vocals",
+      "jp": "緊張してたね　顔が赤くて",
+      "romaji": "Kinchou shiteta ne kao ga akakute",
+      "zh": "你超緊張的 臉都紅了"
+    },
+    {
+      "t": 70,
+      "section": "Verse 2: Merging Lives",
+      "voice": "Duet / Together",
+      "jp": "今ではみんな　笑い合ってる",
+      "romaji": "Ima dewa minna warai atteru",
+      "zh": "現在大家 都能相視而笑"
+    },
+    {
+      "t": 74,
+      "section": "Verse 2: Merging Lives",
+      "jp": "最高の味方　増えていくよ",
+      "romaji": "Saikou no mikata fuete iku yo",
+      "zh": "最強的夥伴 越來越多了呢"
+    },
+    {
+      "t": 78,
+      "section": "Bridge: Confession",
+      "jp": "違う材料　違う色",
+      "romaji": "Chigau zairyou chigau iro",
+      "zh": "不同的材料 不同的顏色"
+    },
+    {
+      "t": 81,
+      "section": "Bridge: Confession",
+      "jp": "だからこんなに　豊かになる",
+      "romaji": "Dakara konnani yutaka ni naru",
+      "zh": "所以才會 如此豐富"
+    },
+    {
+      "t": 84,
+      "section": "Bridge: Confession",
+      "jp": "これからは　ずっと一緒",
+      "romaji": "Korekara wa zutto issho",
+      "zh": "從今以後 永遠在一起"
+    },
+    {
+      "t": 89,
+      "section": "Chorus",
+      "jp": "Like a Fruit Cake, colorful days",
+      "romaji": "",
+      "zh": ""
+    },
+    {
+      "t": 92,
+      "section": "Chorus",
+      "jp": "君のすべてを　僕のすべてに",
+      "romaji": "Kimi no subete wo boku no subete ni",
+      "zh": "妳的一切 變成我的一切"
+    },
+    {
+      "t": 97,
+      "section": "Chorus",
+      "jp": "凸凹な二人　ぴったりだね",
+      "romaji": "Dekoboko na futari pittari da ne",
+      "zh": "凹凸不平的兩人 卻正好互補呢"
+    },
+    {
+      "t": 101,
+      "section": "Chorus",
+      "jp": "ひとつの丸い　家族になろう",
+      "romaji": "Hitotsu no marui kazoku ni narou",
+      "zh": "成為一個圓滿的 家人吧"
+    },
+    {
+      "t": 106,
+      "section": "Chorus",
+      "jp": "Sweetest life, forever",
+      "romaji": "",
+      "zh": ""
+    },
+    {
+      "t": 108,
+      "section": "Outro",
+      "jp": "He and She... Became \"We\"",
+      "romaji": "",
+      "zh": ""
+    },
+    {
+      "t": 110,
+      "section": "Outro",
+      "jp": "(幸せ！) (Shiawase - 好幸福！)",
+      "romaji": "",
+      "zh": ""
+    }
+  ]
+}
