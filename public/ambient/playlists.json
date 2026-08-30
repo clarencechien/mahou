@@ -45,15 +45,31 @@
       "_": "直接連對方的圖床（就跟開著他們的網頁一樣），沒有複製到這個 repo。載不到會退到漸層背景。⚠️ 原本 30 張裡有 21 張只有 600×400——1080p 電視上要放大 3.2 倍，一看就糊。只留 1280×853 的這 9 張。想全部拿回來就把 6074–6138 那組加回去。",
       "images": [
         "https://img.hiweb.tw/album_data/8870.jpg",
-        "https://img.hiweb.tw/album_data/8871.jpg",
+        {
+          "url": "https://img.hiweb.tw/album_data/8871.jpg",
+          "trim": [0.25, 0, 0.5, 1]
+        },
         "https://img.hiweb.tw/album_data/8872.jpg",
-        "https://img.hiweb.tw/album_data/8873.jpg",
-        "https://img.hiweb.tw/album_data/8874.jpg",
+        {
+          "url": "https://img.hiweb.tw/album_data/8873.jpg",
+          "trim": [0.25, 0, 0.5, 1]
+        },
+        {
+          "url": "https://img.hiweb.tw/album_data/8874.jpg",
+          "trim": [0.2773, 0, 0.4477, 1]
+        },
         "https://img.hiweb.tw/album_data/8875.jpg",
-        "https://img.hiweb.tw/album_data/8876.jpg",
-        "https://img.hiweb.tw/album_data/8877.jpg",
+        {
+          "url": "https://img.hiweb.tw/album_data/8876.jpg",
+          "trim": [0.2758, 0, 0.4461, 1]
+        },
+        {
+          "url": "https://img.hiweb.tw/album_data/8877.jpg",
+          "trim": [0.2773, 0, 0.4469, 1]
+        },
         "https://img.hiweb.tw/album_data/8878.jpg"
-      ]
+      ],
+      "_trim": "trim 是 [x, y, 寬, 高] 的比例，把貼在白底上的直式照片切回照片本身。用 node tools/trim-white.mjs 量的（對面沒有 CORS，瀏覽器讀不到像素，只能離線量）。"
     }
   ]
 }
