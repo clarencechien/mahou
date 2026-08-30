@@ -938,7 +938,8 @@
       if (!ski.done) {
         ski.done = true;
         const dist = Math.round((ski.wy - COURSE.START_Y) / WPM());
-        sock.send({ type: 'skiDone', dist, jumps: ski.jumps, hits: ski.hits, combo: ski.bestCombo });
+        sock.send({ type: 'skiDone', dist, jumps: ski.jumps, hits: ski.hits, combo: ski.bestCombo,
+                    misses: ski.misses, rolls: ski.rolls, lv: ski.lv });
         $('#skiMsg').textContent = '結束！';
         $('#skiPadTitle').textContent = '結束';
         $('#skiStat').innerHTML = `滑了 <b>${dist} m</b>・跳台 ${ski.jumps}・最長 ${ski.bestCombo} 連・撞到 ${ski.hits}`;
@@ -1067,6 +1068,7 @@
                   speed: +ski.speed.toFixed(2), vx: Math.round(ski.vx), air: +ski.air.toFixed(2),
                   airMax: +ski.airMax.toFixed(2), rot: +ski.rot.toFixed(2),
                   jumps: ski.jumps, hits: ski.hits, combo: ski.combo, lv: ski.lv,
+                  misses: ski.misses, rolls: ski.rolls,
                   tClient: clock.serverNow() });
     }
   }
