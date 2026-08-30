@@ -1,4 +1,4 @@
-# mahou — 家宴多人互動遊戲
+# mahou — 派對遊戲
 
 手機當手把、電視當主畫面的 Kahoot 式派對遊戲。跑在 Cloudflare Workers + Durable Objects 上，**免費方案就能跑**（DO 已設定成 SQLite-backed）。無框架、無 build step，前端全部原生 DOM。
 
