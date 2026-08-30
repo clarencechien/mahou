@@ -17,7 +17,7 @@ const MEANINGFUL = new Set(['join', 'deviceUpdate', 'tap', 'spamStart', 'spamDon
   'colorRound', 'colorPick', 'colorEnd', 'skiStart', 'skiRun', 'skiDone',
   'freezeStart', 'freezeRound', 'freezeTurn', 'freezeAct', 'freezeEnd', 'skiEnd', 'ready',
   'pointer', 'stampAct', 'huntRound', 'huntRoundEnd', 'huntEnd',
-  'cansStart', 'canThrow', 'canScoreEvt', 'cansLevel', 'cansEnd']);
+  'cansStart', 'canLock', 'canThrow', 'canScoreEvt', 'cansLevel', 'cansEnd']);
 
 // 變色龍藏匿位置。⚠️ 跟 public/engine/paint.js 的 P.place 是同一份演算法，
 // 改一邊一定要改另一邊——DO 用它判定命中，host 用它渲染，位置必須一模一樣。
@@ -550,6 +550,14 @@ export class RoomDO {
         const startAt = now + 4000;
         this.log({ type: 'cansStart', startAt });
         this.broadcastAll({ type: 'cansStart', startAt, refill: msg.refill || 4500, levels: msg.levels || 5 });
+        return;
+      }
+      // 鎖定瞄準點：正式玩時先點「確定」把位子釘住，之後手怎麼漂都不影響這一球
+      case 'canLock': {
+        const c = this.clients.get(ws._clientId);
+        if (!c || !this.cans) return;
+        this.log({ type: 'canLock', clientId: ws._clientId, x: msg.x, y: msg.y, tClient: msg.tClient });
+        this.toHosts({ type: 'canLock', clientId: ws._clientId, name: c.name, x: msg.x, y: msg.y });
         return;
       }
       // 瞄準走 pointer（跟變色龍同一套），這裡只收「丟」：座標＋力量，沒有角度

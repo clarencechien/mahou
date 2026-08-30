@@ -248,8 +248,8 @@
     <div id="cansPowerTrack" style="height:18px; background:#1f2937; border-radius:9px; overflow:hidden">
       <div id="cansPowerBar" style="height:100%; width:0%; background:#e98336; transition:none"></div>
     </div>
-    <button id="cansThrowBtn" class="tappad" style="min-height:110px; font-size:1.9rem; font-weight:900;
-            border-radius:22px; background:#b45309">按住蓄力</button>
+    <button id="cansThrowBtn" class="tappad" style="min-height:110px; font-size:1.7rem; font-weight:900;
+            border-radius:22px; background:#b45309">① 確定位置</button>
     <div style="display:flex; gap:8px">
       <button id="cansZero" style="flex:1; background:#374151; padding:12px">游標回中央</button>
       <button id="cansReady" style="flex:1; background:#16a34a; padding:12px">我準備好了</button>
@@ -1163,16 +1163,28 @@
   // ---- 遊戲四：砸罐子（手機＝雷射筆＋投擲器）----
   // 瞄準跟變色龍共用同一組 pointer（陀螺儀／觸控板），所以不用調角度：瞄哪就打哪。
   // 力量兩條路：按住蓄力放開，或直接用力往前揮（力量飽和，手機不會飛出去）。
-  const CANSC = { SWING_TH: 8, SWING_WIN: 260, CHARGE_MS: 1100, REFILL: 4500 };
+  // 兩段式：① 瞄好按「確定」把位子釘住（手再漂也不影響這一球）→ ② 連點或搖手機蓄力 → 自動出手。
+  // 一次搖＝兩次點的力（使用者指定）；而且只有搖得到滿力，光連點過不了引擎 0.72 的雙倍傷害線。
+  const CANSC = {
+    SWING_TH: 8, SWING_WIN: 200,     // 加速度尖峰門檻／同一下揮動的合併視窗
+    BASE: 0.18,                      // 出手底力
+    TAP: 0.09,                       // 點一下
+    SWING: 0.18,                     // 搖一下＝點兩下
+    TAP_CAP: 0.55,                   // 只用點的最多到這（過不了雙倍傷害線）
+    FIRE_MS: 520,                    // 最後一次輸入後自動出手
+    REFILL: 4500,
+  };
   let cansReadySent = false, cansBallAt = 0, cansStartAt = 0, cansOn = false;
-  let swingPeak = 0, swingUntil = 0, chargeAt = 0, charging = false;
+  let swingPeak = 0, swingUntil = 0;
+  let cansPhase = 'aim';             // aim → charge →（自動出手）→ aim
+  let lockX = .5, lockY = .5, chargeTaps = 0, chargeSwings = 0, fireTimer = 0;
 
   function setCansMode(m2) {
     ptrMode = m2;
     $('#cansModeGyro').style.background = m2 === 'gyro' ? '#2563eb' : '#374151';
     $('#cansModePad').style.background = m2 === 'pad' ? '#2563eb' : '#374151';
     $('#cansPadTitle').textContent = m2 === 'gyro' ? '瞄你想砸的東西' : '在這裡滑動瞄準';
-    $('#cansPadSub').textContent = m2 === 'gyro' ? '雷射點在電視上・會漂就按歸零' : '手機當觸控板';
+    $('#cansPadSub').textContent = (m2 === 'gyro' ? '雷射點在電視上・會漂就按歸零' : '手機當觸控板') + '・瞄好按①確定';
     if (m2 === 'gyro') ptrZero();
   }
   $('#cansModeGyro').addEventListener('click', () => setCansMode('gyro'));
@@ -1204,7 +1216,11 @@
 
   // 觸控板瞄準（跟變色龍同一個 pad 邏輯，只是掛在不同元素上）
   let cansPadLast = null;
-  $('#cansPad').addEventListener('pointerdown', (e) => { e.preventDefault(); cansPadLast = [e.clientX, e.clientY]; });
+  $('#cansPad').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    cansPadLast = [e.clientX, e.clientY];
+    if (cansPhase === 'charge') addCharge('tap');   // 鎖定後整片 pad 都算連點，手指落哪都算數
+  });
   $('#cansPad').addEventListener('pointermove', (e) => {
     if (ptrMode !== 'pad' || !cansPadLast) return;
     const r = $('#cansPad').getBoundingClientRect();
@@ -1213,13 +1229,13 @@
   });
   addEventListener('pointerup', () => { cansPadLast = null; });
 
-  // 揮擲：加速度尖峰 → 力量。飽和曲線＝中等力道就有八成，拚命揮只多一點（安全＋長輩公平）
+  // 揮擲偵測：只在「已確定位置」的蓄力階段算數，一下尖峰＝一次搖
   function startCansSwing() {
     if (cansOn) return;
     cansOn = true;
     let base = 9.8;
     addEventListener('devicemotion', (e) => {
-      if (stage !== 'cans' || charging) return;
+      if (stage !== 'cans') return;
       const a = e.accelerationIncludingGravity;
       if (!a || a.x == null) return;
       const mag = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
@@ -1228,78 +1244,108 @@
       const nowP = performance.now();
       if (lin > CANSC.SWING_TH && nowP > swingUntil) {
         swingPeak = lin; swingUntil = nowP + CANSC.SWING_WIN;
-        setTimeout(() => { const p = Math.min(1, 0.55 + Math.sqrt(Math.max(0, swingPeak - CANSC.SWING_TH) / 30) * 0.45); swingPeak = 0; doThrow(p); }, CANSC.SWING_WIN + 10);
+        addCharge('swing');
       } else if (nowP < swingUntil) swingPeak = Math.max(swingPeak, lin);
     });
   }
 
-  // 按住蓄力：0.35 → 1.0，1.1 秒充滿。沒感測器也玩得下去，長輩也懂
+  function cansPower() {
+    const p = CANSC.BASE + chargeTaps * CANSC.TAP + chargeSwings * CANSC.SWING;
+    return Math.max(.15, Math.min(chargeSwings > 0 ? 1 : CANSC.TAP_CAP, p));
+  }
+  // ① 確定位置：把當下的雷射點釘住，之後陀螺儀怎麼漂都不影響這一球
+  function lockAim() {
+    if (!ballReady()) { $('#cansPadSub').textContent = '球還沒好'; return; }
+    cansPhase = 'charge';
+    lockX = ptrX; lockY = ptrY; chargeTaps = 0; chargeSwings = 0;
+    sock.send({ type: 'canLock', x: +lockX.toFixed(4), y: +lockY.toFixed(4), tClient: clock.serverNow() });
+    $('#cansPadTitle').textContent = '位置鎖定！';
+    $('#cansPadSub').textContent = '用力搖＝點兩下的力';
+    navigator.vibrate?.(15);
+    clearTimeout(fireTimer);
+    fireTimer = setTimeout(fireLocked, 2200);        // 鎖了不動也會出手，不會卡住
+    renderCansBtn(true);
+  }
+  // ② 連點／搖手機蓄力，最後一次輸入 0.52 秒後自動出手
+  function addCharge(kind) {
+    if (cansPhase !== 'charge') return;
+    if (kind === 'swing') chargeSwings++; else chargeTaps++;
+    navigator.vibrate?.(kind === 'swing' ? 25 : 8);
+    const p = cansPower();
+    $('#cansPowerBar').style.width = (p * 100) + '%';
+    $('#cansPowerBar').style.background = p > .72 ? '#dc2626' : '#e98336';
+    clearTimeout(fireTimer);
+    fireTimer = setTimeout(fireLocked, CANSC.FIRE_MS);
+  }
+  function fireLocked() {
+    if (cansPhase !== 'charge') return;
+    const p = cansPower();
+    cansPhase = 'aim';
+    doThrow(p, lockX, lockY);
+  }
   $('#cansThrowBtn').addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    if (!ballReady()) { $('#cansPadSub').textContent = '球還沒好'; return; }
-    charging = true; chargeAt = performance.now();
-    $('#cansThrowBtn').textContent = '放開！';
-    $('#cansThrowBtn').style.background = '#dc2626';
+    if (cansPhase === 'aim') lockAim(); else addCharge('tap');
   });
-  const releaseThrow = () => {
-    if (!charging) return;
-    charging = false;
-    const held = Math.min(CANSC.CHARGE_MS, performance.now() - chargeAt);
-    $('#cansThrowBtn').textContent = '按住蓄力';
-    $('#cansThrowBtn').style.background = '#b45309';
-    doThrow(0.35 + (held / CANSC.CHARGE_MS) * 0.65);
-  };
-  $('#cansThrowBtn').addEventListener('pointerup', releaseThrow);
-  $('#cansThrowBtn').addEventListener('pointercancel', releaseThrow);
 
   function ballReady() {
     const now = clock.serverNow() ?? Date.now();
     return cansStartAt > 0 && now >= cansStartAt && now - cansBallAt >= CANSC.REFILL;
   }
-  function doThrow(power) {
+  function doThrow(power, nx, ny) {
     if (!ballReady()) { $('#cansPadSub').textContent = '球還沒好'; return; }
     cansBallAt = clock.serverNow() ?? Date.now();
-    sock.send({ type: 'canThrow', x: +ptrX.toFixed(4), y: +ptrY.toFixed(4),
+    sock.send({ type: 'canThrow', x: +nx.toFixed(4), y: +ny.toFixed(4),
                 power: +power.toFixed(2), mode: ptrMode, tClient: clock.serverNow() });
     $('#cansPowerBar').style.width = (power * 100) + '%';
-    $('#cansPadTitle').textContent = power > .85 ? '全力砸出去！' : '丟出去了！';
+    $('#cansPadTitle').textContent = power > .72 ? '全力砸出去！' : '丟出去了！';
     navigator.vibrate?.(Math.round(20 + power * 40));
     setTimeout(() => { setCansMode(ptrMode); $('#cansPowerBar').style.width = '0%'; }, 900);
   }
 
   function renderCansStat(total) { $('#cansStat').innerHTML = `得分 <b>${total}</b>`; }
+  function renderCansBtn(force) {
+    const btn = $('#cansThrowBtn');
+    if (cansPhase === 'charge') {
+      btn.disabled = false; btn.style.opacity = 1;
+      btn.textContent = '② 連點／搖手機';
+      btn.style.background = '#dc2626';
+      return;
+    }
+    const ready = ballReady();
+    btn.disabled = !ready;
+    btn.style.opacity = ready ? 1 : .45;
+    btn.style.background = '#b45309';
+    if (!ready && cansStartAt) {
+      const now = clock.serverNow() ?? Date.now();
+      btn.textContent = now < cansStartAt ? '準備…' : '補球 ' + Math.max(0, ((CANSC.REFILL - (now - cansBallAt)) / 1000)).toFixed(1);
+    } else if (ready) btn.textContent = '① 確定位置';
+    else if (force) btn.textContent = '① 確定位置';
+  }
   // 蓄力條與球回充狀態
   setInterval(() => {
     if (ended || stage !== 'cans') return;
-    if (charging) {
-      const p = Math.min(1, (performance.now() - chargeAt) / CANSC.CHARGE_MS);
-      $('#cansPowerBar').style.width = (35 + p * 65) + '%';
-      $('#cansPowerBar').style.background = p > .85 ? '#dc2626' : '#e98336';
-    }
-    const ready = ballReady();
-    const btn = $('#cansThrowBtn');
-    if (!charging) {
-      btn.disabled = !ready;
-      btn.style.opacity = ready ? 1 : .45;
-      if (!ready && cansStartAt) {
-        const now = clock.serverNow() ?? Date.now();
-        btn.textContent = now < cansStartAt ? '準備…' : '補球 ' + Math.max(0, ((CANSC.REFILL - (now - cansBallAt)) / 1000)).toFixed(1);
-      } else if (ready) btn.textContent = '按住蓄力';
-    }
+    renderCansBtn();
   }, 1000 / 20);
 
   sock.on('cansStart', (m) => {
     cansStartAt = m.startAt; CANSC.REFILL = m.refill || 4500; cansBallAt = 0;
+    cansPhase = 'aim'; clearTimeout(fireTimer);
     $('#cansMsg').textContent = '開始！';
   });
   sock.on('cansLevel', (m) => { $('#cansMsg').textContent = `第 ${m.level}/${m.levels || 5} 關`; });
   sock.on('canScore', (m) => { if (m.clientId === clientId) { renderCansStat(m.total); navigator.vibrate?.(20); } });
   sock.on('cansEnd', (m) => {
-    cansStartAt = 0;
+    cansStartAt = 0; cansPhase = 'aim'; clearTimeout(fireTimer);
     if (m.rank) $('#cansStat').innerHTML = m.rank.map((r, i) => `${i + 1}. ${r.name} ${r.score}分`).join('<br>');
     $('#cansMsg').textContent = '結束！';
   });
-  window.__cansThrow = (nx, ny, power) => { ptrX = nx; ptrY = ny; cansBallAt = 0; doThrow(power); };   // 測試鉤子
+  // 測試鉤子
+  window.__cansThrow = (nx, ny, power) => { ptrX = nx; ptrY = ny; cansBallAt = 0; cansPhase = 'aim'; clearTimeout(fireTimer); doThrow(power, nx, ny); };
+  window.__cansLock = (nx, ny) => { ptrX = nx; ptrY = ny; cansBallAt = 0; cansPhase = 'aim'; lockAim(); };
+  window.__cansCharge = (kind, n) => { for (let i = 0; i < (n || 1); i++) addCharge(kind || 'tap'); };
+  window.__cansState = () => ({ phase: cansPhase, taps: chargeTaps, swings: chargeSwings, power: cansPower(), lockX, lockY });
+  window.__cansResetCharge = () => { cansPhase = 'charge'; chargeTaps = 0; chargeSwings = 0; clearTimeout(fireTimer); };
 
 })();
 </script>

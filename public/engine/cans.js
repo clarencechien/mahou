@@ -424,7 +424,7 @@
     return pr;
   }
 
-  // colors: 玩家色；aims: [{idx,name,nx,ny}] 各玩家的雷射點
+  // colors: 玩家色；aims: [{idx,name,nx,ny,lock}] 各玩家的雷射點（lock=已確定的準心）
   C.render = function (g, world, colors, aims) {
     g.imageSmoothingEnabled = false;
     g.save();
@@ -518,13 +518,37 @@
     g.restore();
 
     // 各玩家的雷射點（畫在最上層，不吃震動）
+    // lock=true 的是「已確定」的準心：十字＋方框，跟還在飄的圓點一眼分得出來
     for (const a of aims || []) {
       const x = a.nx * C.W, y = a.ny * C.H;
       const col = colors[a.idx % colors.length];
-      g.strokeStyle = col; g.lineWidth = 3;
-      g.beginPath(); g.arc(x, y, 15, 0, Math.PI * 2); g.stroke();
-      g.fillStyle = col;
-      g.fillRect(x - 2, y - 2, 4, 4);
+      g.strokeStyle = col;
+      if (a.lock) {
+        g.lineWidth = 3;
+        g.strokeRect(x - 17, y - 17, 34, 34);
+        g.beginPath();
+        g.moveTo(x - 26, y); g.lineTo(x - 8, y);
+        g.moveTo(x + 8, y); g.lineTo(x + 26, y);
+        g.moveTo(x, y - 26); g.lineTo(x, y - 8);
+        g.moveTo(x, y + 8); g.lineTo(x, y + 26);
+        g.stroke();
+        g.fillStyle = col;
+        g.fillRect(x - 3, y - 3, 6, 6);
+      } else {
+        g.lineWidth = 3;
+        g.beginPath(); g.arc(x, y, 15, 0, Math.PI * 2); g.stroke();
+        g.fillStyle = col;
+        g.fillRect(x - 2, y - 2, 4, 4);
+      }
+      if (a.name) {                                   // 平台鐵則：任何視角都要有名字
+        g.font = '700 13px system-ui, sans-serif';
+        g.textAlign = 'center';
+        g.fillStyle = 'rgba(0,0,0,.65)';
+        g.fillText(a.name, x + 1, y - 26);
+        g.fillStyle = col;
+        g.fillText(a.name, x, y - 27);
+        g.textAlign = 'left';
+      }
     }
   };
 })();
