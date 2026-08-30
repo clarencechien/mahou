@@ -1,0 +1,223 @@
+{
+  "id": "our-table-b",
+  "title": "Our Table (B)",
+  "titleZh": "我們的餐桌（另一版）",
+  "subtitle": "Our Table · alternate arrangement",
+  "audio": "music/Our_Table_B.mp3",
+  "duration": 172.1,
+  "offset": -0.4,
+  "timing": {
+    "source": "gemini-3.5-flash+gemini-3.6-flash（thinkingLevel: minimal）",
+    "crossCheck": "兩個模型：中位差 1.0s、最大 2.0s，差超過 1.5s 的是第 13、26、27、29 句",
+    "silenceCheck": "ffmpeg silencedetect：整首沒有靜音區段，沒有一句落在靜音裡",
+    "spotChecks": "5/6",
+    "flagged": [
+      13,
+      26,
+      27,
+      29
+    ],
+    "corrected": "第 0 句 13→8s、第 2 句 20→19s（剪窗聽寫逐句確認）；offset -0.4s 補整首的落後",
+    "tool": "family-feast tools/align-lyrics.mjs + tools/probe-line 剪窗複查",
+    "recheck": "修正後重抽 8 句（含首末），每一句都落在該句的開頭或再早一點點；只有第 26 句還晚半個字"
+  },
+  "lines": [
+    {
+      "t": 8,
+      "section": "Verse 1",
+      "jp": "The evening falls, the lake is still",
+      "zh": "夜幕降臨，湖面寧靜"
+    },
+    {
+      "t": 16,
+      "section": "Verse 1",
+      "jp": "A quiet house up on the hill",
+      "zh": "山畔的安靜小屋"
+    },
+    {
+      "t": 19,
+      "section": "Verse 1",
+      "jp": "We gather round, the fire’s bright",
+      "zh": "我們相聚，爐火明亮"
+    },
+    {
+      "t": 23,
+      "section": "Verse 1",
+      "jp": "Safe and warm against the night",
+      "zh": "安全又溫暖地抵禦著夜色"
+    },
+    {
+      "t": 26,
+      "section": "Pre-Chorus",
+      "jp": "No need to rush, nowhere to be",
+      "zh": "不需匆忙，無處需去"
+    },
+    {
+      "t": 29,
+      "section": "Pre-Chorus",
+      "jp": "Just familiar faces, you and me",
+      "zh": "只有熟悉的面孔，你和我"
+    },
+    {
+      "t": 32,
+      "section": "Pre-Chorus",
+      "jp": "The clink of glass, the gentle hum",
+      "zh": "酒杯輕碰，輕柔的低語"
+    },
+    {
+      "t": 35,
+      "section": "Pre-Chorus",
+      "jp": "Of all the days that are to come",
+      "zh": "訴說著未來的每一天"
+    },
+    {
+      "t": 41,
+      "section": "Chorus",
+      "jp": "Here at our table, under the light",
+      "zh": "在我們的餐桌旁，燈光之下"
+    },
+    {
+      "t": 47,
+      "section": "Chorus",
+      "jp": "Sharing the stories, making it right",
+      "zh": "分享著故事，讓一切美好"
+    },
+    {
+      "t": 53,
+      "section": "Chorus",
+      "jp": "A simple feast, a hand to hold",
+      "zh": "一頓簡單的家宴，一雙牽著的手"
+    },
+    {
+      "t": 56,
+      "section": "Chorus",
+      "jp": "The greatest love story ever told",
+      "zh": "這是被訴說過最偉大的愛情故事"
+    },
+    {
+      "t": 61,
+      "section": "Chorus",
+      "jp": "Just stay a while, the night is long",
+      "zh": "就留下來吧，夜還很長"
+    },
+    {
+      "t": 65,
+      "section": "Chorus",
+      "jp": "This is where we all belong",
+      "zh": "這就是我們的歸屬"
+    },
+    {
+      "t": 81,
+      "section": "Verse 2",
+      "jp": "The food is warm, the laughter soft",
+      "zh": "飯菜溫熱，笑聲輕柔"
+    },
+    {
+      "t": 84,
+      "section": "Verse 2",
+      "jp": "A gentle breeze is up aloft",
+      "zh": "微風在上方輕拂"
+    },
+    {
+      "t": 88,
+      "section": "Verse 2",
+      "jp": "Two days of peace, no ticking clock",
+      "zh": "兩天的平靜，沒有滴答作響的時鐘"
+    },
+    {
+      "t": 91,
+      "section": "Verse 2",
+      "jp": "Just memories built upon this rock",
+      "zh": "只有建立在這磐石上的回憶"
+    },
+    {
+      "t": 94,
+      "section": "Bridge",
+      "jp": "And Erika smiles, a quiet grace",
+      "zh": "Erika 微笑著，帶著恬靜的優雅"
+    },
+    {
+      "t": 97,
+      "section": "Bridge",
+      "jp": "In this perfect, hidden place",
+      "zh": "在這個完美、隱秘的地方"
+    },
+    {
+      "t": 100,
+      "section": "Bridge",
+      "jp": "We share the bread, we pour the wine",
+      "zh": "我們分享麵包，我們斟滿酒"
+    },
+    {
+      "t": 103,
+      "section": "Bridge",
+      "jp": "In this little world of yours and mine",
+      "zh": "在這個屬於你和我的小世界裡"
+    },
+    {
+      "t": 109,
+      "section": "Chorus",
+      "jp": "Here at our table, under the light",
+      "zh": "在我們的餐桌旁，燈光之下"
+    },
+    {
+      "t": 115,
+      "section": "Chorus",
+      "jp": "Sharing the stories, making it right",
+      "zh": "分享著故事，讓一切美好"
+    },
+    {
+      "t": 121,
+      "section": "Chorus",
+      "jp": "A simple feast, a hand to hold",
+      "zh": "一頓簡單的家宴，一雙牽著的手"
+    },
+    {
+      "t": 124,
+      "section": "Chorus",
+      "jp": "The greatest love story ever told",
+      "zh": "這是被訴說過最偉大的愛情故事"
+    },
+    {
+      "t": 129,
+      "section": "Chorus",
+      "jp": "Just stay a while, the night is long",
+      "zh": "就留下來吧，夜還很長"
+    },
+    {
+      "t": 133,
+      "section": "Chorus",
+      "jp": "This is where we all belong",
+      "zh": "這就是我們的歸屬"
+    },
+    {
+      "t": 138,
+      "section": "Outro",
+      "jp": "Take your time, let the evening flow",
+      "zh": "慢慢來，讓夜晚流淌"
+    },
+    {
+      "t": 142,
+      "section": "Outro",
+      "jp": "In the warmest love we know",
+      "zh": "在我們所知最溫暖的愛裡"
+    },
+    {
+      "t": 145,
+      "section": "Outro",
+      "jp": "Our little feast, a lakeside dream",
+      "zh": "我們的家宴，一個湖畔的夢"
+    },
+    {
+      "t": 149,
+      "section": "Outro",
+      "jp": "Flowing gently like a stream",
+      "zh": "如溪流般輕輕流淌"
+    },
+    {
+      "t": 153,
+      "section": "Outro",
+      "jp": "Mm-hmm..."
+    }
+  ]
+}
