@@ -1,0 +1,27 @@
+{
+  "voice": "Sulafat",
+  "model": "gemini-2.5-flash-preview-tts",
+  "style": "taiwanese-casual",
+  "lines": {
+    "freeze": {
+      "chars": 65,
+      "sec": 13.1,
+      "kb": 103
+    },
+    "ski": {
+      "chars": 76,
+      "sec": 17.8,
+      "kb": 140
+    },
+    "hunt": {
+      "chars": 105,
+      "sec": 24.9,
+      "kb": 195
+    },
+    "cans": {
+      "chars": 123,
+      "sec": 24.6,
+      "kb": 193
+    }
+  }
+}

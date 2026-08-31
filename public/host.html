@@ -942,16 +942,21 @@
   const readySet = new Set();
   sock.on('ready', (m) => { readySet.add(m.clientId); renderBrief(); });
 
-  // 語音解說：用系統 TTS，中文女聲優先。沒有中文語音就安靜跳過，不擋流程。
-  // getVoices() 第一次常常回空陣列（語音清單是非同步載入的），
-  // 所以先暖機、並在 voiceschanged 時補抓一次
+  // 語音解說：先播錄好的旁白（public/voice/<關卡>.mp3），沒有才退回系統 TTS。
+  //
+  // 為什麼要錄好：系統 TTS 念出來的東西**每台電腦都不一樣**——Mac 一種聲音、
+  // Windows 另一種、Linux 常常一種中文語音都沒有（整段安靜跳過）。
+  // 而且那個腔調是朗讀腔，在家宴的客廳裡聽起來很像在唸公告。
+  // 錄好的檔是 Gemini TTS 產的（node tools/make-voice.mjs），全場一致、
+  // 現場網路爛掉也照播，而且金鑰留在建置端、不會進到瀏覽器。
   let voices = [];
   function loadVoices() { try { voices = speechSynthesis.getVoices() || []; } catch (e) {} }
   if ('speechSynthesis' in window) {
     loadVoices();
     speechSynthesis.addEventListener?.('voiceschanged', loadVoices);
   }
-  function speak(text) {
+  let sayAudio = null;
+  function speakSystem(text) {
     if (!('speechSynthesis' in window)) return;
     try {
       if (!voices.length) loadVoices();
@@ -964,6 +969,21 @@
       u.rate = 0.95; u.pitch = 1.02;
       speechSynthesis.speak(u);
     } catch (e) {}
+  }
+  function stopSpeak() {
+    try { speechSynthesis.cancel(); } catch (e) {}
+    if (sayAudio) { sayAudio.pause(); sayAudio = null; }
+  }
+  // key 是關卡代號（freeze／ski／hunt／cans），text 是同一段字的備援
+  function speak(text, key) {
+    stopSpeak();
+    if (!key) return speakSystem(text);
+    const a = new Audio(`/voice/${key}.mp3`);
+    sayAudio = a;
+    a.volume = 1;
+    // 檔案不在（還沒錄）或播不出來都退回系統 TTS，不要讓說明變成默劇
+    a.addEventListener('error', () => { if (sayAudio === a) { sayAudio = null; speakSystem(text); } });
+    a.play().catch(() => { if (sayAudio === a) { sayAudio = null; speakSystem(text); } });
   }
   function renderBrief() {
     if (!briefOpen) return;
@@ -993,7 +1013,7 @@
     sock.send({ type: 'stage', stage: g.key });
     setActiveBtn(g.key);
     if (g.key === 'hunt') huntPreload();       // 說明期間預載名畫，開打不用等
-    speak(b.say);
+    speak(b.say, g.key);
   }
   // 白底展示五種姿勢：畫上偽裝就看不出輪廓了，所以說明時先讓大家記住形狀。
   // 借 PAINT.drawChameleon 本人畫（不是另外畫一張示意圖），才不會說明跟實際長得不一樣。
@@ -1018,9 +1038,12 @@
   function closeBrief() {
     briefOpen = false;
     $('#brief').classList.remove('on');
-    try { speechSynthesis.cancel(); } catch (e) {}
+    stopSpeak();          // 系統 TTS 跟錄好的旁白都要停，不然關掉說明它還在講
   }
-  $('#briefSay').addEventListener('click', () => speak(BRIEF[GAMES[pickedGame].key].say));
+  $('#briefSay').addEventListener('click', () => {
+    const k = GAMES[pickedGame].key;
+    speak(BRIEF[k].say, k);
+  });
   $('#briefCancel').addEventListener('click', closeBrief);
   $('#briefGo').addEventListener('click', () => {
     closeBrief();
