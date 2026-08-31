@@ -6,3 +6,6 @@ node_modules/
 # 這幾條是防手滑：有版權的素材（動畫角色、遊戲美術）放這些資料夾也不會被 commit。
 public/arts-custom/
 tools/arts-src/
+
+# 試聽用的旁白樣本：只是拿來挑聲音的，不要進 repo 也不要部署
+public/voice/samples/
