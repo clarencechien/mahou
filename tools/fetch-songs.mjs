@@ -6,7 +6,7 @@
 // 歌是使用者自己的作品，家宴當天不該還要靠別台機器活著——音檔放自己家，
 // 現場網路爛掉、對面站台掛掉都照播。歌詞 JSON 本來就一定要同源（對面沒有 CORS）。
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, cpSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -34,7 +34,16 @@ async function grab(rel) {
 const index = JSON.parse((await grab('data/songs/index.json')).toString());
 let songs = 0, audio = 0, skipped = 0, failed = 0;
 
+// ⚠️ id 與 audio 都是**對面站台給的字串**，直接接到 join() 上會穿出去：
+//   join(OUT, 'songs', '../../../../.git/hooks/post-checkout.json') → ~/.git/hooks/…
+// 對面是自己的站台，但「自己的站台被入侵」跟「被 DNS 劫持」都不是零機率，
+// 而代價是在開發機上任意寫檔（寫進 .git/hooks 就是下一次 git 操作直接執行）。
+// 三行就能擋掉，沒有理由不擋。
+const safeId = (x) => /^[A-Za-z0-9._-]+$/.test(x) && !x.startsWith('.');
+const inside = (p) => resolve(p).startsWith(resolve(OUT) + sep);
+
 for (const s of index.songs || []) {
+  if (!safeId(String(s.id || ''))) { console.error(`❌ 跳過可疑的 id：${JSON.stringify(s.id)}`); failed++; continue; }
   const jsonRel = `data/songs/${s.id}.json`;
   let meta;
   try {
@@ -48,6 +57,7 @@ for (const s of index.songs || []) {
   const rel = meta.audio && meta.audio.replace(/^\/+/, '');
   if (!rel) { console.error(`❌ ${s.id} 沒有 audio 欄位`); failed++; continue; }
   const dest = join(OUT, rel);
+  if (!inside(dest)) { console.error(`❌ ${s.id} 的 audio 指到 public/ambient 外面：${rel}`); failed++; continue; }
   mkdirSync(dirname(dest), { recursive: true });
   if (existsSync(dest) && !force) {
     skipped++;

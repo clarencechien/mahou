@@ -2616,7 +2616,15 @@
     feedEl.prepend(line);
     while (feedEl.childNodes.length > 100) feedEl.lastChild.remove();
   }
-  function esc(s) { const d = document.createElement('span'); d.textContent = s ?? ''; return d.innerHTML; }
+  // ⚠️ textContent→innerHTML **不會跳脫引號**，所以放進 title="…" 這種屬性裡是破得掉的：
+  // 玩家的 device.ua 是自己送上來的（deviceUpdate 沒有驗證），送一個
+  //   " onmouseover="…
+  // 就能在主控台上執行——而主控台是這裡權限最高的那一頁。引號一起跳脫掉。
+  function esc(s) {
+    const d = document.createElement('span');
+    d.textContent = s ?? '';
+    return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
 })();
 </script>
 </body>
