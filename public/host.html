@@ -595,17 +595,45 @@
 <script src="/engine/mode7.js"></script>
 <script src="/shared.js"></script>
 <script>
-(function () {
+(async function () {
   const { $ } = Mahou;
 
   // 房號放在 hash：重新整理房間不變，也可手動指定 /host.html#ABCD
   let roomId = (location.hash.slice(1) || '').toUpperCase();
-  if (!/^[A-Z0-9]{4,8}$/.test(roomId)) {
-    roomId = Mahou.randomRoom();
-    location.hash = roomId;
+  if (!/^[A-Z0-9]{4,8}$/.test(roomId)) roomId = '';
+
+  // ---- 跟 Worker 換一張房間憑證 ----
+  // 主控這一頁是唯一能換憑證的地方（它在 Cloudflare Access 後面）。
+  // 沒有憑證就連不上 /ws/，所以路人開不了 DO——真正在管費用的是這張憑證，
+  // 不是把頁面藏起來。掃 QR 的人不用登入，憑證跟在網址裡跟著走。
+  let roomToken = '', roomLocked = false;
+  try {
+    const r = await fetch('/api/room' + (roomId ? `?room=${roomId}` : ''), { method: 'POST' });
+    if (r.status === 403) {
+      document.body.innerHTML = '<p style="padding:24px;font-size:1.1rem">' +
+        '這台沒有通過 Cloudflare Access，不能開房間。<br>請用有權限的帳號登入後重新整理。</p>';
+      return;
+    }
+    const j = await r.json();
+    roomId = j.room; roomToken = j.token || ''; roomLocked = !!j.locked;
+  } catch (e) {
+    // 換不到就退回舊行為（本機開發、Worker 還沒更新），不要讓主控台開不起來
+    if (!roomId) roomId = Mahou.randomRoom();
   }
+  location.hash = roomId;
+  const tq = roomToken ? `&t=${encodeURIComponent(roomToken)}` : '';
+  const tq1 = roomToken ? `?t=${encodeURIComponent(roomToken)}` : '';
+
   $('#roomCode').textContent = roomId;
-  const clientUrl = `${location.origin}/client#${roomId}`;
+  // 沒上鎖就講出來。寧可醜，也不要讓人以為鎖上了。
+  if (!roomLocked) {
+    const w = document.createElement('div');
+    w.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:99;background:#7f1d1d;color:#fecaca;' +
+      'padding:4px 10px;border-radius:8px;font-size:.72rem;letter-spacing:.05em';
+    w.textContent = '房間沒上鎖（未設 ROOM_SECRET）';
+    document.body.appendChild(w);
+  }
+  const clientUrl = `${location.origin}/client#${roomId}${roomToken ? '.' + roomToken : ''}`;
   $('#clientUrl').textContent = clientUrl;
   try {
     // CDN 掛掉不能讓主控台跟著死：降級成純文字網址（上面已顯示）
@@ -623,7 +651,7 @@
     location.href = `${location.pathname}?hint=${e.target.value}#${Mahou.randomRoom()}`;
   });
 
-  const sock = new Mahou.Sock(roomId, 'host', `&hint=${encodeURIComponent(hint)}`);
+  const sock = new Mahou.Sock(roomId, 'host', `&hint=${encodeURIComponent(hint)}${tq}`);
   let roomEnded = false;
   const net = { state: 'connecting', doColo: '–', edgeColo: '–' };
   function renderNet() {
@@ -637,7 +665,7 @@
   sock.ws.addEventListener('close', () => { if (!roomEnded) { net.state = 'closed'; renderNet(); } });
   $('#connDot').addEventListener('click', () => $('#netPop').classList.toggle('on'));
   // DO 落點診斷：doColo 離現場越遠，RTT 地板越高
-  fetch(`/whereami/${roomId}?hint=${encodeURIComponent(hint)}`).then((r) => r.json()).then((w) => {
+  fetch(`/whereami/${roomId}?hint=${encodeURIComponent(hint)}${tq}`).then((r) => r.json()).then((w) => {
     net.doColo = w.doColo; net.edgeColo = w.edgeColo; renderNet();
   }).catch(() => {});
 
@@ -690,7 +718,7 @@
 
   // ---- 匯出：POC 唯一真正的交付物 ----
   async function doExport() {
-    const res = await fetch(`/export/${roomId}`);
+    const res = await fetch(`/export/${roomId}${tq1}`);
     if (!res.ok) { alert('匯出失敗：' + res.status); return false; }
     const blob = await res.blob();
     const a = document.createElement('a');
@@ -709,28 +737,36 @@
   // （128MB × 秒數）——一個忘記關的房間撐到 6 小時上限就吃掉免費方案
   // 一天額度的兩成。閒置 30 分鐘會自動關，但「自動」跟「確定關掉了」是兩回事。
   // 沒有地方可以列出所有 DO，所以自己記：每開一個房間就把房號存進 localStorage。
+  // 記的是「房號＋那間的憑證」：上鎖之後關房也要帶憑證，只記房號會關不掉
   const ROOMS_KEY = 'mahou-rooms';
-  const roomLog = () => { try { return JSON.parse(localStorage.getItem(ROOMS_KEY) || '[]'); } catch (e) { return []; } };
-  function rememberRoom(id) {
+  const roomLog = () => {
     try {
-      const list = roomLog().filter((r) => r !== id);
-      list.push(id);
+      return (JSON.parse(localStorage.getItem(ROOMS_KEY) || '[]'))
+        .map((r) => (typeof r === 'string' ? { room: r, t: '' } : r))     // 舊格式是純字串
+        .filter((r) => r && r.room);
+    } catch (e) { return []; }
+  };
+  function rememberRoom(id, t) {
+    try {
+      const list = roomLog().filter((r) => r.room !== id);
+      list.push({ room: id, t: t || '' });
       localStorage.setItem(ROOMS_KEY, JSON.stringify(list.slice(-40)));
     } catch (e) {}
   }
-  rememberRoom(roomId);
+  rememberRoom(roomId, roomToken);
   $('#killBtn').addEventListener('click', async () => {
     const rooms = roomLog();
     if (!rooms.length) return alert('這台瀏覽器沒有開過房間的紀錄。');
-    if (!confirm(`關掉這台瀏覽器開過的 ${rooms.length} 個房間？\n（${rooms.join('、')}）\n包含現在這一間，所有人都會被踢掉。`)) return;
+    if (!confirm(`關掉這台瀏覽器開過的 ${rooms.length} 個房間？\n（${rooms.map((r) => r.room).join('、')}）\n包含現在這一間，所有人都會被踢掉。`)) return;
     $('#killBtn').disabled = true;
     const out = [];
-    for (const r of rooms) {
+    for (const { room, t } of rooms) {
       try {
-        const res = await fetch(`/close/${r}`, { method: 'POST' });
+        const res = await fetch(`/close/${room}${t ? `?t=${encodeURIComponent(t)}` : ''}`, { method: 'POST' });
+        if (res.status === 403) { out.push(`${room}：憑證過期了，關不掉（房間本來就會自己關）`); continue; }
         const j = await res.json();
-        out.push(`${r}：${j.alreadyEnded ? '早就關了' : `關掉了（當時還有 ${j.live} 條連線）`}`);
-      } catch (e) { out.push(`${r}：關不掉（${e.message}）`); }
+        out.push(`${room}：${j.alreadyEnded ? '早就關了' : `關掉了（當時還有 ${j.live} 條連線）`}`);
+      } catch (e) { out.push(`${room}：關不掉（${e.message}）`); }
     }
     $('#killBtn').disabled = false;
     alert('全部處理完了：\n\n' + out.join('\n'));
