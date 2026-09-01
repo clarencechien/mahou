@@ -65,6 +65,9 @@ export class RoomDO {
     this.createdAt = Date.now();
     this.lastActivity = Date.now();
     this.ended = false;
+    // 這個 DO 實例活著的期間，主控有沒有連進來過。⚠️ 不落地是故意的：
+    // 它要跟著實例的生死，而不是跟著房號——見 setup() 裡的說明。
+    this.hostSeen = false;
     this._reaper = null;
   }
 
@@ -106,9 +109,27 @@ export class RoomDO {
     ws._role = role;
     ws._clientId = null;
     if (this.ended) { ws.close(4000, 'room ended'); return; }
-    // 有連線才需要看門狗；全空時要清掉，否則 timer 本身會擋住 DO 回收
+
+    // ⚠️ 沒有主控的房間不該活著——這是「手機重整把房間叫醒」的唯一防線。
+    //
+    // 房間狀態全在記憶體（這個檔案沒有任何 storage 寫入），所以 DO 一被回收，
+    // ended 也跟著不見。也就是說「已經結束的房間」跟「主控只是關了網頁的房間」
+    // 在這裡長得**一模一樣**：都是一個全新的空 DO。
+    // 好消息是兩者的正確行為也一樣：沒有主控就不是房間，當場關掉。
+    // 所以不需要把 ended 寫進 storage、也不會讓房號永久作廢。
+    //
+    // hostSeen 為什麼跟著「實例」而不是跟著「房號」：
+    //   主控斷線重連時，DO 被還連著的手機撐著沒被回收 → hostSeen 還是 true
+    //     → 手機重連照樣進得來（不會誤殺）
+    //   全部斷光、DO 被回收 → 新實例 hostSeen 是 false
+    //     → 手機重整進來被擋下，DO 幾毫秒後就死，不會掛滿 30 分鐘的閒置上限
+    if (role !== 'host' && !this.hostSeen) { ws.close(4002, 'no host'); return; }
+
+    // ⚠️ 看門狗一定要開在上面那道判斷**之後**。setInterval 一開就會把 DO 釘在
+    // 記憶體裡，被拒絕的連線也會害它多活一分鐘——那正是這段程式要省下來的東西。
     if (!this._reaper) this._reaper = setInterval(() => this.checkIdle(), 60 * 1000);
     if (role === 'host') {
+      this.hostSeen = true;
       this.hosts.add(ws);
       this.send(ws, { type: 'hello', role, roomId: this.roomId, stage: this.stage });
       this.sendRoster(ws);
@@ -216,7 +237,12 @@ export class RoomDO {
         if (!c) return;
         c.sync = { offset: msg.offset, rtt: msg.rtt, drift: msg.drift, at: now };
         this.log({ type: 'syncResult', clientId: ws._clientId, offset: msg.offset, rtt: msg.rtt, drift: msg.drift, elapsedMs: msg.elapsedMs });
-        this.toHosts({ type: 'syncUpdate', clientId: ws._clientId, offset: msg.offset, rtt: msg.rtt, drift: msg.drift });
+        // 名字一起送：host 萬一還沒有這個人的名單列，才補得出一列像樣的
+        this.toHosts({ type: 'syncUpdate', clientId: ws._clientId, name: c.name,
+                       offset: msg.offset, rtt: msg.rtt, drift: msg.drift });
+        // 第一次對時完成才廣播整份名單。ping 是名單的一部分，只送窄訊息的話，
+        // host 端只要漏接一次就要等下一輪（10 秒）——現場看起來就是「沒反應」。
+        if (!c.syncedOnce) { c.syncedOnce = true; this.broadcastRoster(); }
         return;
       }
 

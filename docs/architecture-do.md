@@ -222,7 +222,15 @@ DO 是按存活時間計費的，所以「誰可以開房間」就等於「誰�
 
 做法是一張 HMAC 簽的房間憑證：主控（過 Access）打 `POST /api/room` 換一張，
 QR 網址帶著它，掃 QR 的人不用登入。`/ws`、`/export`、`/whereami`、`/close`
-沒有有效憑證一律 403。設定方式見 README 的「誰可以開房間」。
+沒有有效憑證一律 403。設定方式與驗收清單見 README 的「誰可以開房間」。
+
+線上實測（`mahou.ai-apps.work`，設好 `ROOM_SECRET` ＋ Access 之後）：
+四條 DO 路徑無憑證全部 403、`/host` 與 `/api/room` 302 導到 Access 登入頁、
+`/client` `/ambient` `/audio` `/voice` `/arts` 全部 200。
+
+> 設定時踩到的：`ROOM_SECRET` 沒設到部署的那支 Worker 時，前端是新的、
+> 後端的檢查卻是空的——**`/close/<任意房號>` 回 200 就是還沒鎖上**，
+> 那比看主控台的字條可靠（字條只知道「換不到憑證」，不知道為什麼）。
 
 順帶一個容易漏的細節：**Access 的 JWT 要真的驗簽**，不能只看
 `Cf-Access-Jwt-Assertion` 這個 header 在不在。Access 沒有蓋到的路徑，
