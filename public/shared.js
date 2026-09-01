@@ -16,6 +16,7 @@
       this.endedHandlers = [];
       this.closed = false;
       this.retry = 0;
+      this.noHost = 0;
       this.connect();
     }
     url() {
@@ -25,10 +26,17 @@
     connect() {
       this.ws = new WebSocket(this.url());
       this.ws.onopen = () => {
-        this.retry = 0;
+        // ⚠️ 計數器**不要**在這裡歸零。被拒絕的連線一樣會 open——
+        // DO 是先接受 WebSocket（101）再關掉它的，所以 onopen 照樣會觸發。
+        // 在這裡歸零的話，「開了就被關」會變成無限迴圈：實測 42 秒戳了 83 次，
+        // 退避完全沒有生效（每次都從 500ms 重新開始）。
         this.openHandlers.forEach((fn) => fn());
       };
       this.ws.onmessage = (e) => {
+        // 收到第一則訊息才算「這條連線真的可用」——DO 只對接受的連線送 hello。
+        // 退避與放棄的計數器歸零放這裡才對。
+        this.retry = 0;
+        this.noHost = 0;
         let msg;
         try { msg = JSON.parse(e.data); } catch { return; }
         const fn = this.handlers[msg.type];
@@ -36,6 +44,18 @@
       };
       this.ws.onclose = (e) => {
         if (this.closed) return;
+        // 4002 = 房間目前沒有主控。兩種可能：主控剛好在重連（等一下就好），
+        // 或房間早就散了（再等也沒用）。所以給幾次機會就放棄——
+        // 每一次重試都會把 DO 生出來一次，雖然它判斷完幾毫秒就死，但沒必要一直戳。
+        if (e.code === 4002) {
+          if (++this.noHost <= 6) {
+            setTimeout(() => this.connect(), Math.min(500 * 2 ** this.retry++, 8000));
+            return;
+          }
+          this.closed = true;
+          this.endedHandlers.forEach((fn) => fn('no-host'));
+          return;
+        }
         // 4000/4001 = 伺服器主動關房（host 結束或閒置逾時）：不再重連，
         // 否則忘記關的分頁會自動重連＋重新加入，把房間永遠養著（計費防呆）
         if (e.code >= 4000) {

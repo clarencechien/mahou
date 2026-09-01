@@ -2,6 +2,12 @@ name = "mahou"
 main = "worker/index.js"
 compatibility_date = "2025-11-01"
 
+# 關掉 *.workers.dev 那個網域。留著它等於開一扇沒有 Access 的側門：
+# Cloudflare Access 是綁在 mahou.ai-apps.work 上的，workers.dev 那條進來的請求
+# 不會經過它——/host 就變成誰都打得開，也就換得到房間憑證。
+# 部署後 workers.dev 會回 404，只剩自訂網域進得來。
+workers_dev = false
+
 # 靜態頁面（host.html / client.html / shared.js）
 assets = { directory = "./public", binding = "ASSETS" }
 
