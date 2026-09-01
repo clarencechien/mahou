@@ -1072,11 +1072,11 @@
     ski: {
       title: '滑雪下坡',
       lead: () => `${TUNE.dur | 0} 秒比距離・手機平放拿好，螢幕朝上`,
-      say: '手機平放拿好，手要一直連點畫面才會有速度，停手就慢下來。左右傾斜閃開樹木。看到藍色跳台，就把手機往上抬。連續跳中三次會超加速，撞到就從頭算。看誰滑最遠。',
+      say: '手機平放拿好，手要一直連點畫面才會有速度，停手就慢下來。左右傾斜閃開樹木。看到藍色跳台，就把手機往上抬。連續跳中三次會超加速，再連三次升到極速，九連是神速，一檔比一檔快。撞到就掉檔。看誰滑最遠。',
       rules: [
         { ic: '👆', h: '手不能停', d: '一直連點才有速度，停手就慢下來' },
         { ic: '📱', h: '左右傾斜轉向', d: '把手機往左右倒，閃開樹和石頭' },
-        { ic: '🔥', h: '連三次跳台＝超加速', d: '跳台往上抬手機。連中三次解鎖更高的速度上限，撞到或跳空就從頭算' },
+        { ic: '🔥', h: '跳台連段換檔', d: '3 連超加速、6 連極速、9 連神速，一檔比一檔快。撞到砍一半、跳空歸零' },
       ],
     },
   };
@@ -1431,7 +1431,8 @@
         ht.style.top = (oy + (vp.tagY - 4) * k) + 'px';
         ht.style.color = CHARA.palFor(vp.idx).accent2;
         ht.classList.toggle('bad', !!(p && p.lv > 0));
-        ht.innerHTML = esc(vp.c.name) + (p && p.lv > 0 ? '<b>超加速</b>' : '');
+        ht.innerHTML = esc(vp.c.name) +
+          (p && p.lv > 0 ? `<b style="color:rgb(${skiTier(p.lv).ring})">${skiTier(p.lv).name}</b>` : '');
       });
     }
     for (let i = n; i < paneTagPool.length; i++) paneTagPool[i].style.display = 'none';
@@ -1834,6 +1835,17 @@
   const skiDur = () => Math.max(20, Math.min(120, TUNE.dur | 0 || 60)) * 1000;
   const WPM = () => COURSE.WORLD_PER_M;   // 單一來源在 course.js，兩端不能各寫一份
   const SKI = { race: null, obs: [], players: new Map(), img: null, rankText: '' };
+  // 超加速的檔位表（要跟 client.html 的 SKI.TIERS 同名同序）。
+  // 三個旋鈕一起推才讀得出換檔（風格規範 §2.3.1）：視野再開一點、地面花紋再細一點、
+  // 框線再亮一點。而且**每一檔的級距要放大**——線性的 lv*5 會讓第二檔看起來
+  // 只是第一檔的延續，實測回報就是「超加速只有一段」。
+  const SKI_TIER = [
+    { name: '',       fov: 0,  tex: 1.00, ring: null,      lines: 0 },
+    { name: '超加速', fov: 5,  tex: 1.22, ring: '244,63,94',  lines: 0.06 },
+    { name: '極速',   fov: 12, tex: 1.55, ring: '249,115,22', lines: 0.14 },
+    { name: '神速',   fov: 20, tex: 1.95, ring: '253,224,71', lines: 0.22 },
+  ];
+  const skiTier = (lv) => SKI_TIER[Math.max(0, Math.min(SKI_TIER.length - 1, lv | 0))];
 
   $('#skiStartBtn').addEventListener('click', () => {
     SFX.init(); showQR(false); SFX.go();
@@ -2026,10 +2038,11 @@
       // 超加速要看得出來是「換了一檔」，不能只有紅框閃一下：
       // 視野再開、地面花紋再細＝每秒掃過的東西變多，這是最省力的速度感（風格聖經 §5）
       const lv = p ? (p.lv | 0) : 0;
+      const tr = skiTier(lv);
       const vp = { x: Math.round(v.x), y: Math.round(v.y), w: vw, h: vh,
                    horizon: Math.round(vh * 0.34), scroll: wy - COURSE.START_Y, camX: x,
-                   f: (94 - sp01 * 16 - lv * 5) / TUNE.fov, tex: TUNE.tex * (1 + lv * 0.22),
-                   c, p, speed, air, rot, sp01, idx: i };
+                   f: (94 - sp01 * 16 - tr.fov) / TUNE.fov, tex: TUNE.tex * tr.tex,
+                   c, p, speed, air, rot, sp01, lv, tr, idx: i };
       MODE7.renderInto(img, FW, SKI.world, vp);
       vps.push(vp);
     });
@@ -2056,11 +2069,14 @@
         drawCourseItem(o, pr, Math.max(1, Math.min(pr.k * 46, vp.h * 0.62)));
       }
       // 速度線：從消失點往外掃的短白條，只在夠快時出現
-      if (vp.sp01 > 0.35) {
+      // 速度線的門檻跟著檔位往下降、條數往上加：sp01 在 20 就飽和了，
+      // 光靠速度分不出第二第三檔，得讓檔位自己再推一把
+      const lnTh = Math.max(0.12, 0.35 - vp.tr.lines);
+      if (vp.sp01 > lnTh) {
         const cx = vp.x + vp.w / 2, cy = vp.y + vp.horizon;
-        const n = Math.round(4 + vp.sp01 * 8);
-        fctx.globalAlpha = (vp.sp01 - 0.35) / 0.65 * 0.5;
-        fctx.strokeStyle = '#ffffff'; fctx.lineWidth = 1;
+        const n = Math.round(4 + vp.sp01 * 8 + vp.lv * 3);
+        fctx.globalAlpha = Math.min(0.75, (vp.sp01 - lnTh) / (1 - lnTh) * 0.5 + vp.lv * 0.07);
+        fctx.strokeStyle = vp.lv > 0 ? `rgb(${vp.tr.ring})` : '#ffffff'; fctx.lineWidth = vp.lv > 1 ? 2 : 1;
         for (let k = 0; k < n; k++) {
           const ph = ((performance.now() / 260) + k / n) % 1;   // 由中心往外加速展開
           const r0 = Math.pow(ph, 2.2) * vp.w * .95;
@@ -2102,10 +2118,19 @@
         fctx.ellipse(cx0, gy, 15 * scale, 4 * scale, 0, 0, Math.PI * 2);
         fctx.fill();
         CHARA.drawSki(fctx, vp.idx, dir, frame, cx0, feetY, scale, vp.rot || 0);
-        if (pp.lv > 0) {                                         // 超加速：整格鑲一圈紅邊
-          fctx.strokeStyle = `rgba(244,63,94,${.35 + .3 * Math.sin(performance.now() / 90)})`;
-          fctx.lineWidth = 3;
-          fctx.strokeRect(vp.x + 1.5, vp.y + 1.5, vp.w - 3, vp.h - 3);
+        if (pp.lv > 0) {                                         // 換檔：整格鑲一圈，顏色與粗細跟著檔位跳
+          const lw = 2 + vp.lv * 2;
+          // 底線跟著檔位抬高：純脈動的話最低會掉到幾乎透明，電視上看起來是閃爍不是狀態，
+          // 而且高檔位剛好在低谷時會比低檔位還淡——換檔反而看起來像降檔
+          const beat = Math.min(.95, .3 + vp.lv * .12 + .3 * Math.sin(performance.now() / (110 - vp.lv * 20)));
+          fctx.strokeStyle = `rgba(${vp.tr.ring},${beat})`;
+          fctx.lineWidth = lw;
+          fctx.strokeRect(vp.x + lw / 2, vp.y + lw / 2, vp.w - lw, vp.h - lw);
+          if (vp.lv > 1) {                                       // 第二檔起再補一圈內框，遠遠看就知道又升了
+            fctx.strokeStyle = `rgba(${vp.tr.ring},${beat * .45})`;
+            fctx.lineWidth = 2;
+            fctx.strokeRect(vp.x + lw + 2, vp.y + lw + 2, vp.w - lw * 2 - 4, vp.h - lw * 2 - 4);
+          }
         }
         if (pp.flash > 0) {                                      // 上跳台：整格閃一下紫光
           fctx.fillStyle = `rgba(168,85,247,${pp.flash * .35})`;
@@ -2129,6 +2154,37 @@
     return vps;
   }
   SKI.world = MODE7.buildWorld('snow');
+
+  // 測試鉤子：不連房間也能把滑雪畫面推到「N 個人各停在一個檔位」。
+  // 換檔看不看得出來，只有把四檔並排在同一張畫面上才判得準——真的開一場去等某個人
+  // 剛好連到 9，量到的是手氣不是設計。純本機假資料，不會送任何東西給 DO。
+  // speed 給值＝四格用同一個速度跑，這樣格與格的差就只剩檔位的畫面旋鈕
+  //（要量地面花紋會不會抖，速度一定要控住，不然量到的是「跑比較快」）
+  let skiDemoTimer = null;
+  window.__skiDemo = (lvs = [0, 1, 2, 3], speed = null) => {
+    clearInterval(skiDemoTimer);
+    roster = lvs.map((lv, i) => ({ clientId: 'demo' + i, name: (SKI_TIER[lv].name || '無加速'), connected: true }));
+    SKI.race = { startAt: Date.now() - 5000, duration: 60000, seed: 12345, speedMul: +TUNE.speed };
+    SKI.obs = COURSE.build(12345, +TUNE.speed);
+    SKI.players.clear();
+    lvs.forEach((lv, i) => SKI.players.set('demo' + i, {
+      name: roster[i].name, x: 0, wy: COURSE.START_Y + 2000, dispX: 0, dispY: COURSE.START_Y + 2000,
+      speed: speed == null ? SKI_SPEED_AT(lv) : speed, vx: 0, air: 0, airMax: 0.42, rot: 0,
+      jumps: lv * 3, hits: 0, combo: lv * 3, lv, at: performance.now(),
+    }));
+    curStage = 'ski';
+    // 假裝手機每 100ms 回報一次，畫面才會真的往前跑；不動的畫面看不出速度感也量不到閃爍
+    skiDemoTimer = setInterval(() => {
+      for (const pl of SKI.players.values()) {
+        pl.wy += pl.speed * COURSE.WORLD_PER_M * 0.1;
+        pl.at = performance.now();
+      }
+    }, 100);
+    return lvs.length;
+  };
+  const SKI_SPEED_AT = (lv) => [14, 28, 37, 45][Math.min(3, lv | 0)];
+  window.__skiVps = () => skiVps.map((v) => ({ lv: v.lv, name: SKI_TIER[v.lv].name,
+    f: +v.f.toFixed(2), tex: +v.tex.toFixed(2), ring: v.tr.ring }));
 
   // ---- 畫面 ----
   const fmt = (v, d = 1) => (v == null ? '–' : (+v).toFixed(d));

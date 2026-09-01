@@ -2,6 +2,10 @@
 //
 //   gemini_key=... node tools/make-voice.mjs --sample          # 各種聲音各念一段，挑聲音用
 //   gemini_key=... node tools/make-voice.mjs --voice Sulafat   # 正式錄四段旁白
+//   gemini_key=... node tools/make-voice.mjs --only ski         # 只補錄改過稿的那一段
+//
+// 改了 host.html 的 BRIEF.say 就要補錄，不然語音跟畫面上的字對不起來。用 --only
+// 只重錄動到的那一段：其他段沒改，重錄只會換成另一次隨機的演出，白花錢又讓聲音走鐘。
 //
 // 為什麼要「先錄好」而不是現場叫 API：
 //   1. 金鑰不能進瀏覽器。這是唯一硬理由——現場呼叫就等於把 key 發給每一台主控。
@@ -84,6 +88,11 @@ function pcmToMp3(pcm, dest) {
 
 mkdirSync(OUT, { recursive: true });
 
+// 補錄時預設沿用上次的聲音——四段旁白換聲音會很出戲
+function manifestVoice() {
+  try { return JSON.parse(readFileSync(join(OUT, 'manifest.json'), 'utf8')).voice; } catch (e) { return null; }
+}
+
 if (process.argv.includes('--sample')) {
   // 挑聲音用：同一段話，每個聲音各念一次
   const VOICES = (arg('voices', 'Sulafat,Puck,Zephyr,Kore,Aoede,Leda')).split(',');
@@ -103,11 +112,15 @@ if (process.argv.includes('--sample')) {
   process.exit(0);
 }
 
-const VOICE = arg('voice', 'Sulafat');
-const lines = readLines();
-if (!lines.length) { console.error('從 host.html 讀不到 BRIEF 的 say'); process.exit(1); }
+const VOICE = arg('voice', manifestVoice() || 'Sulafat');
+const ONLY = (arg('only', '') || '').split(',').filter(Boolean);
+const lines = readLines().filter((l) => !ONLY.length || ONLY.includes(l.key));
+if (!lines.length) { console.error(ONLY.length ? `--only ${ONLY.join(',')} 對不到任何一段` : '從 host.html 讀不到 BRIEF 的 say'); process.exit(1); }
 console.log(`聲音 ${VOICE}・模型 ${MODEL}・${lines.length} 段\n`);
-const manifest = { voice: VOICE, model: MODEL, style: 'taiwanese-casual', lines: {} };
+// 補錄不能把 manifest 洗掉：沒重錄的那幾段還在磁碟上，紀錄卻沒了
+const prev = (() => { try { return JSON.parse(readFileSync(join(OUT, 'manifest.json'), 'utf8')); } catch (e) { return null; } })();
+const manifest = { voice: VOICE, model: MODEL, style: 'taiwanese-casual',
+                   lines: Object.assign({}, prev && prev.lines) };
 let fail = 0;
 for (const { key, text } of lines) {
   try {
