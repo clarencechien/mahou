@@ -270,6 +270,33 @@ curl -s -o /dev/null -w "ambient %{http_code}\n" "https://<你的網域>/ambient
 ⚠️ **`/close` 回 200 就是還沒鎖上**，不管字條顯示什麼。
 secret 是即時生效的，補設完不用重新部署，再打一次就會變 403。
 
+### 安全複查（2026-09）
+
+上線前把整條分支做過一次安全審查。**新加的後端（房間憑證、Access 驗簽、`/audio`）
+沒有找到高信心漏洞**，複查過並確認沒問題的有：
+
+- **房間憑證的 HMAC**：`${room}.${exp}` 沒有分隔符走私空間（房號是 `[A-Z0-9]{4,8}`），
+  截斷後仍有 192 bits，常數時間比對，`exp` 有被簽進去所以改不動
+- **Access JWT**：`aud` / `iss` / `exp` / `kid` 都驗，演算法**寫死** `RSASSA-PKCS1-v1_5`
+  ——所以少檢查 `head.alg` 不構成 alg 混淆（`alg:none`、HS256 都進不來）。失敗路徑一律 fail-closed
+- **`serveAudio`**：檔名白名單不含 `/` 或 `%`，`..%2f`、雙重編碼、字面 `../` 全部擋掉
+- **`randomRoom`**：`crypto.getRandomValues`，256 % 32 = 0，沒有模數偏差
+
+修掉的三件事：
+
+| 問題 | 為什麼修 |
+|---|---|
+| `tools/fetch-songs.mjs` 路徑穿越 | 對面給的 `s.id` / `meta.audio` 直接接 `join()`，實測穿得到 `~/.git/hooks/`＝**開發機任意寫檔**。對面是自己的站台，但被入侵或 DNS 被劫持都不是零機率，三行就擋得掉 |
+| 主控台 `esc()` 在屬性裡破得掉 | `textContent→innerHTML` **不跳脫引號**，而 `title="${esc(device.ua)}"` 的 `ua` 是玩家自己送的。**任何掃到 QR 的訪客都打得到，中彈的是權限最高的那一頁** |
+| `client.html` 名次表沒跳脫名字 | 目前靠 DO 把名字切到 10 字才不能利用——那是**另一個檔案裡的常數**撐著的，改成 20 就破了 |
+
+> ⚠️ 已知但沒改：`?t=` 會出現在 `/ws`、`/export`、`/close` 的 query string，
+> 而 `[observability]` 是開著的，所以**憑證會進 Cloudflare 的請求記錄**。
+> 它是 12 小時、單一房間的憑證，判斷可以接受；不想讓它進 log 就要改走 header。
+>
+> `/close/<房號>` 任何掃過 QR 的人都叫得動。但他本來就能用 WebSocket 送 `endRoom`
+> 達到一樣的效果，**不是新增的權限**，影響也只是關房。
+
 ### 逃生鈕怎麼運作
 
 `POST /close/<房號>` 直接叫那間的 DO 關房，回一個 JSON 說**關掉之前還有幾條連線**——
