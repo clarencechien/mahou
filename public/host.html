@@ -440,6 +440,11 @@
         <input type="range" id="tFov" min="0.6" max="1.6" step="0.05" value="1">
         <div class="d">越廣角，兩側掃得越兇；太廣會像魚眼。</div>
       </div>
+      <div class="k">
+        <div class="lab"><span>配樂音量</span><b id="tvBgmVol">60</b></div>
+        <input type="range" id="tBgmVol" min="0" max="100" step="5" value="60">
+        <div class="d">現場合成的電子配樂，會跟著檔位加聲部與加速。拉到 0 就關掉，音效不受影響。</div>
+      </div>
       <h4>🎨 名畫變色龍</h4>
       <div class="k">
         <div class="lab"><span>變色龍難度</span><b id="tvHuntDiff">1.0×</b></div>
@@ -655,6 +660,7 @@
 <script src="/engine/paint.js"></script>
 <script src="/engine/cans.js"></script>
 <script src="/engine/sfx.js"></script>
+<script src="/engine/bgm.js"></script>
 <script src="/engine/mode7.js"></script>
 <script src="/shared.js"></script>
 <script>
@@ -1227,6 +1233,7 @@
     openBrief();
   });
   $('#gStop').addEventListener('click', () => {
+    BGM.stop();
     FZ.running = false; HUNT.running = false; HUNT.roundActive = false; CANSG.running = false;
     sock.send({ type: curStage === 'ski' ? 'skiEnd'
       : curStage === 'hunt' ? 'huntEnd'
@@ -1712,7 +1719,7 @@
                      huntDiff: 1, huntSec: 45, huntTheme: 0, huntBlock: 1,
                      huntRounds: 8, huntMax: 10, huntCrop: 60, huntChar: 'block',
                      huntSize: 0, huntDepth: 0, huntEdge: 0, huntBlink: 0,   // 0 = 照關卡曲線
-                     cansRefill: 4.5, cansSec: 45, cansFun: 50 };
+                     cansRefill: 4.5, cansSec: 45, cansFun: 50, bgmVol: 60 };
   // 改預設值的時候把 TUNE_VER 加一：舊瀏覽器存的設定會蓋掉新預設，
   // 之前就中過——像素大小預設早就改成 3 了，現場那台還是拿舊的 6 在跑，看起來像沒改到。
   const TUNE_VER = 3;
@@ -1734,6 +1741,8 @@
     $('#tTex').value = TUNE.tex;     $('#tvTex').textContent = (+TUNE.tex).toFixed(1) + '×';
     $('#tFov').value = TUNE.fov;     $('#tvFov').textContent = (+TUNE.fov).toFixed(2) + '×';
     $('#tDur').value = TUNE.dur;     $('#tvDur').textContent = (TUNE.dur | 0) + ' 秒';
+    $('#tBgmVol').value = TUNE.bgmVol; $('#tvBgmVol').textContent = (TUNE.bgmVol | 0) || '關';
+    if (TUNE.bgmVol > 0) BGM.setVolume(0.2 * TUNE.bgmVol / 100); else BGM.stop();
     $('#tHuntDiff').value = TUNE.huntDiff; $('#tvHuntDiff').textContent = (+TUNE.huntDiff).toFixed(2).replace(/0$/,'') + '×';
     $('#tHuntSec').value = TUNE.huntSec;   $('#tvHuntSec').textContent = (TUNE.huntSec | 0) + ' 秒';
     $('#tCansRefill').value = TUNE.cansRefill; $('#tvCansRefill').textContent = (+TUNE.cansRefill).toFixed(1) + ' 秒';
@@ -1784,7 +1793,7 @@
       huntIdleReset(); huntPreload();          // 主題換了就重抓畫、重畫說明底圖
     });
   });
-  [['tSpeed', 'speed'], ['tTex', 'tex'], ['tFov', 'fov'], ['tDur', 'dur'],
+  [['tSpeed', 'speed'], ['tTex', 'tex'], ['tFov', 'fov'], ['tDur', 'dur'], ['tBgmVol', 'bgmVol'],
    ['tHuntDiff', 'huntDiff'], ['tHuntSec', 'huntSec'], ['tHuntBlock', 'huntBlock'],
    ['tHuntRounds', 'huntRounds'], ['tHuntMax', 'huntMax'], ['tHuntCrop', 'huntCrop'],
    ['tHuntSize', 'huntSize'], ['tHuntDepth', 'huntDepth'], ['tHuntEdge', 'huntEdge'], ['tHuntBlink', 'huntBlink'],
@@ -1859,17 +1868,30 @@
     SKI.obs = COURSE.build(m.seed, m.speedMul || 1);   // 倍率跟種子一樣由 DO 發，兩端才長出同一條賽道
     idleObs = null;
     SKI.players.clear();
+    BGM.setIntensity(0);
+    if (TUNE.bgmVol > 0) { BGM.setVolume(0.2 * TUNE.bgmVol / 100); BGM.play('ski'); }
   });
-  sock.on('skiRun', (m) => {
+  // 拉成具名函式是為了測得到：畫面與音效全靠「這次回報比上次多了什麼」的 delta，
+  // 而 delta 的經典地雷就是**忘了把某個欄位存回去**——存不回去就等於每次都是新事件。
+  function skiRunMsg(m) {
     let p = SKI.players.get(m.clientId);
-    if (!p) { p = { name: m.name, dispX: m.x, dispY: m.wy, hits: 0, jumps: 0 }; SKI.players.set(m.clientId, p); }
+    if (!p) { p = { name: m.name, dispX: m.x, dispY: m.wy, hits: 0, jumps: 0, rolls: 0, lv: 0, air: 0 }; SKI.players.set(m.clientId, p); }
     if (m.hits > (p.hits || 0)) p.shake = 1;        // 撞到就抖一下那一格
     if (m.jumps > (p.jumps || 0)) p.flash = 1;      // 上跳台就閃一下
+    // 音效跟著同一批 delta 走。12 個人同場時事件會擠在一起，
+    // 節流放在 SFX 那一層（同一種音效有最短間隔），這裡只管「發生了什麼」。
+    if (m.hits > (p.hits || 0)) SFX.skiCrash();
+    if (m.jumps > (p.jumps || 0)) SFX.skiJump();
+    if ((m.rolls | 0) > (p.rolls | 0)) SFX.skiRoll();
+    if ((m.lv | 0) > (p.lv | 0)) SFX.skiGear(m.lv | 0);
+    if ((p.air || 0) > 0 && +m.air <= 0) SFX.skiLand();        // 滯空歸零＝落地，手機不用另外回報
     Object.assign(p, { name: m.name, x: m.x, wy: m.wy, speed: m.speed, vx: m.vx,
                        air: m.air, airMax: m.airMax, rot: m.rot, jumps: m.jumps, hits: m.hits,
-                       combo: m.combo | 0, lv: m.lv | 0,
+                       combo: m.combo | 0, lv: m.lv | 0, rolls: m.rolls | 0,
                        at: performance.now(), uplinkMs: m.uplinkMs });
-  });
+  }
+  sock.on('skiRun', skiRunMsg);
+  window.__skiFeed = skiRunMsg;                     // 測試鉤子：直接餵一則回報，驗 delta
   sock.on('skiDone', (m) => {
     const p = SKI.players.get(m.clientId);
     if (p) { p.final = m.dist; p.speed = 0; }
@@ -1882,6 +1904,7 @@
     // 大螢幕只放前三，名字太多會擠爆 HUD
     SKI.rankText = rank.slice(0, 3).map((r, i) => `${'🥇🥈🥉'.slice(i * 2, i * 2 + 2)} ${r.name} ${r.dist}m`).join('　');
     SKI.race = null;
+    BGM.stop();
     updateShell();                    // 立刻換回「開始」並把成績打到畫面中央
   });
 
@@ -2009,6 +2032,13 @@
     if (layoutT < 1) layoutT = Math.min(1, layoutT + 1 / 27);
     curLayout = lerpLayout(layoutFrom, layoutTo, layoutT < 1 ? layoutT * layoutT * (3 - 2 * layoutT) : 1);
 
+    // 配樂的強度跟場上**最高**的檔位走：電視前的人在看的是領先的那一格，
+    // 用平均的話會被一堆 lv0 拉平，音樂永遠不升檔
+    if (BGM.playing()) {
+      let top = 0;
+      for (const pl of SKI.players.values()) top = Math.max(top, pl.lv | 0);
+      BGM.setIntensity(top);
+    }
     if (!SKI.img || SKI.img.width !== FW) SKI.img = fctx.createImageData(FW, FH);
     const img = SKI.img;
     // 沒玩家的格子＝純黑。ImageData 清 0 會是透明而非黑，要把 alpha 補滿
