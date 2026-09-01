@@ -64,6 +64,9 @@ export class RoomDO {
     this.events = [];
     this.createdAt = Date.now();
     this.lastActivity = Date.now();
+    // 跨遊戲總分：一場家宴玩好幾款，各款的分數單位完全不能比
+    //（滑雪是公尺、變色龍是分、木頭人是格數），所以總分算的是**名次**不是原始分。
+    this.totals = new Map();   // clientId -> { pts, games }
     this.ended = false;
     // 這個 DO 實例活著的期間，主控有沒有連進來過。⚠️ 不落地是故意的：
     // 它要跟著實例的生死，而不是跟著房號——見 setup() 裡的說明。
@@ -170,6 +173,33 @@ export class RoomDO {
     const now = Date.now();
     if (now - this.lastActivity > IDLE_LIMIT_MS) this.endRoom('idle', 4001);
     else if (now - this.createdAt > MAX_AGE_MS) this.endRoom('max-age', 4001);
+  }
+
+  // 名次點數：1st 10、2nd 7、3rd 5、4th 3，其他有玩的都拿 1。
+  // ⚠️ 同分一定要同點數。派對上「我跟他一樣分數，為什麼他比較高」是會被抓的，
+  // 而且那不是輸贏問題，是看起來像壞掉。
+  awardPlacement(game, entries) {
+    const TABLE = [10, 7, 5, 3];
+    let lastVal = null, lastPts = 0;
+    entries.forEach((e, i) => {
+      if (!e || !e.clientId) return;
+      const pts = e.value === lastVal ? lastPts : (TABLE[i] ?? 1);
+      lastVal = e.value; lastPts = pts;
+      const t = this.totals.get(e.clientId) || { pts: 0, games: 0 };
+      t.pts += pts; t.games += 1;
+      this.totals.set(e.clientId, t);
+    });
+    this.log({ type: 'totals', game, totals: this.totalsPayload().rows });
+    this.broadcastAll(this.totalsPayload());
+  }
+
+  totalsPayload() {
+    return {
+      type: 'totals',
+      rows: [...this.totals.entries()]
+        .map(([id, t]) => ({ clientId: id, name: this.clients.get(id)?.name || '?', pts: t.pts, games: t.games }))
+        .sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name)),
+    };
   }
 
   huntScores() {
@@ -337,6 +367,7 @@ export class RoomDO {
         this.colorRound = null;
         this.log({ type: 'colorEnd', scores: msg.scores });
         this.broadcastAll({ type: 'colorEnd', scores: msg.scores });
+        this.awardPlacement('color', (msg.scores || []).map((r) => ({ clientId: r.clientId, value: r.score })));
         return;
       }
 
@@ -422,6 +453,7 @@ export class RoomDO {
           .sort((a, b) => b.progress - a.progress || a.violations - b.violations);
         this.log({ type: 'freezeEnd', rank });
         this.broadcastAll({ type: 'freezeEnd', rank });
+        this.awardPlacement('freeze', rank.map((r) => ({ clientId: r.clientId, value: r.progress })));
         this.freeze = null;
         return;
       }
@@ -488,6 +520,7 @@ export class RoomDO {
           .sort((a, b) => b.dist - a.dist);
         this.log({ type: 'skiEnd', rank });
         this.broadcastAll({ type: 'skiEnd', rank });
+        this.awardPlacement('ski', rank.map((r) => ({ clientId: r.clientId, value: r.dist })));
         this.ski = null;
         return;
       }
@@ -583,6 +616,7 @@ export class RoomDO {
         const rank = this.huntScores();
         this.log({ type: 'huntEnd', rank });
         this.broadcastAll({ type: 'huntEnd', rank });
+        this.awardPlacement('hunt', rank.map((r) => ({ clientId: r.clientId, value: r.score })));
         for (const cl of this.hunt.claims.values()) clearTimeout(cl.timer);
         this.hunt = null;
         return;
@@ -640,6 +674,7 @@ export class RoomDO {
           .sort((a, b) => b.score - a.score);
         this.log({ type: 'cansEnd', rank });
         this.broadcastAll({ type: 'cansEnd', rank });
+        this.awardPlacement('cans', rank.map((r) => ({ clientId: r.clientId, value: r.score })));
         this.cans = null;
         return;
       }
@@ -701,7 +736,8 @@ export class RoomDO {
     this.broadcastAll({ type: 'freezeState', round: this.freeze.round, players });
   }
 
-  sendRoster(ws) { this.send(ws, this.rosterPayload()); }
+  // 主控重新整理之後總分要還在——DO 記著，跟名單一起補送
+  sendRoster(ws) { this.send(ws, this.rosterPayload()); this.send(ws, this.totalsPayload()); }
   broadcastRoster() { this.toHosts(this.rosterPayload()); }
 
   // DO 到底住在哪個機房？從 DO 內打一個 trace，回的 colo 就是 DO 所在地。
