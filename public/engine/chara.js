@@ -22,6 +22,35 @@
   // 鬼／主持角色：刻意用中性暗色，跟任何玩家色都不撞
   CHARA.GUARD = { name: '鬼', accent0: '#332a44', accent1: '#4d4166', accent2: '#6b5d8c' };
 
+  // ⚠️ 只有 8 組配色，但分割畫面最多 12 人。第 9 個人直接 % 8 就會跟第 1 個人
+  // **一模一樣**——電視上兩個同色小人，那兩個人都認不出自己是哪隻。
+  // 所以第二輪整組往亮的推（往白色混 34%），色相不變（還是「紅隊」），
+  // 但明度差得很開，一眼看得出是兩個人。第三輪再亮一階。
+  // 往亮推而不是往暗推：畫面底是深色的，暗色會糊進背景。
+  const mixW = (hex, t) => {
+    const n = parseInt(hex.slice(1), 16);
+    const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(v + (255 - v) * t));
+    return '#' + ch.map((v) => v.toString(16).padStart(2, '0')).join('');
+  };
+  const palCache = new Map();
+  CHARA.palFor = (i) => {
+    const n = CHARA.PLAYERS.length;
+    const idx = ((i % n) + n) % n;
+    const cycle = Math.min(2, Math.floor((i % (n * 3)) / n));   // 0、1、2 三輪
+    if (!cycle) return CHARA.PLAYERS[idx];
+    const key = idx + '|' + cycle;
+    if (!palCache.has(key)) {
+      // 0.42：實測第二輪跟第一輪的明度比最差 1.4:1、最好 2.0:1。
+      // 再高就開始像「白色加一點顏色」，色相認不出來了。
+      const b = CHARA.PLAYERS[idx], t = cycle * 0.42;
+      palCache.set(key, {
+        name: b.name + '·' + (cycle + 1),          // 名字要不一樣，精靈快取才不會撞
+        accent0: mixW(b.accent0, t), accent1: mixW(b.accent1, t), accent2: mixW(b.accent2, t),
+      });
+    }
+    return palCache.get(key);
+  };
+
   let U = 1, S = 32, sc = null, sctx = null;
   function ensure(u) {
     if (U === u && sc) return;
@@ -132,7 +161,7 @@
   // pal 可以是 PLAYERS 索引，或直接給一個 {accent0,1,2} 物件（例如 GUARD）
   CHARA.sprite = (who, dir, frame, u, ski) => {
     u = u || 1;
-    const pal = typeof who === 'number' ? CHARA.PLAYERS[who % CHARA.PLAYERS.length] : who;
+    const pal = typeof who === 'number' ? CHARA.palFor(who) : who;
     const key = (pal.name || 'x') + '|' + dir + '|' + frame + '|' + u + (ski ? '|s' : '');
     if (!cache.has(key)) cache.set(key, build(pal, dir, frame, u, ski));
     return cache.get(key);
