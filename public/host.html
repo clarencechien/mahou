@@ -606,7 +606,7 @@
   // 主控這一頁是唯一能換憑證的地方（它在 Cloudflare Access 後面）。
   // 沒有憑證就連不上 /ws/，所以路人開不了 DO——真正在管費用的是這張憑證，
   // 不是把頁面藏起來。掃 QR 的人不用登入，憑證跟在網址裡跟著走。
-  let roomToken = '', roomLocked = false;
+  let roomToken = '', roomLocked = false, lockWhy = '';
   try {
     const r = await fetch('/api/room' + (roomId ? `?room=${roomId}` : ''), { method: 'POST' });
     if (r.status === 403) {
@@ -616,21 +616,30 @@
     }
     const j = await r.json();
     roomId = j.room; roomToken = j.token || ''; roomLocked = !!j.locked;
+    // ⚠️ 「拿不到憑證」有兩種完全不同的原因，不要都寫成「沒設 ROOM_SECRET」——
+    // 上一版就是這樣，害人對著已經設好的 secret 找半天。分開講：
+    if (!roomLocked) lockWhy = 'Worker 讀不到 ROOM_SECRET（secret 沒設到這支 Worker，或設在別的環境／.dev.vars）';
   } catch (e) {
     // 換不到就退回舊行為（本機開發、Worker 還沒更新），不要讓主控台開不起來
     if (!roomId) roomId = Mahou.randomRoom();
+    lockWhy = '/api/room 叫不動（Worker 還沒部署新版，或被 Access 擋在登入頁）：' + (e.message || e);
   }
   location.hash = roomId;
   const tq = roomToken ? `&t=${encodeURIComponent(roomToken)}` : '';
   const tq1 = roomToken ? `?t=${encodeURIComponent(roomToken)}` : '';
 
   $('#roomCode').textContent = roomId;
-  // 沒上鎖就講出來。寧可醜，也不要讓人以為鎖上了。
+  // 沒上鎖就講出來，而且要講**為什麼**。寧可醜，也不要讓人以為鎖上了；
+  // 更不要害人去修一個根本沒壞的地方。
   if (!roomLocked) {
     const w = document.createElement('div');
     w.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:99;background:#7f1d1d;color:#fecaca;' +
-      'padding:4px 10px;border-radius:8px;font-size:.72rem;letter-spacing:.05em';
-    w.textContent = '房間沒上鎖（未設 ROOM_SECRET）';
+      'padding:4px 10px;border-radius:8px;font-size:.72rem;letter-spacing:.05em;max-width:46vw;cursor:help';
+    w.textContent = '房間沒上鎖';
+    w.title = lockWhy + '\n\n查法：npx wrangler secret list　（看得到 ROOM_SECRET 才算設到這支 Worker）';
+    w.addEventListener('click', () => alert('房間沒上鎖\n\n' + lockWhy +
+      '\n\n查法：\n  npx wrangler secret list\n看得到 ROOM_SECRET 才算設在這支 Worker 上。' +
+      '\n.dev.vars 只有本機 wrangler dev 會讀，部署上去不算。'));
     document.body.appendChild(w);
   }
   const clientUrl = `${location.origin}/client#${roomId}${roomToken ? '.' + roomToken : ''}`;

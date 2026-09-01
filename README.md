@@ -185,10 +185,11 @@ node tools/fakeclients.mjs wss://<你的網域>/ws <房號> 8 30
 # ① 房間憑證的簽章金鑰（只有這個就能擋掉「路人直接開房間」）
 npx wrangler secret put ROOM_SECRET        # 隨便一串長亂碼
 
-# ② 要求主控本人登入才換得到憑證：先在 Zero Trust → Access → Applications
-#    開一個 Self-hosted 應用，路徑蓋住 /host 與 /api/room，然後把它的識別資料設進來
-npx wrangler secret put ACCESS_TEAM        # <你的團隊名>.cloudflareaccess.com 的前半
-npx wrangler secret put ACCESS_AUD         # 該應用 Overview 裡的 Application Audience (AUD) Tag
+# ② 要求主控本人登入才換得到憑證：先在 Zero Trust → Access controls → Applications
+#    開一個 Self-hosted 應用，路徑蓋住 /host 與 /api/room，再把它的兩個識別碼設進來
+npx wrangler secret put ACCESS_TEAM        # 團隊名。<這一段>.cloudflareaccess.com，只填前面那段
+npx wrangler secret put ACCESS_AUD         # Applications → 該應用 Configure → Additional settings
+                                           #   裡的 Application Audience (AUD) Tag，64 位十六進位
 ```
 
 - 只設 ①：路人開不了房間，但任何人打得開 `/host` 也就換得到憑證。
@@ -202,6 +203,14 @@ npx wrangler secret put ACCESS_AUD         # 該應用 Overview 裡的 Applicati
 > Access 的 JWT 是**真的驗簽**的（抓團隊的 JWKS、比對 `aud` 與 `iss`），
 > 不是只看 `Cf-Access-Jwt-Assertion` 這個 header 在不在——
 > Access 沒有蓋到的路徑，Cloudflare 不會幫你把使用者自己送的同名 header 拿掉。
+>
+> 兩個值長這樣：
+> `ACCESS_TEAM=mycompany`（完整團隊網域是 `mycompany.cloudflareaccess.com`），
+> `ACCESS_AUD=4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2`。
+> **AUD 是「每個應用」一組**，不是整個帳號一組——同一個團隊底下開兩個應用會有兩個 AUD，
+> 填錯那個就會一直 403。驗簽用的公鑰在
+> `https://<團隊名>.cloudflareaccess.com/cdn-cgi/access/certs`，Cloudflare 每六週輪替一次，
+> 所以 Worker 那邊的快取只留一小時。
 
 憑證有效 12 小時。它等於「這個房間的入場券」：QR 流出去的後果就是別人也能進那一間，
 跟現在把房號告訴別人一樣，關掉房間就結束了。
