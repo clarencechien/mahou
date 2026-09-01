@@ -1,8 +1,10 @@
 // 把現場合成的配樂錄成 mp3，用來「聽」原型——改一次曲子跑一次，不用開房間也不用喇叭。
 //
 //   npx wrangler dev --port 8788 &
-//   node tools/bgm-preview.mjs                    # 四個檔位各錄 8 秒，接成一軌
-//   node tools/bgm-preview.mjs --lv 2 --sec 12    # 只錄第二檔 12 秒
+//   node tools/bgm-preview.mjs                       # 滑雪，四個強度各錄 8 秒接成一軌
+//   node tools/bgm-preview.mjs --track freeze        # 換一首（ski / freeze / hunt / cans）
+//   node tools/bgm-preview.mjs --all                 # 四首各錄一遍，各自輸出一個 mp3
+//   node tools/bgm-preview.mjs --lv 2 --sec 12       # 只錄第二強度 12 秒
 //
 // 做法：headless Chromium 開主控頁，把 BGM 的輸出接到 MediaStreamDestination 上錄，
 // 再用 ffmpeg 轉 mp3。錄的是**真正的訊號路徑**（同一組 PeriodicWave、同一組濾波器），
@@ -22,7 +24,9 @@ const URL_ = arg('url', 'http://localhost:8788/host');
 const SEC = +arg('sec', 8);
 const ONE = arg('lv', null);
 const LVS = ONE == null ? [0, 1, 2, 3] : [+ONE];
-const OUT = join(ROOT, arg('out', 'tools/bgm-preview.mp3'));
+const TRACK = arg('track', 'ski');
+const ALL = process.argv.includes('--all');
+const OUT0 = arg('out', null);
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium',
@@ -33,10 +37,16 @@ page.on('pageerror', (e) => console.error('page error:', e.message));
 await page.goto(URL_, { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(1200);
 
-console.log(`錄 ${LVS.map((l) => 'lv' + l).join(' / ')}，每段 ${SEC} 秒…`);
-const { audio: b64, stats } = await page.evaluate(async ({ lvs, sec }) => {
+const NAMES = ALL ? await page.evaluate(() => BGM.tracks()) : [TRACK];
+for (const name of NAMES) await record(name);
+await browser.close();
+
+async function record(name) {
+const OUT = join(ROOT, OUT0 || `tools/bgm-${name}.mp3`);
+console.log(`\n🎵 ${name}：錄 ${LVS.map((l) => 'lv' + l).join(' / ')}，每段 ${SEC} 秒…`);
+const { audio: b64, stats } = await page.evaluate(async ({ lvs, sec, name }) => {
   BGM.setVolume(0.2);
-  BGM.play('ski');
+  BGM.play(name);
   const ac = SFX.context();
   const dest = ac.createMediaStreamDestination();
   BGM.out().connect(dest);                       // 照樣送去喇叭，這裡只是多接一路出來錄
@@ -57,8 +67,7 @@ const { audio: b64, stats } = await page.evaluate(async ({ lvs, sec }) => {
   let s = '';
   for (let i = 0; i < buf.length; i += 8192) s += String.fromCharCode(...buf.subarray(i, i + 8192));
   return { audio: btoa(s), stats };
-}, { lvs: LVS, sec: SEC });
-await browser.close();
+}, { lvs: LVS, sec: SEC, name });
 
 const webm = Buffer.from(b64, 'base64');
 mkdirSync(dirname(OUT), { recursive: true });
@@ -94,4 +103,5 @@ if (LVS.length > 1) {
       `${((rows[i].all / rows[i - 1].all - 1) * 100).toFixed(0)}%`);
   }
   if (bad) process.exitCode = 1;
+}
 }

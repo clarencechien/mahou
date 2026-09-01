@@ -11,5 +11,5 @@ tools/arts-src/
 public/voice/samples/
 
 # 配樂原型的錄音：build 產物，聽完就丟
-tools/bgm-preview.mp3
-tools/bgm-preview.webm
+tools/bgm-*.mp3
+tools/bgm-*.webm

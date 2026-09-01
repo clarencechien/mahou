@@ -976,21 +976,28 @@
     setActiveBtn('freeze');
     FZ.running = true; FZ.players = []; cmdBag = []; $('#freezeRank').textContent = '';
     sock.send({ type: 'freezeStart' });
+    bgmStart('freeze');
     await sleep(600);
     for (let r = 1; r <= 10 && FZ.running; r++) {
       const cmd = nextCmd();
       const greenMs = 2600 + Math.random() * 2200;
       sock.send({ type: 'freezeRound', cmd: cmd.key, params: cmd.params });
       FZ.round = r; FZ.cmd = cmd; FZ.green = true;
+      // 音樂本身就是紅綠燈：綠燈放、紅燈整首卡在原地，綠燈再從同一格接下去。
+      // 十回合分成四段強度，越後面越急。
+      BGM.setIntensity(Math.min(3, Math.floor((r - 1) / 3)));
+      BGM.hold(false);
       FZ.phaseEnd = performance.now() + greenMs; FZ.phaseLen = greenMs;
       await sleep(greenMs);
       if (!FZ.running) break;
       const redMs = 1800 + Math.random() * 1400;
       sock.send({ type: 'freezeTurn' });
       FZ.green = false;
+      BGM.hold(true);
       FZ.phaseEnd = performance.now() + redMs; FZ.phaseLen = redMs;
       await sleep(redMs);
     }
+    BGM.stop();
     sock.send({ type: 'freezeEnd' });
     FZ.running = false; FZ.cmd = null;
   });
@@ -998,6 +1005,7 @@
   sock.on('freezeState', (m) => { FZ.players = m.players; });
   sock.on('freezeEnd', (m) => {
     FZ.running = false;
+    BGM.stop();
     SFX.win();
     $('#freezeRank').innerHTML = '🏁 ' + (m.rank || []).map((p, i) =>
       `${i + 1}. <b>${esc(p.name)}</b> 前進 ${p.progress}・犯規 ${p.violations}`).join(' · ');
@@ -1714,6 +1722,15 @@
   // ================= 遊戲二：滑雪下坡（分割畫面） =================
   // 每格一個獨立視野，全部寫進同一張 ImageData 再一次 putImageData。
   // 實測：1 格與 8 格同樣 4.3ms —— 分割數不是成本，總像素才是。
+  // 四款遊戲共用同一個開關：配樂音量拉到 0 就整個不播，音效不受影響。
+  // 每款遊戲自己決定強度怎麼算，但「要不要播」只有這一個入口，免得有的遊戲關不掉。
+  function bgmStart(name) {
+    if (!(TUNE.bgmVol > 0)) return;
+    BGM.setIntensity(0);
+    BGM.setVolume(0.2 * TUNE.bgmVol / 100);
+    BGM.play(name);
+  }
+
   // ---- 手感旋鈕：定案速度前先讓人現場調 ----
   const TUNE_DEF = { speed: 3.2, tex: 3.5, fov: 1.0, dur: 60,
                      huntDiff: 1, huntSec: 45, huntTheme: 0, huntBlock: 1,
@@ -1868,8 +1885,7 @@
     SKI.obs = COURSE.build(m.seed, m.speedMul || 1);   // 倍率跟種子一樣由 DO 發，兩端才長出同一條賽道
     idleObs = null;
     SKI.players.clear();
-    BGM.setIntensity(0);
-    if (TUNE.bgmVol > 0) { BGM.setVolume(0.2 * TUNE.bgmVol / 100); BGM.play('ski'); }
+    bgmStart('ski');
   });
   // 拉成具名函式是為了測得到：畫面與音效全靠「這次回報比上次多了什麼」的 delta，
   // 而 delta 的經典地雷就是**忘了把某個欄位存回去**——存不回去就等於每次都是新事件。
@@ -2495,7 +2511,18 @@
     HUNT.totalRounds = huntRounds();
     sock.send({ type: 'stage', stage: 'hunt' });
     setActiveBtn('hunt');
+    bgmStart('hunt');
     huntNextRound();
+  }
+  // 強度跟著「這一關剩幾隻」走，不是跟著時間。剩最後一兩隻才是全場屏息的時候——
+  // 那時候把滴答放進來才有意義；一開始就催只會吵到正在瞇眼睛找的人。
+  function huntBgm() {
+    if (!BGM.playing() || !HUNT.chams) return;
+    const total = HUNT.chams.length;
+    const left = HUNT.chams.filter((c) => c.found === null).length;
+    if (!total || !HUNT.roundActive) { BGM.setIntensity(0); return; }
+    const done = 1 - left / total;
+    BGM.setIntensity(left <= 1 ? 3 : done >= 0.6 ? 2 : done > 0 ? 1 : 0);
   }
   function huntNextRound() {
     HUNT.round++;
@@ -2516,6 +2543,7 @@
     HUNT.hNorm = m.hNorm; HUNT.tEnd = 0; HUNT.reveal = []; HUNT.stamps = [];
     HUNT.startAt = m.startAt; HUNT.duration = m.duration;
     HUNT.chams = PAINT.place(m.seed, m.count).map((c) => ({ ...c, found: null, blink: false, nextBlink: 0 }));
+    BGM.setIntensity(0);                              // 新的一關重新從安靜開始
     HUNT.roundEndSent = false;
     // 畫作：預載好就用，沒好／載失敗就程序化
     const buildBg = () => {
@@ -2581,6 +2609,7 @@
     addStampEl(m.x, m.y, m.name);
     floatPts(huntToScreen(m.x, m.y), '+2 ' + m.name, '#4ade80');
     SFX.ok();
+    huntBgm();
     if (m.left === 0 && HUNT.roundActive && !HUNT.roundEndSent) {
       HUNT.roundEndSent = true;
       sock.send({ type: 'huntRoundEnd' });
@@ -2595,6 +2624,7 @@
   sock.on('huntEnd', (m) => {
     clearStampEls();
     HUNT.running = false; HUNT.roundActive = false;
+    BGM.stop();
     SFX.win();
     HUNT.rankText = (m.rank || []).slice(0, 3).map((r, i) => `${'🥇🥈🥉'.slice(i * 2, i * 2 + 2)} ${r.name} ${r.score}分`).join('　');
     updateShell();
@@ -2720,6 +2750,7 @@
     sock.send({ type: 'stage', stage: 'cans' });
     setActiveBtn('cans');
     sock.send({ type: 'cansStart', refill: Math.round((+TUNE.cansRefill || 4.5) * 1000), levels: CANSG.levels });
+    bgmStart('cans');
   }
   sock.on('cansStart', (m) => { CANSG.level = 0; CANSG.startAt = m.startAt; cansNextLevel(); });
   function cansNextLevel() {
@@ -2729,6 +2760,8 @@
     CANSG.world = CANS.build(CANSG.level);
     CANSG.levelEndAt = (hostClock.serverNow() ?? Date.now()) + (TUNE.cansSec | 0 || 45) * 1000;
     sock.send({ type: 'cansLevel', level: CANSG.level, levels: CANSG.levels });
+    // 五關對到四段強度：關卡越後面塔越高，音樂也越重
+    BGM.setIntensity(Math.min(3, Math.floor((CANSG.level - 1) * 3 / Math.max(1, CANSG.levels - 1))));
     SFX.go();
   }
   sock.on('canLock', (m) => {
@@ -2745,6 +2778,7 @@
   });
   sock.on('canScore', (m) => { if (m.clientId) CANSG.scores.set(m.clientId, m.total); });
   sock.on('cansEnd', (m) => {
+    BGM.stop();
     CANSG.running = false; CANSG.world = null; CANSG.locks.clear();
     SFX.win();
     CANSG.rankText = (m.rank || []).slice(0, 3).map((r, i) => `${'🥇🥈🥉'.slice(i * 2, i * 2 + 2)} ${r.name} ${r.score}分`).join('　');
