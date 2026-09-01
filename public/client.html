@@ -288,6 +288,14 @@
 <script>
 (function () {
   const { $, Sock, ClockSync, Telemetry } = Mahou;
+  // 名字是別的玩家自己取的。目前 DO 把它切到 10 字，10 字很難寫出可用的 payload，
+  // 但那個安全性是**靠另一個檔案裡的一個常數**撐著的——有人哪天把上限改成 20
+  // 就破了。名字要進 innerHTML 就跳脫，不要依賴那個巧合。
+  const esc = (s) => {
+    const d = document.createElement('span');
+    d.textContent = s ?? '';
+    return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  };
 
   // ---- 房號來自 QR：/client.html#房號.憑證 ----
   // 憑證是主控那邊換來的（那頁在 Cloudflare Access 後面）。掃 QR 的人不用登入，
@@ -650,7 +658,7 @@
     document.body.classList.remove('fzFreeze');
     $('#fzCmd').textContent = '結束！';
     $('#fzArea').innerHTML = '';
-    if (m.rank) $('#fzStat').innerHTML = m.rank.map((p, i) => `${i + 1}. ${p.name} 前進 ${p.progress}・犯規 ${p.violations}`).join('<br>');
+    if (m.rank) $('#fzStat').innerHTML = m.rank.map((p, i) => `${i + 1}. ${esc(p.name)} 前進 ${p.progress}・犯規 ${p.violations}`).join('<br>');
   });
   sock.on('freezeVerdict', (m) => {
     if (m.verdict === 'ok') { $('#fzSub').textContent = '✓ 前進一格！'; navigator.vibrate?.(30); }
@@ -788,7 +796,7 @@
     $('#colorMsg').textContent = '遊戲結束！';
     $('#colorGrid').innerHTML = '';
     if (Array.isArray(m.scores)) {
-      $('#colorStat').innerHTML = '總分：<br>' + m.scores.map((s, i) => `${i + 1}. ${s.name} — ${s.score} 分`).join('<br>');
+      $('#colorStat').innerHTML = '總分：<br>' + m.scores.map((s, i) => `${i + 1}. ${esc(s.name)} — ${s.score} 分`).join('<br>');
     }
   });
 
@@ -1166,7 +1174,7 @@
 
   sock.on('skiEnd', (m) => {
     clearInterval(skiTimer); ski = null;
-    if (m.rank) $('#skiStat').innerHTML = m.rank.map((r, i) => `${i + 1}. ${r.name} ${r.dist}m`).join('<br>');
+    if (m.rank) $('#skiStat').innerHTML = m.rank.map((r, i) => `${i + 1}. ${esc(r.name)} ${r.dist}m`).join('<br>');
   });
 
   // ---- 遊戲三：名畫變色龍（手機＝指向裝置）----
@@ -1298,7 +1306,7 @@
     $('#huntMsg').textContent = `第 ${m.round}/${m.totalRounds || 4} 幅・找 ${m.count} 隻`;
   });
   sock.on('huntEnd', (m) => {
-    if (m.rank) $('#huntStat').innerHTML = m.rank.map((r, i) => `${i + 1}. ${r.name} ${r.score}分`).join('<br>');
+    if (m.rank) $('#huntStat').innerHTML = m.rank.map((r, i) => `${i + 1}. ${esc(r.name)} ${r.score}分`).join('<br>');
     $('#huntMsg').textContent = '結束！';
   });
   window.__huntPoint = (x, y) => { ptrX = x; ptrY = y; ptrMode = 'test'; };   // 測試鉤子
@@ -1503,7 +1511,7 @@
   sock.on('canScore', (m) => { if (m.clientId === clientId) { renderCansStat(m.total); navigator.vibrate?.(20); } });
   sock.on('cansEnd', (m) => {
     cansStartAt = 0; cansPhase = 'aim'; clearTimeout(fireTimer);
-    if (m.rank) $('#cansStat').innerHTML = m.rank.map((r, i) => `${i + 1}. ${r.name} ${r.score}分`).join('<br>');
+    if (m.rank) $('#cansStat').innerHTML = m.rank.map((r, i) => `${i + 1}. ${esc(r.name)} ${r.score}分`).join('<br>');
     $('#cansMsg').textContent = '結束！';
   });
   // 測試鉤子
