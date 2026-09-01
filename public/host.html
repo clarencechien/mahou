@@ -82,6 +82,48 @@
 
   /* 遊戲控制搬到頂列：底部留給畫面，不要再壓掉一條 */
   #gameCtl { display: flex; gap: 8px; align-items: center; margin-left: 20px; flex-wrap: nowrap; }
+  #scoreBtn { padding: 7px 12px; font-size: .88rem; background: #2a2213; border: 1px solid #5c4a27;
+              color: #f3e2b8; white-space: nowrap; margin-right: 4px; }
+  #scoreBtn.on { background: #6b551f; border-color: #a4842f; color: #fff; }
+  #ambBtn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+  /* 總分板蓋在遊戲畫面上，不佔常駐版面——它是「想看的時候叫出來」的東西。
+     ⚠️ 這是**電視上隔三公尺看的東西**，不是筆電上的對話框。字級一律用 vmin，
+     跟著螢幕長大：1080p 電視上名字 43px、分數 54px。用 rem 寫死的話在電視上
+     就是一張「看得到但要瞇眼」的表。clamp 的下限保護小視窗，上限避免投影機上爆掉。
+     （風格規範見 .claude/skills/pixel-fake3d：HUD 底板 rgba(10,12,24,.6~.88)、
+     文字一律系統字型粗體——中文沒有堪用的像素字型，不要硬湊。） */
+  #totalBoard {
+    position: absolute; inset: 0; z-index: 12; display: none;
+    background: rgba(4,7,14,.86); backdrop-filter: blur(6px);
+    align-items: center; justify-content: center; padding: 3vh 3vw;
+  }
+  #totalBoard.on { display: flex; }
+  #tbCard {
+    width: min(900px, 94%); background: rgba(10,12,24,.88);
+    border: 1px solid #27395c; border-radius: clamp(12px, 1.6vmin, 22px);
+    padding: clamp(18px, 3vmin, 34px) clamp(20px, 3.4vmin, 40px);
+  }
+  #tbCard h2 { margin: 0 0 .2em; font-size: clamp(22px, 4.6vmin, 56px); letter-spacing: .04em; }
+  #tbSub { color: #94a3b8; font-size: clamp(11px, 1.9vmin, 22px); margin-bottom: clamp(10px, 1.8vmin, 22px); }
+  #tbRows { display: flex; flex-direction: column; gap: clamp(5px, .9vmin, 11px); max-height: 62vh; overflow-y: auto; }
+  .tbRow {
+    display: flex; align-items: center; gap: clamp(8px, 1.6vmin, 20px);
+    padding: clamp(7px, 1.4vmin, 17px) clamp(10px, 1.8vmin, 22px);
+    border-radius: clamp(8px, 1.2vmin, 14px); background: #16233c;
+    border-left: clamp(4px, .8vmin, 10px) solid #64748b;   /* 玩家配色，跟頭上的名牌同一套 */
+  }
+  .tbRow .no { width: 1.8em; text-align: right; color: #94a3b8; font-variant-numeric: tabular-nums;
+               font-size: clamp(14px, 2.6vmin, 32px); }
+  .tbRow .nm { flex: 1; min-width: 0; font-weight: 800; overflow: hidden; text-overflow: ellipsis;
+               white-space: nowrap; font-size: clamp(18px, 4vmin, 48px); }
+  .tbRow .gm { color: #94a3b8; white-space: nowrap; font-size: clamp(10px, 1.8vmin, 21px); }
+  .tbRow .pt { width: 2.6em; text-align: right; font-weight: 800; font-variant-numeric: tabular-nums;
+               font-size: clamp(20px, 5vmin, 60px); line-height: 1; }
+  .tbRow.top1 { background: #4a3a13; }
+  .tbRow.top2 { background: #2e3646; }
+  .tbRow.top3 { background: #33291c; }
+  #tbEmpty { color: #94a3b8; padding: clamp(12px, 2vmin, 24px) 4px; line-height: 1.9;
+             font-size: clamp(13px, 2.2vmin, 26px); }
   #gamePick { display: flex; gap: 5px; }
   #gamePick button { padding: 7px 13px; font-size: .88rem; background: #16233c; border: 1px solid #27395c; white-space: nowrap; }
   #gamePick button.on { background: #334d7a; border-color: #4a6ea8; color: #fff; }
@@ -306,6 +348,7 @@
 <div class="appbar">
   <div class="brand">mahou</div>
   <div id="gameCtl">
+    <button id="scoreBtn" title="目前總分（跨遊戲名次點數）">🏆 總分</button>
     <span id="gamePick"></span>
     <button class="go" id="gStart">開始</button>
     <button id="gStop" style="display:none">停止</button>
@@ -316,6 +359,7 @@
     <button id="fsBtn" class="iconbtn" title="全螢幕">⛶</button>
     <!-- 正式／測試：一格的切換開關，取代兩個分頁 -->
     <button id="modeSw" class="modesw" title="切換正式／測試"><b>正式</b><span>測試</span></button>
+    <a id="ambBtn" class="iconbtn" href="/ambient" target="_blank" rel="noopener" title="背景模式（新分頁）">🎵</a>
   </div>
 </div>
 <div id="netPop">
@@ -325,6 +369,13 @@
 </div>
 
 <div id="gameView" class="view on">
+  <div id="totalBoard">
+    <div id="tbCard">
+      <h2>目前總分</h2>
+      <div id="tbSub"></div>
+      <div id="tbRows"></div>
+    </div>
+  </div>
   <div id="gameWrap">
     <canvas id="gameCv"></canvas>
     <canvas id="huntCv" width="960" height="540" style="display:none; width:100%; height:100%; object-fit:contain; image-rendering:pixelated"></canvas>
@@ -687,6 +738,51 @@
 
   let roster = [];
   sock.on('roster', (m) => { roster = m.clients; renderRoster(); });
+
+  // ---- 跨遊戲總分 ----
+  // 各款的分數單位完全不能比（滑雪是公尺、變色龍是分、木頭人是格數），
+  // 所以總分算的是**名次點數**：1st 10、2nd 7、3rd 5、4th 3，其他有玩的都拿 1。
+  // 算在 DO 那邊，主控重整之後總分才會還在（跟名單一起補送回來）。
+  let totals = [];
+  sock.on('totals', (m) => { totals = m.rows || []; renderTotals(); });
+  function renderTotals() {
+    const played = totals.reduce((a, r) => Math.max(a, r.games), 0);
+    $('#tbSub').textContent = totals.length
+      ? `玩了 ${played} 場・名次點數 1st 10・2nd 7・3rd 5・4th 3・其他 1`
+      : '';
+    if (!totals.length) {
+      $('#tbRows').innerHTML =
+        '<div id="tbEmpty">還沒有人拿到分數。<br>玩完任何一款，名次點數就會加到這裡。</div>';
+      return;
+    }
+    // 同分要同名次：顯示的名次跟 DO 給的點數規則一致，不然會看起來像壞掉
+    let shown = 0, lastPts = null, lastNo = 0;
+    $('#tbRows').innerHTML = totals.map((r) => {
+      shown++;
+      const no = r.pts === lastPts ? lastNo : shown;
+      lastPts = r.pts; lastNo = no;
+      // 左邊那條色帶用**跟頭上名牌同一套**的玩家配色（CHARA.PLAYERS 照 roster 索引）。
+      // 電視上一排名字，配色是大家認自己的唯一線索——換一套顏色就白做了。
+      const i = roster.findIndex((c) => c.clientId === r.clientId);
+      const col = i < 0 ? '#64748b' : CHARA.PLAYERS[i % CHARA.PLAYERS.length].accent1;
+      return `<div class="tbRow ${no <= 3 ? 'top' + no : ''}" style="border-left-color:${col}">` +
+        `<span class="no">${no}</span>` +
+        `<span class="nm">${esc(r.name)}</span>` +
+        `<span class="gm">${r.games} 場</span>` +
+        `<span class="pt">${r.pts}</span></div>`;
+    }).join('');
+  }
+  function showTotals(on) {
+    const el = $('#totalBoard');
+    const next = on === undefined ? !el.classList.contains('on') : on;
+    el.classList.toggle('on', next);
+    $('#scoreBtn').classList.toggle('on', next);
+    if (next) renderTotals();
+  }
+  $('#scoreBtn').addEventListener('click', () => showTotals());
+  // 點板子本身或按 Esc 都收起來——跟手感面板同一個習慣
+  $('#totalBoard').addEventListener('click', () => showTotals(false));
+  renderTotals();
   sock.on('syncUpdate', (m) => {
     // ⚠️ 找不到就補一列，不要默默丟掉。第一次對時的結果常常跟 join 的名單
     // 差幾十毫秒到達，順序反過來的話這筆就沒了——畫面上表現成「ping 一直是空的，
@@ -1162,6 +1258,10 @@
     $('#gStart').style.display = playing ? 'none' : '';
     $('#gStop').style.display = playing ? '' : 'none';
     $('#gamePick').style.display = playing ? 'none' : 'flex';
+    // 開打後頂列只留品牌＋停止，總分鈕跟著遊戲選單一起收起來；
+    // 順手把板子關掉，不然它會蓋在比賽畫面上
+    $('#scoreBtn').style.display = playing ? 'none' : '';
+    if (playing && $('#totalBoard').classList.contains('on')) showTotals(false);
     $('#joinCard').classList.toggle('slim', playing);   // 開打後只留房號
     document.body.classList.toggle('playing', playing);
     $('#joinCard').style.transform = playing ? 'scale(.62)' : 'scale(1)';
@@ -1698,6 +1798,7 @@
     closeTune();
   }, true);
   addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && $('#totalBoard').classList.contains('on')) { showTotals(false); return; }
     if (e.target.closest && e.target.closest('input, select, textarea, button')) return;
     if (e.key === 'Escape') { closeTune(); return; }
     // T 直接開關面板。⚙︎ 那顆在「測試」檢視裡，關掉之後要再調就得「測試 → ⚙︎」繞一圈；
