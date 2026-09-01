@@ -86,26 +86,44 @@
               color: #f3e2b8; white-space: nowrap; margin-right: 4px; }
   #scoreBtn.on { background: #6b551f; border-color: #a4842f; color: #fff; }
   #ambBtn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
-  /* 總分板蓋在遊戲畫面上，不佔常駐版面——它是「想看的時候叫出來」的東西 */
+  /* 總分板蓋在遊戲畫面上，不佔常駐版面——它是「想看的時候叫出來」的東西。
+     ⚠️ 這是**電視上隔三公尺看的東西**，不是筆電上的對話框。字級一律用 vmin，
+     跟著螢幕長大：1080p 電視上名字 43px、分數 54px。用 rem 寫死的話在電視上
+     就是一張「看得到但要瞇眼」的表。clamp 的下限保護小視窗，上限避免投影機上爆掉。
+     （風格規範見 .claude/skills/pixel-fake3d：HUD 底板 rgba(10,12,24,.6~.88)、
+     文字一律系統字型粗體——中文沒有堪用的像素字型，不要硬湊。） */
   #totalBoard {
     position: absolute; inset: 0; z-index: 12; display: none;
-    background: rgba(4,7,14,.9); backdrop-filter: blur(6px);
-    align-items: center; justify-content: center; padding: 4vh 4vw;
+    background: rgba(4,7,14,.86); backdrop-filter: blur(6px);
+    align-items: center; justify-content: center; padding: 3vh 3vw;
   }
   #totalBoard.on { display: flex; }
-  #tbCard { width: min(720px, 92%); background: #0f1830; border: 1px solid #27395c; border-radius: 16px; padding: 22px 26px; }
-  #tbCard h2 { margin: 0 0 4px; font-size: 1.5rem; }
-  #tbSub { color: #94a3b8; font-size: .82rem; margin-bottom: 14px; }
-  #tbRows { display: flex; flex-direction: column; gap: 6px; max-height: 58vh; overflow-y: auto; }
-  .tbRow { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 10px; background: #16233c; }
-  .tbRow .no { width: 2.2em; text-align: right; color: #94a3b8; font-variant-numeric: tabular-nums; }
-  .tbRow .nm { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tbRow .gm { color: #94a3b8; font-size: .78rem; white-space: nowrap; }
-  .tbRow .pt { width: 3.4em; text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #tbCard {
+    width: min(900px, 94%); background: rgba(10,12,24,.88);
+    border: 1px solid #27395c; border-radius: clamp(12px, 1.6vmin, 22px);
+    padding: clamp(18px, 3vmin, 34px) clamp(20px, 3.4vmin, 40px);
+  }
+  #tbCard h2 { margin: 0 0 .2em; font-size: clamp(22px, 4.6vmin, 56px); letter-spacing: .04em; }
+  #tbSub { color: #94a3b8; font-size: clamp(11px, 1.9vmin, 22px); margin-bottom: clamp(10px, 1.8vmin, 22px); }
+  #tbRows { display: flex; flex-direction: column; gap: clamp(5px, .9vmin, 11px); max-height: 62vh; overflow-y: auto; }
+  .tbRow {
+    display: flex; align-items: center; gap: clamp(8px, 1.6vmin, 20px);
+    padding: clamp(7px, 1.4vmin, 17px) clamp(10px, 1.8vmin, 22px);
+    border-radius: clamp(8px, 1.2vmin, 14px); background: #16233c;
+    border-left: clamp(4px, .8vmin, 10px) solid #64748b;   /* 玩家配色，跟頭上的名牌同一套 */
+  }
+  .tbRow .no { width: 1.8em; text-align: right; color: #94a3b8; font-variant-numeric: tabular-nums;
+               font-size: clamp(14px, 2.6vmin, 32px); }
+  .tbRow .nm { flex: 1; min-width: 0; font-weight: 800; overflow: hidden; text-overflow: ellipsis;
+               white-space: nowrap; font-size: clamp(18px, 4vmin, 48px); }
+  .tbRow .gm { color: #94a3b8; white-space: nowrap; font-size: clamp(10px, 1.8vmin, 21px); }
+  .tbRow .pt { width: 2.6em; text-align: right; font-weight: 800; font-variant-numeric: tabular-nums;
+               font-size: clamp(20px, 5vmin, 60px); line-height: 1; }
   .tbRow.top1 { background: #4a3a13; }
   .tbRow.top2 { background: #2e3646; }
   .tbRow.top3 { background: #33291c; }
-  #tbEmpty { color: #94a3b8; padding: 18px 4px; line-height: 1.9; }
+  #tbEmpty { color: #94a3b8; padding: clamp(12px, 2vmin, 24px) 4px; line-height: 1.9;
+             font-size: clamp(13px, 2.2vmin, 26px); }
   #gamePick { display: flex; gap: 5px; }
   #gamePick button { padding: 7px 13px; font-size: .88rem; background: #16233c; border: 1px solid #27395c; white-space: nowrap; }
   #gamePick button.on { background: #334d7a; border-color: #4a6ea8; color: #fff; }
@@ -743,7 +761,11 @@
       shown++;
       const no = r.pts === lastPts ? lastNo : shown;
       lastPts = r.pts; lastNo = no;
-      return `<div class="tbRow ${no <= 3 ? 'top' + no : ''}">` +
+      // 左邊那條色帶用**跟頭上名牌同一套**的玩家配色（CHARA.PLAYERS 照 roster 索引）。
+      // 電視上一排名字，配色是大家認自己的唯一線索——換一套顏色就白做了。
+      const i = roster.findIndex((c) => c.clientId === r.clientId);
+      const col = i < 0 ? '#64748b' : CHARA.PLAYERS[i % CHARA.PLAYERS.length].accent1;
+      return `<div class="tbRow ${no <= 3 ? 'top' + no : ''}" style="border-left-color:${col}">` +
         `<span class="no">${no}</span>` +
         `<span class="nm">${esc(r.name)}</span>` +
         `<span class="gm">${r.games} 場</span>` +
