@@ -809,6 +809,18 @@
     ROLL_AIR: 0.28,                        // 輾過跳台的小彈：純手感，不給速度也不吃掉跳台
     LATE_S: 0.7,                           // 輾過去之後還可以補抬手機的補救窗
     COMBO_EVERY: 3, COMBO_CAP_STEP: 7, COMBO_SURGE: 6, COMBO_MAX_LV: 3,
+    // 超加速是**分段**的，不是一條線性的加成。每 3 連升一檔，每一檔都要有自己的
+    // 名字、自己的顏色、自己的震動——第一版三檔全叫「超加速」、畫面也長一樣，
+    // 玩家的回報就是「超加速只有一段」：機制升了檔，人卻讀不出來。
+    // 名字要一眼分得出強弱，所以用「超加速→極速→神速」，不是「超加速 2」。
+    // 底色一路往「燒起來」的方向走：暗紅 → 橘 → 亮黃。亮黃配白字會看不見，
+    // 所以最高檔連字色一起換成深紫，遠遠看就是一塊發光的牌子。
+    TIERS: [
+      { name: '',       pad: '#1f2937', fg: '#e5e7eb', bar: '#a855f7', buzz: null },
+      { name: '超加速', pad: '#9f1239', fg: '#ffffff', bar: '#f43f5e', buzz: [40, 30, 40, 30, 90] },
+      { name: '極速',   pad: '#c2410c', fg: '#ffffff', bar: '#f59e0b', buzz: [60, 30, 60, 30, 60, 30, 140] },
+      { name: '神速',   pad: '#fde047', fg: '#3b0764', bar: '#fef08a', buzz: [80, 40, 80, 40, 80, 40, 220] },
+    ],
     HIT_MUL: 0.45, STUN: 0.5,
     STEER: 260, TILT_DEAD: 3.5, TILT_RANGE: 26, TILT_EMA: 0.16,
     LIFT_TH: 6.0, LIFT_REFRACT: 320,
@@ -978,6 +990,7 @@
   // combo：連續跳台成功才算，撞到或空跳會斷。單純沒去跳的跳台不算斷——
   // 不然要一路不漏跳才連得起來，派對場合沒人做得到。
   function comboCap() { return SKI.HARD_CAP + ski.lv * SKI.COMBO_CAP_STEP; }
+  function tier() { return SKI.TIERS[Math.min(SKI.TIERS.length - 1, ski.lv | 0)]; }
   function skiRampHit(i) {
     ski.obs[i].used = true;                                    // 同一座跳台只吃一次
     ski.air = ski.airMax = SKI.RAMP_AIR;
@@ -991,15 +1004,22 @@
     const lv = Math.min(SKI.COMBO_MAX_LV, Math.floor(ski.combo / SKI.COMBO_EVERY));
     const levelUp = lv > ski.lv;
     ski.lv = lv;
-    ski.surge = Math.min(comboCap(), ski.surge + SKI.RAMP_SURGE + (levelUp ? SKI.COMBO_SURGE : 0));
+    // 升檔的那一下要「踢」得比上一檔更用力（6/12/18），不然第二檔只是第一檔再久一點，
+    // 玩家感覺不到又換了一檔——升檔的瞬間本來就該是整局最爽的一下。
+    ski.surge = Math.min(comboCap(), ski.surge + SKI.RAMP_SURGE + (levelUp ? SKI.COMBO_SURGE * lv : 0));
     if (levelUp) {
-      ski.superT = 1.6;                                        // 超加速的畫面提示時間
-      $('#skiPadTitle').textContent = '超加速！' + ski.combo + ' 連';
-      $('#skiPadSub').textContent = '速度上限 ' + comboCap().toFixed(0);
-      navigator.vibrate?.([40, 30, 40, 30, 90]);
+      ski.superT = 1.2 + lv * 0.6;                             // 檔位越高，畫面提示留得越久
+      $('#skiPadTitle').textContent = tier().name + '！' + ski.combo + ' 連';
+      $('#skiPadSub').textContent = lv < SKI.COMBO_MAX_LV
+        ? `速度上限 ${comboCap().toFixed(0)}・再 ${SKI.COMBO_EVERY} 連上「${SKI.TIERS[lv + 1].name}」`
+        : '速度上限 ' + comboCap().toFixed(0) + '・最高檔';
+      navigator.vibrate?.(tier().buzz);
     } else {
+      const next = SKI.TIERS[Math.min(SKI.COMBO_MAX_LV, ski.lv + 1)].name;
       $('#skiPadTitle').textContent = ski.combo + ' 連跳台！';
-      $('#skiPadSub').textContent = '再 ' + (SKI.COMBO_EVERY - (ski.combo % SKI.COMBO_EVERY)) + ' 次超加速';
+      $('#skiPadSub').textContent = ski.lv >= SKI.COMBO_MAX_LV
+        ? '維持連段，速度就不會掉'
+        : '再 ' + (SKI.COMBO_EVERY - (ski.combo % SKI.COMBO_EVERY)) + ' 次上「' + next + '」';
       navigator.vibrate?.([25, 25, 45]);
     }
   }
@@ -1134,21 +1154,30 @@
     // 跳台預警：用當前速度換算，固定給 0.9 秒的抬手機反應時間
     const r = COURSE.nextRamp(ski.obs, ski.scan, ski.x, ski.wy, ski.speed * WPM() * 0.55 + 110 * COURSE.SPEED_MUL);
     const near = !!r;
-    if (ski.stun <= 0 && ski.air <= 0 && ski.arm <= 0 && ski.lateT <= 0) {
+    // superT 是升檔那一下的宣告時間：這段期間不要被「抬起手機！」蓋掉，
+    // 不然剛升上「極速」的那行字撐不到半秒，玩家只看到底色閃一下就沒了。
+    if (ski.stun <= 0 && ski.air <= 0 && ski.arm <= 0 && ski.lateT <= 0 && ski.superT <= 0) {
       $('#skiPadTitle').textContent = near ? '抬起手機！' : '連點加速';
       $('#skiPadSub').textContent = near
         ? (Math.abs(r.wx - ski.x) < COURSE.RAMP_X ? '正對跳台' : (r.wx < ski.x ? '跳台在左邊 ←' : '→ 跳台在右邊'))
-        : '看到跳台就把手機往上抬';
+        : (ski.lv > 0 ? tier().name + '中・撞到就掉檔' : '看到跳台就把手機往上抬');
     }
     $('#skiPad').style.background = ski.stun > 0 ? '#7f1d1d'
-      : ski.superT > 0 ? '#9f1239' : (near ? '#4c1d95' : '#1f2937');
+      : ski.lv > 0 ? tier().pad : (near ? '#4c1d95' : '#1f2937');
+    // 副標本來寫死灰字，神速那格是亮黃底，灰字直接看不見——底色會換，字色就得跟著換
+    const fg = ski.lv > 0 && ski.stun <= 0 ? tier().fg : '';
+    $('#skiPad').style.color = fg;
+    // .92 不是隨便挑的：橘底（極速）配 .78 的白只有 3.7:1，副標那行字級小，
+    // 手機在戶外或投影出去就糊掉了。.92 量到 4.6:1，四檔全部過 AA。
+    $('#skiPadSub').style.color = fg ? (ski.lv >= 3 ? '#6b21a8' : 'rgba(255,255,255,.92)') : '#94a3b8';
     $('#skiDist').textContent = Math.round((ski.wy - COURSE.START_Y) / WPM());
     $('#skiSpeedBar').style.width = Math.min(100, (ski.speed / comboCap()) * 100) + '%';
     $('#skiSpeedBar').style.background = ski.stun > 0 ? '#ef4444'
-      : ski.lv > 0 ? '#f43f5e' : (ski.surge > 1 ? '#a855f7'
+      : ski.lv > 0 ? tier().bar : (ski.surge > 1 ? '#a855f7'
       : (ski.speed > SKI.DRIFT + SKI.TAP_CAP * .9 ? '#f2c14e' : '#38bdf8'));
     $('#skiTiltDot').style.left = (50 + t * 44) + '%';
     $('#skiStat').innerHTML = `速度 <b>${ski.speed.toFixed(1)}</b>` +
+      (ski.lv > 0 ? `・<b style="color:${tier().bar}">${tier().name}</b>` : '') +
       (ski.combo > 1 ? `・<b style="color:#f43f5e">${ski.combo} 連</b>` : '') +
       `・跳台 ${ski.jumps}・空跳 ${ski.misses}・撞到 ${ski.hits}`;
 
