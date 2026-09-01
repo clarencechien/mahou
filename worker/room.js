@@ -216,7 +216,12 @@ export class RoomDO {
         if (!c) return;
         c.sync = { offset: msg.offset, rtt: msg.rtt, drift: msg.drift, at: now };
         this.log({ type: 'syncResult', clientId: ws._clientId, offset: msg.offset, rtt: msg.rtt, drift: msg.drift, elapsedMs: msg.elapsedMs });
-        this.toHosts({ type: 'syncUpdate', clientId: ws._clientId, offset: msg.offset, rtt: msg.rtt, drift: msg.drift });
+        // 名字一起送：host 萬一還沒有這個人的名單列，才補得出一列像樣的
+        this.toHosts({ type: 'syncUpdate', clientId: ws._clientId, name: c.name,
+                       offset: msg.offset, rtt: msg.rtt, drift: msg.drift });
+        // 第一次對時完成才廣播整份名單。ping 是名單的一部分，只送窄訊息的話，
+        // host 端只要漏接一次就要等下一輪（10 秒）——現場看起來就是「沒反應」。
+        if (!c.syncedOnce) { c.syncedOnce = true; this.broadcastRoster(); }
         return;
       }
 

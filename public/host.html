@@ -688,8 +688,12 @@
   let roster = [];
   sock.on('roster', (m) => { roster = m.clients; renderRoster(); });
   sock.on('syncUpdate', (m) => {
-    const c = roster.find((x) => x.clientId === m.clientId);
-    if (c) c.sync = { offset: m.offset, rtt: m.rtt, drift: m.drift };
+    // ⚠️ 找不到就補一列，不要默默丟掉。第一次對時的結果常常跟 join 的名單
+    // 差幾十毫秒到達，順序反過來的話這筆就沒了——畫面上表現成「ping 一直是空的，
+    // 重整才有」（重整時 sendRoster 會把 DO 記著的 sync 一起帶回來，所以立刻就有）。
+    let c = roster.find((x) => x.clientId === m.clientId);
+    if (!c) { c = { clientId: m.clientId, name: m.name || '?', connected: true }; roster.push(c); }
+    c.sync = { offset: m.offset, rtt: m.rtt, drift: m.drift };
     renderRoster();
   });
   sock.on('tapEvent', (m) => {
