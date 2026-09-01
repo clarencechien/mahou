@@ -100,12 +100,24 @@
   #totalBoard.on { display: flex; }
   #tbCard {
     width: min(900px, 94%); background: rgba(10,12,24,.88);
+    transition: width .18s ease;
     border: 1px solid #27395c; border-radius: clamp(12px, 1.6vmin, 22px);
     padding: clamp(18px, 3vmin, 34px) clamp(20px, 3.4vmin, 40px);
   }
   #tbCard h2 { margin: 0 0 .2em; font-size: clamp(22px, 4.6vmin, 56px); letter-spacing: .04em; }
   #tbSub { color: #94a3b8; font-size: clamp(11px, 1.9vmin, 22px); margin-bottom: clamp(10px, 1.8vmin, 22px); }
   #tbRows { display: flex; flex-direction: column; gap: clamp(5px, .9vmin, 11px); max-height: 62vh; overflow-y: auto; }
+  /* ⚠️ 電視上沒有人會去捲名單。實測 1080p 一列 99px（含間距）、可視高 670px，
+     **只塞得下 6 列**——所以第 7 個人開始就要分兩欄，不是等到 10 個人。
+     欄的方向是「填滿左欄再填右欄」（grid-auto-flow: column ＋ 固定列數），
+     不是左右交錯——名次表左右跳著讀是災難。 */
+  #tbCard.two { width: min(1500px, 96%); }
+  #tbRows.two {
+    display: grid; grid-auto-flow: column;
+    grid-template-columns: 1fr 1fr; column-gap: clamp(10px, 1.6vmin, 20px);
+    max-height: none; overflow: visible;
+  }
+  #tbRows.two .gm { display: none; }   /* 兩欄時寬度緊，場次讓給名字 */
   .tbRow {
     display: flex; align-items: center; gap: clamp(8px, 1.6vmin, 20px);
     padding: clamp(7px, 1.4vmin, 17px) clamp(10px, 1.8vmin, 22px);
@@ -751,10 +763,19 @@
       ? `玩了 ${played} 場・名次點數 1st 10・2nd 7・3rd 5・4th 3・其他 1`
       : '';
     if (!totals.length) {
+      $('#tbRows').classList.remove('two');
+      $('#tbCard').classList.remove('two');
       $('#tbRows').innerHTML =
         '<div id="tbEmpty">還沒有人拿到分數。<br>玩完任何一款，名次點數就會加到這裡。</div>';
       return;
     }
+    // 超過一欄塞得下的量就分兩欄。ROWS_PER_COL 是量出來的（1080p 塞得下 6 列），
+    // 不是猜的；分兩欄之後 12 人也不用捲。
+    const ROWS_PER_COL = 6;
+    const two = totals.length > ROWS_PER_COL;
+    $('#tbRows').classList.toggle('two', two);
+    $('#tbCard').classList.toggle('two', two);
+    $('#tbRows').style.gridTemplateRows = two ? `repeat(${Math.ceil(totals.length / 2)}, auto)` : '';
     // 同分要同名次：顯示的名次跟 DO 給的點數規則一致，不然會看起來像壞掉
     let shown = 0, lastPts = null, lastNo = 0;
     $('#tbRows').innerHTML = totals.map((r) => {
@@ -764,7 +785,7 @@
       // 左邊那條色帶用**跟頭上名牌同一套**的玩家配色（CHARA.PLAYERS 照 roster 索引）。
       // 電視上一排名字，配色是大家認自己的唯一線索——換一套顏色就白做了。
       const i = roster.findIndex((c) => c.clientId === r.clientId);
-      const col = i < 0 ? '#64748b' : CHARA.PLAYERS[i % CHARA.PLAYERS.length].accent1;
+      const col = i < 0 ? '#64748b' : CHARA.palFor(i).accent1;
       return `<div class="tbRow ${no <= 3 ? 'top' + no : ''}" style="border-left-color:${col}">` +
         `<span class="no">${no}</span>` +
         `<span class="nm">${esc(r.name)}</span>` +
@@ -1215,7 +1236,7 @@
   function renderPlayerStrip() {
     const list = roster.filter((c) => c.connected || FZ.players.some((p) => p.clientId === c.clientId));
     $('#playerStrip').innerHTML = list.map((c, i) => {
-      const col = CHARA.PLAYERS[i % 8].accent1;
+      const col = CHARA.palFor(i).accent1;
       let sc = '–';
       if (curStage === 'ski') {
         const p = SKI.players.get(c.clientId);
@@ -1394,7 +1415,7 @@
         // 第一排要讓開頂部 HUD，不然會被「滑雪 60 秒比距離」那條蓋掉
         const top = oy + vp.y * k;
         el.style.top = (vp.y < 4 ? Math.max(top, hudBottom() - oy + 6) : top + 4) + 'px';
-        el.style.borderLeftColor = CHARA.PLAYERS[vp.idx % 8].accent1;
+        el.style.borderLeftColor = CHARA.palFor(vp.idx).accent1;
         el.innerHTML = esc(vp.c.name) +
           (p && p.combo > 1 ? `<span class="cb">${p.combo}連</span>` : '') +
           `<span class="d">${dist}m</span>`;
@@ -1408,7 +1429,7 @@
         ht.style.display = '';
         ht.style.left = (ox + vp.tagX * k) + 'px';
         ht.style.top = (oy + (vp.tagY - 4) * k) + 'px';
-        ht.style.color = CHARA.PLAYERS[vp.idx % 8].accent2;
+        ht.style.color = CHARA.palFor(vp.idx).accent2;
         ht.classList.toggle('bad', !!(p && p.lv > 0));
         ht.innerHTML = esc(vp.c.name) + (p && p.lv > 0 ? '<b>超加速</b>' : '');
       });
@@ -1430,7 +1451,7 @@
       el.style.display = '';
       el.style.left = (ox + it.cx * k) + 'px';
       el.style.top = (oy + (it.feetY - 32 * it.u - 4) * k) + 'px';
-      el.style.color = CHARA.PLAYERS[it.i % 8].accent2;
+      el.style.color = CHARA.palFor(it.i).accent2;
       el.classList.toggle('bad', !!it.st.violations);
       const v = it.st.violations ? ' ✗'.repeat(Math.min(3, it.st.violations)) : '';
       el.innerHTML = esc(it.c.name) + '<b>' + it.st.progress + v + '</b>';
@@ -2443,7 +2464,7 @@
       const el = document.createElement('div');
       el.className = 'hcur';
       const idx = roster.findIndex((c) => c.clientId === m.clientId);
-      const col = CHARA.PLAYERS[(idx < 0 ? cursors.size : idx) % 8].accent1;
+      const col = CHARA.palFor(idx < 0 ? cursors.size : idx).accent1;
       el.innerHTML = `<div class="ring" style="border-color:${col}"></div><div class="dot2"></div><div class="nm" style="color:${col}">${esc(m.name)}</div>`;
       $('#gameWrap').appendChild(el);
       cur = { el, x: m.x, y: m.y, tx: m.x, ty: m.y, at: 0, cool: 0 };
