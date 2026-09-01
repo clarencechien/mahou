@@ -46,6 +46,7 @@
     border: 1px solid #27395c; font-size: 1rem; line-height: 1; display: flex;
     align-items: center; justify-content: center; color: #cbd5e1;
   }
+  .iconbtn.on { background: #3f1d1d; border-color: #7f1d1d; color: #fca5a5; }   /* 靜音中：紅底，遠遠就看得出來 */
   #connDot i { width: 11px; height: 11px; border-radius: 50%; background: #64748b; display: block; transition: background .2s; }
   #connDot[data-state="open"] i { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,.6); }
   #connDot[data-state="closed"] i { background: #ef4444; }
@@ -369,6 +370,8 @@
     <!-- 平常只有一顆燈；點了才展開 DO 落點（右下浮窗） -->
     <button id="connDot" class="iconbtn" title="連線狀態"><i></i></button>
     <button id="fsBtn" class="iconbtn" title="全螢幕">⛶</button>
+    <!-- 一鍵靜音：小孩睡了、長輩在講話的時候要能馬上關掉，不能還去翻手感面板 -->
+    <button id="muteBtn" class="iconbtn" title="主控靜音（音效＋配樂）">🔊</button>
     <!-- 正式／測試：一格的切換開關，取代兩個分頁 -->
     <button id="modeSw" class="modesw" title="切換正式／測試"><b>正式</b><span>測試</span></button>
     <a id="ambBtn" class="iconbtn" href="/ambient" target="_blank" rel="noopener" title="背景模式（新分頁）">🎵</a>
@@ -443,7 +446,18 @@
       <div class="k">
         <div class="lab"><span>配樂音量</span><b id="tvBgmVol">60</b></div>
         <input type="range" id="tBgmVol" min="0" max="100" step="5" value="60">
-        <div class="d">現場合成的電子配樂，會跟著檔位加聲部與加速。拉到 0 就關掉，音效不受影響。</div>
+        <div class="d">現場合成的電子配樂，會跟著檔位加聲部與加速。拉到 0 就關掉，音效不受影響。
+          右上角的 🔊 是一鍵靜音，音效與配樂一起關。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>個人音效</span><b id="tvSfxHost">只在手機</b></div>
+        <div style="display:flex; gap:6px; margin-top:2px">
+          <button class="sfxWhereBtn" data-v="0" style="flex:1; padding:8px 0; font-size:.84rem">只在手機</button>
+          <button class="sfxWhereBtn" data-v="1" style="flex:1; padding:8px 0; font-size:.84rem">主控也發</button>
+        </div>
+        <div class="d">跳躍、落地、撞到這種「自己的動作」預設只在自己手機上響——<b style="color:#7dd3fc">那才是即時的</b>，
+          主控收到已經晚了 78ms（實測上行 p50）。要主控也發的話同一件事會聽到兩次，中間差那 78ms
+          會變成回音。主控固定負責配樂與全場共同的事件（開始、結束、過關）。</div>
       </div>
       <h4>🎨 名畫變色龍</h4>
       <div class="k">
@@ -1594,13 +1608,16 @@
     const before = FZ.players;
     if (_origFreezeState) _origFreezeState(m);
     FZ.players = m.players;
-    // 有人前進＝清脆音；有人犯規＝被抓音
-    for (const p of m.players) {
-      const old = before.find((x) => x.clientId === p.clientId);
-      if (!old) continue;
-      if (p.progress > old.progress) SFX.ok();
-      else if (p.violations > old.violations) SFX.caught();
-      else if (p.progress < old.progress) SFX.bad();
+    // 對錯是「自己的動作」，預設交給自己的手機——十個人同時答題，主控一起發等於
+    // 一團亂，而且慢 78ms。喊聲與轉身聲固定留在主控，那才是全場共同的。
+    if (TUNE.sfxHost) {
+      for (const p of m.players) {
+        const old = before.find((x) => x.clientId === p.clientId);
+        if (!old) continue;
+        if (p.progress > old.progress) SFX.ok();
+        else if (p.violations > old.violations) SFX.caught();
+        else if (p.progress < old.progress) SFX.bad();
+      }
     }
   });
 
@@ -1725,7 +1742,7 @@
   // 四款遊戲共用同一個開關：配樂音量拉到 0 就整個不播，音效不受影響。
   // 每款遊戲自己決定強度怎麼算，但「要不要播」只有這一個入口，免得有的遊戲關不掉。
   function bgmStart(name) {
-    if (!(TUNE.bgmVol > 0)) return;
+    if (TUNE.mute || !(TUNE.bgmVol > 0)) return;
     BGM.setIntensity(0);
     BGM.setVolume(0.2 * TUNE.bgmVol / 100);
     BGM.play(name);
@@ -1736,7 +1753,8 @@
                      huntDiff: 1, huntSec: 45, huntTheme: 0, huntBlock: 1,
                      huntRounds: 8, huntMax: 10, huntCrop: 60, huntChar: 'block',
                      huntSize: 0, huntDepth: 0, huntEdge: 0, huntBlink: 0,   // 0 = 照關卡曲線
-                     cansRefill: 4.5, cansSec: 45, cansFun: 50, bgmVol: 60 };
+                     cansRefill: 4.5, cansSec: 45, cansFun: 50, bgmVol: 60,
+                     mute: 0, sfxHost: 0 };
   // 改預設值的時候把 TUNE_VER 加一：舊瀏覽器存的設定會蓋掉新預設，
   // 之前就中過——像素大小預設早就改成 3 了，現場那台還是拿舊的 6 在跑，看起來像沒改到。
   const TUNE_VER = 3;
@@ -1759,7 +1777,14 @@
     $('#tFov').value = TUNE.fov;     $('#tvFov').textContent = (+TUNE.fov).toFixed(2) + '×';
     $('#tDur').value = TUNE.dur;     $('#tvDur').textContent = (TUNE.dur | 0) + ' 秒';
     $('#tBgmVol').value = TUNE.bgmVol; $('#tvBgmVol').textContent = (TUNE.bgmVol | 0) || '關';
-    if (TUNE.bgmVol > 0) BGM.setVolume(0.2 * TUNE.bgmVol / 100); else BGM.stop();
+    if (TUNE.bgmVol > 0 && !TUNE.mute) BGM.setVolume(0.2 * TUNE.bgmVol / 100); else BGM.stop();
+    SFX.enabled = !TUNE.mute;
+    $('#muteBtn').textContent = TUNE.mute ? '🔇' : '🔊';
+    $('#muteBtn').classList.toggle('on', !!TUNE.mute);
+    $('#tvSfxHost').textContent = TUNE.sfxHost ? '主控也發' : '只在手機';
+    for (const b of document.querySelectorAll('.sfxWhereBtn')) {
+      b.style.background = (+b.dataset.v === (TUNE.sfxHost | 0)) ? '#334d7a' : '#1e293b';
+    }
     $('#tHuntDiff').value = TUNE.huntDiff; $('#tvHuntDiff').textContent = (+TUNE.huntDiff).toFixed(2).replace(/0$/,'') + '×';
     $('#tHuntSec').value = TUNE.huntSec;   $('#tvHuntSec').textContent = (TUNE.huntSec | 0) + ' 秒';
     $('#tCansRefill').value = TUNE.cansRefill; $('#tvCansRefill').textContent = (+TUNE.cansRefill).toFixed(1) + ' 秒';
@@ -1810,6 +1835,14 @@
       huntIdleReset(); huntPreload();          // 主題換了就重抓畫、重畫說明底圖
     });
   });
+  $('#muteBtn').addEventListener('click', () => {
+    TUNE.mute = TUNE.mute ? 0 : 1;
+    if (TUNE.mute) BGM.stop();
+    saveTune(); renderTune();
+  });
+  for (const b of document.querySelectorAll('.sfxWhereBtn')) {
+    b.addEventListener('click', () => { TUNE.sfxHost = +b.dataset.v; saveTune(); renderTune(); });
+  }
   [['tSpeed', 'speed'], ['tTex', 'tex'], ['tFov', 'fov'], ['tDur', 'dur'], ['tBgmVol', 'bgmVol'],
    ['tHuntDiff', 'huntDiff'], ['tHuntSec', 'huntSec'], ['tHuntBlock', 'huntBlock'],
    ['tHuntRounds', 'huntRounds'], ['tHuntMax', 'huntMax'], ['tHuntCrop', 'huntCrop'],
@@ -1894,13 +1927,17 @@
     if (!p) { p = { name: m.name, dispX: m.x, dispY: m.wy, hits: 0, jumps: 0, rolls: 0, lv: 0, air: 0 }; SKI.players.set(m.clientId, p); }
     if (m.hits > (p.hits || 0)) p.shake = 1;        // 撞到就抖一下那一格
     if (m.jumps > (p.jumps || 0)) p.flash = 1;      // 上跳台就閃一下
-    // 音效跟著同一批 delta 走。12 個人同場時事件會擠在一起，
+    // 「自己的動作」預設由自己的手機發聲——那才是即時的；主控這邊收到已經晚了
+    // 78ms（實測上行 p50），同時發會變成一前一後的回音。主控只管配樂與全場共同的事件。
+    // 面板可以切回「主控也發」，12 個人同場時事件會擠在一起，
     // 節流放在 SFX 那一層（同一種音效有最短間隔），這裡只管「發生了什麼」。
-    if (m.hits > (p.hits || 0)) SFX.skiCrash();
-    if (m.jumps > (p.jumps || 0)) SFX.skiJump();
-    if ((m.rolls | 0) > (p.rolls | 0)) SFX.skiRoll();
-    if ((m.lv | 0) > (p.lv | 0)) SFX.skiGear(m.lv | 0);
-    if ((p.air || 0) > 0 && +m.air <= 0) SFX.skiLand();        // 滯空歸零＝落地，手機不用另外回報
+    if (TUNE.sfxHost) {
+      if (m.hits > (p.hits || 0)) SFX.skiCrash();
+      if (m.jumps > (p.jumps || 0)) SFX.skiJump();
+      if ((m.rolls | 0) > (p.rolls | 0)) SFX.skiRoll();
+      if ((m.lv | 0) > (p.lv | 0)) SFX.skiGear(m.lv | 0);
+      if ((p.air || 0) > 0 && +m.air <= 0) SFX.skiLand();      // 滯空歸零＝落地，手機不用另外回報
+    }
     Object.assign(p, { name: m.name, x: m.x, wy: m.wy, speed: m.speed, vx: m.vx,
                        air: m.air, airMax: m.airMax, rot: m.rot, jumps: m.jumps, hits: m.hits,
                        combo: m.combo | 0, lv: m.lv | 0, rolls: m.rolls | 0,

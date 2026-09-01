@@ -94,6 +94,12 @@
   <button id="copyLink">複製連結</button>
 </div>
 
+<!-- 自己的手機自己決定要不要出聲：不用等主控，也不該由主控決定我口袋裡的手機吵不吵 -->
+<button id="sndBtn" title="音效開關"
+        style="position:fixed; top:8px; right:8px; z-index:40; width:38px; height:38px; padding:0;
+               border-radius:10px; background:#16233c; border:1px solid #27395c; color:#cbd5e1;
+               font-size:1.05rem; line-height:1; display:none">🔊</button>
+
 <!-- 步驟 1：加入 -->
 <section id="st-join" class="stage active">
   <p class="hint">輸入暱稱（五個字以內）</p>
@@ -284,6 +290,7 @@
 </section>
 
 <script src="/engine/course.js"></script>
+<script src="/engine/sfx.js"></script>
 <script src="/shared.js"></script>
 <script>
 (function () {
@@ -392,7 +399,41 @@
     if (nk && nk.value.trim()) myName = nk.value.trim();
     sock.send({ type: 'join', clientId, name: myName, device });
   }
-  $('#joinBtn').addEventListener('click', () => { lockPortrait().then(rotFix); });
+  // ---- 手機自己的音效 ----
+  // 「自己的動作」由自己的手機發聲，比等主控發快 78ms（實測上行 p50）——那 78ms 就是
+  // 「手感跟得上」跟「慢半拍」的差別。主控負責配樂與全場共同的事件，兩邊不重疊。
+  //
+  // ⚠️ 兩個手機才有的坑：
+  //   1. AudioContext 一定要由**使用者手勢**啟動，所以掛在「加入房間」那一下。
+  //   2. iOS 的靜音鍵預設會把 WebAudio 一起關掉。Safari 16.4+ 可以用 audioSession
+  //      宣告成 'playback' 播出來——派對場合手機幾乎都在靜音，不宣告等於這功能不存在。
+  let sndOn = (() => { try { return localStorage.getItem('mahou-snd') !== '0'; } catch (e) { return true; } })();
+  function renderSnd() {
+    const b = $('#sndBtn');
+    if (!b) return;
+    b.textContent = sndOn ? '🔊' : '🔇';
+    b.style.background = sndOn ? '#16233c' : '#3f1d1d';
+    b.style.borderColor = sndOn ? '#27395c' : '#7f1d1d';
+    b.style.color = sndOn ? '#cbd5e1' : '#fca5a5';
+    if (window.SFX) SFX.enabled = sndOn;
+  }
+  function initSnd() {
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+    if (window.SFX) SFX.init();
+    renderSnd();
+  }
+  $('#sndBtn').addEventListener('click', () => {
+    sndOn = !sndOn;
+    try { localStorage.setItem('mahou-snd', sndOn ? '1' : '0'); } catch (e) {}
+    initSnd();                                   // 開回來時順便把 AudioContext 喚醒
+  });
+
+  // ⚠️ 開機就要套用一次。只在加入時才套的話，關過音效的人重整之後
+  // localStorage 記著「關」、SFX.enabled 卻還是預設的 true——設定看起來記住了，
+  // 實際上沒生效。initSnd() 要有手勢才能叫（AudioContext），renderSnd() 不用。
+  renderSnd();
+
+  $('#joinBtn').addEventListener('click', () => { lockPortrait().then(rotFix); initSnd(); });
   $('#joinBtn').addEventListener('pointerdown', () => {
     const nk = $('#nick');
     if (nk && !nk.value.trim()) { $('#joinMsg').textContent = '先填暱稱'; return; }
@@ -402,6 +443,8 @@
   let myName = '客';
   sock.on('joined', async (m) => {
     joined = true;
+    $('#sndBtn').style.display = '';              // 進了房間才顯示，加入畫面上是多餘的
+    renderSnd();
     myName = ($('#nick') && $('#nick').value.trim()) || myName;
     // iOS「搖動以還原」只在有輸入紀錄（undo stack）時觸發。這遊戲要一直搖手機，
     // 所以加入後立刻 blur 並把 input 從 DOM 移除，清掉 undo 情境。
@@ -661,10 +704,10 @@
     if (m.rank) $('#fzStat').innerHTML = m.rank.map((p, i) => `${i + 1}. ${esc(p.name)} 前進 ${p.progress}・犯規 ${p.violations}`).join('<br>');
   });
   sock.on('freezeVerdict', (m) => {
-    if (m.verdict === 'ok') { $('#fzSub').textContent = '✓ 前進一格！'; navigator.vibrate?.(30); }
-    else if (m.verdict === 'wrong') { $('#fzSub').textContent = '✗ 答錯了'; navigator.vibrate?.([50, 30, 50]); }
-    else if (m.verdict === 'over') { $('#fzSub').textContent = '✗ 點超過了，退一格'; navigator.vibrate?.([80, 40, 80]); }
-    else if (m.verdict === 'violation') { $('#fzSub').textContent = '✗ 被抓到，退一格'; navigator.vibrate?.([60, 40, 60]); }
+    if (m.verdict === 'ok') { $('#fzSub').textContent = '✓ 前進一格！'; navigator.vibrate?.(30); SFX.ok(); }
+    else if (m.verdict === 'wrong') { $('#fzSub').textContent = '✗ 答錯了'; navigator.vibrate?.([50, 30, 50]); SFX.bad(); }
+    else if (m.verdict === 'over') { $('#fzSub').textContent = '✗ 點超過了，退一格'; navigator.vibrate?.([80, 40, 80]); SFX.bad(); }
+    else if (m.verdict === 'violation') { $('#fzSub').textContent = '✗ 被抓到，退一格'; navigator.vibrate?.([60, 40, 60]); SFX.caught(); }
   });
 
   const CMD_TEXT = {
@@ -1014,6 +1057,7 @@
         ? `速度上限 ${comboCap().toFixed(0)}・再 ${SKI.COMBO_EVERY} 連上「${SKI.TIERS[lv + 1].name}」`
         : '速度上限 ' + comboCap().toFixed(0) + '・最高檔';
       navigator.vibrate?.(tier().buzz);
+      SFX.skiGear(lv);
     } else {
       const next = SKI.TIERS[Math.min(SKI.COMBO_MAX_LV, ski.lv + 1)].name;
       $('#skiPadTitle').textContent = ski.combo + ' 連跳台！';
@@ -1021,6 +1065,7 @@
         ? '維持連段，速度就不會掉'
         : '再 ' + (SKI.COMBO_EVERY - (ski.combo % SKI.COMBO_EVERY)) + ' 次上「' + next + '」';
       navigator.vibrate?.([25, 25, 45]);
+      SFX.skiJump();
     }
   }
   function breakCombo() { ski.combo = 0; ski.lv = 0; }
@@ -1089,7 +1134,8 @@
       ski.air -= dt;
       // 真跳台才轉一圈；輾過去的小彈只是離地，轉圈會看起來像被撞飛
       ski.rot = ski.rolling ? 0 : (1 - ski.air / ski.airMax) * Math.PI * 2;
-      if (ski.air <= 0) { ski.air = 0; ski.rot = 0; }
+      // 落地：滯空歸零的那一幀。小彈（0.28 秒）不算落地，它自己已經有「咚」的一聲了
+      if (ski.air <= 0) { if (!ski.rolling) SFX.skiLand(); ski.air = 0; ski.rot = 0; }
     }
 
     ski.scan = COURSE.advance(ski.obs, ski.scan, ski.wy);
@@ -1111,6 +1157,7 @@
         ski.lateRamp = ri; ski.lateT = SKI.LATE_S;
         $('#skiPadTitle').textContent = '現在抬手機還來得及！';
         navigator.vibrate?.(12);
+        SFX.skiRoll();
       }
     }
     if (ski.lateT > 0) {
@@ -1148,6 +1195,7 @@
       ski.obs[hit].wy = -1e9;                                  // 同一棵只撞一次
       $('#skiPadTitle').textContent = '撞到了！';
       navigator.vibrate?.([50, 30, 50]);
+      SFX.skiCrash();
     }
 
     // 畫面回饋
@@ -1443,6 +1491,7 @@
     $('#cansPadTitle').textContent = '位置鎖定！';
     $('#cansPadSub').textContent = '用力搖＝點兩下的力';
     navigator.vibrate?.(15);
+    SFX.ok();
     clearTimeout(fireTimer);
     fireTimer = setTimeout(unlockAim, 4000);         // 鎖了一直沒蓄力就放掉重瞄，不浪費這顆球
     renderCansBtn(true);
@@ -1489,6 +1538,7 @@
       $('#cansPadTitle').textContent = '球來了';
       $('#cansPadSub').textContent = '瞄好按①確定';
       navigator.vibrate?.(12);
+      SFX.go();                                    // 球補回來了，不用一直盯著螢幕等
     }
     cansWasReady = ready;
     return ready;
