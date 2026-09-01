@@ -163,6 +163,49 @@ node tools/fakeclients.mjs wss://<你的網域>/ws <房號> 8 30
 
 被關房的 client 會看到「房間已結束」且不再重連（WS close code 4000/4001）。房間沒有寫任何持久化儲存，所以連線清空後成本歸零。
 
+### 誰可以開房間（＝誰可以花到錢）
+
+預設是**開放**的：任何人打 `/ws/ABCD` 都生得出一個 DO。家宴自己玩沒差，
+但網址一旦流出去，路人就能替你開房間然後掛在那裡計費。要鎖起來設兩樣東西。
+
+> ⚠️ **只把 `/host` 放到 Cloudflare Access 後面是擋不住的。**
+> DO 不是 `/host` 開出來的，是 `/ws/<房號>` 開出來的——路人不用打開任何頁面，
+> 直接連 `wss://…/ws/ABCD` 就生得出 DO。**保護頁面沒有保護到花錢的那條路徑。**
+> 所以鎖必須放在 Worker 裡，而且要在 `env.ROOM.get()` **之前**：
+> 拿到 stub 就等於生出 DO 了，之後才拒絕已經來不及。
+
+實際的機制是一張 HMAC 簽的**房間憑證**：
+
+1. 主控開 `/host` → 打 `POST /api/room` 換一張憑證（這一步要過 Access）
+2. QR 網址帶著它：`/client#<房號>.<憑證>`
+3. **掃 QR 的人完全不用登入**，憑證跟著網址走
+4. `/ws`、`/export`、`/whereami`、`/close` 沒有有效憑證一律 403，**碰都不碰 DO**
+
+```bash
+# ① 房間憑證的簽章金鑰（只有這個就能擋掉「路人直接開房間」）
+npx wrangler secret put ROOM_SECRET        # 隨便一串長亂碼
+
+# ② 要求主控本人登入才換得到憑證：先在 Zero Trust → Access → Applications
+#    開一個 Self-hosted 應用，路徑蓋住 /host 與 /api/room，然後把它的識別資料設進來
+npx wrangler secret put ACCESS_TEAM        # <你的團隊名>.cloudflareaccess.com 的前半
+npx wrangler secret put ACCESS_AUD         # 該應用 Overview 裡的 Application Audience (AUD) Tag
+```
+
+- 只設 ①：路人開不了房間，但任何人打得開 `/host` 也就換得到憑證。
+- ①＋②：只有你登入後換得到憑證，別人連 `/api/room` 都會吃 403。
+- 都不設：維持現在的開放行為，而且主控台右下角會出現紅色的
+  **「房間沒上鎖」**——寧可醜，也不要讓人以為鎖上了。
+
+**故意不保護的**：`/ambient`（背景模式）、`/audio/*`、`/client` 這一頁本身。
+背景模式本來就不碰 DO，鎖它只是找自己麻煩；`/client` 是靜態頁，沒有憑證進不了房間。
+
+> Access 的 JWT 是**真的驗簽**的（抓團隊的 JWKS、比對 `aud` 與 `iss`），
+> 不是只看 `Cf-Access-Jwt-Assertion` 這個 header 在不在——
+> Access 沒有蓋到的路徑，Cloudflare 不會幫你把使用者自己送的同名 header 拿掉。
+
+憑證有效 12 小時。它等於「這個房間的入場券」：QR 流出去的後果就是別人也能進那一間，
+跟現在把房號告訴別人一樣，關掉房間就結束了。
+
 ### 逃生鈕怎麼運作
 
 `POST /close/<房號>` 直接叫那間的 DO 關房，回一個 JSON 說**關掉之前還有幾條連線**——
@@ -196,7 +239,7 @@ localStorage（`mahou-rooms`，留最近 40 筆），逃生鈕就是把那份清
 ## 專案結構
 
 ```
-worker/index.js       # 路由 + DO binding（/ws /export /whereami /close /:room）＋ /audio 的 Range
+worker/index.js       # 路由 + DO binding（/ws /export /whereami /close /:room）＋ /audio 的 Range ＋ 房間憑證與 Access 驗證
 worker/room.js        # RoomDO：房間狀態機、對時 pong、遊戲判定、遙測、匯出、關房（含逃生鈕）
 public/host.html      # 主控台：遊戲畫面 + 說明卡 + 手感調校 + 管理・測試分頁
 public/client.html    # 手機端：加入、Phase 0 探針、兩款遊戲的控制器
