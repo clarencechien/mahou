@@ -14,7 +14,16 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync, spawnSync } from 'child_process';
 import { createRequire } from 'module';
-import { chromium } from 'playwright';
+// playwright 刻意**不寫進 package.json**：Cloudflare 每次部署都跑 `npm clean-install`
+// 並且會裝 devDependencies，而 playwright 的 postinstall 要抓一整包瀏覽器——
+// 部署根本用不到它，卻要為它多等好幾分鐘，還多一個會掛掉的環節。
+// 這支工具是本機開發用的，要跑的時候自己裝：npm i --no-save playwright
+let chromium;
+try { ({ chromium } = await import('playwright')); }
+catch (e) {
+  console.error('這支工具需要 playwright（沒寫進 package.json，因為部署用不到）：\n  npm i --no-save playwright');
+  process.exit(1);
+}
 
 const require = createRequire(import.meta.url);
 const FFMPEG = require('ffmpeg-static');

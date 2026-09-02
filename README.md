@@ -365,6 +365,8 @@ tools/cans-levelcheck.cjs # 砸罐子關卡驗證：不出畫面、不自己垮�
 tools/cans-funcheck.cjs   # 歡樂度旋鈕量測：50 等於原物理、越高飛越遠、碎片不爆預算
 tools/ski-tiercheck.mjs   # 滑雪檔位量測：每檔的速度、停留秒數、升檔踢感遞增、名字顏色不重複
 tools/bgm-preview.mjs     # 把四首現場合成的配樂錄成 mp3 試聽（--all），順便量每段的密度有沒有遞增
+                          #   需要 playwright，但**刻意不寫進 package.json**：部署會跑 npm ci 並裝 devDependencies，
+                          #   playwright 的 postinstall 要抓一整包瀏覽器，部署用不到卻要多等。要跑再 npm i --no-save playwright
 tools/hunt-placecheck.cjs # 變色龍撒點：DO 與 host 兩份演算法輸出一致、不少放、不擠一團
 tools/fetch-arts.mjs      # 把名畫抓下來縮到 1280 存進 public/arts/（公有領域，自己 host）
 tools/fetch-songs.mjs     # 背景模式的歌：從 family-feast 把歌詞與音檔抓進 public/ambient/
