@@ -28,6 +28,36 @@
     o.start(t0); o.stop(t0 + dur + 0.02);
   }
   const now = () => (ac ? ac.currentTime : 0);
+  SFX.context = () => ac;                        // bgm.js 共用同一顆 AudioContext
+
+  // 大螢幕上最多 12 個人同時在跳、在撞。每個事件都出聲會變成一團噪音，
+  // 所以同一種音效有最短間隔：只讓第一個人的那一下出聲，其他人吃掉。
+  const gates = new Map();
+  function gate(key, ms) {
+    const t = now();
+    if (t - (gates.get(key) || -9) < ms / 1000) return false;
+    gates.set(key, t);
+    return true;
+  }
+
+  // 雜訊：撞擊、落地的「沙」聲。跟 bgm.js 各自持有一份，音效不該依賴配樂有沒有載入。
+  let nb = null;
+  function noise(t0, dur, vol, type, freq) {
+    if (!ac || !SFX.enabled) return;
+    if (!nb) {
+      const n = Math.floor(ac.sampleRate * 0.4);
+      nb = ac.createBuffer(1, n, ac.sampleRate);
+      const d = nb.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    }
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = nb; src.loop = true;
+    f.type = type || 'bandpass'; f.frequency.value = freq || 1200; f.Q.value = 0.7;
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start(t0); src.stop(t0 + dur + 0.02);
+  }
 
   // 「一」「二」「三」逐字升音，「木頭人！」是三連音收尾
   SFX.chant = function (i) {
@@ -50,5 +80,42 @@
   SFX.win = function () {
     const t = now();
     [523, 659, 784, 1047].forEach((f, i) => tone(f, t + i * 0.13, 0.24, 'square', 0.45));
+  };
+
+  // ---- 滑雪 ----
+  // 起跳：短促上滑。落地跟小彈都是悶響＋一點沙聲，差別只在音量與音高，
+  // 因為它們在遊戲裡的意義也只差一級（真跳台 vs 輾過去彈一下）。
+  SFX.skiJump = function () {
+    if (!gate('skiJump', 70)) return;
+    const t = now();
+    tone(440, t, 0.10, 'square', 0.30, 900);
+  };
+  SFX.skiLand = function () {
+    if (!gate('skiLand', 70)) return;
+    const t = now();
+    tone(170, t, 0.09, 'triangle', 0.40);
+    noise(t, 0.07, 0.16, 'lowpass', 900);
+  };
+  SFX.skiRoll = function () {
+    if (!gate('skiRoll', 90)) return;
+    const t = now();
+    tone(130, t, 0.07, 'triangle', 0.24);
+  };
+  SFX.skiCrash = function () {
+    if (!gate('skiCrash', 120)) return;
+    const t = now();
+    noise(t, 0.26, 0.42, 'bandpass', 700);
+    tone(300, t, 0.28, 'sawtooth', 0.34, 90);
+    window.BGM && BGM.duck(0.4, 260);
+  };
+  // 升檔：檔位越高，音階越長、越亮。這是全場最該被聽見的一下，所以配樂讓路讓得最多。
+  SFX.skiGear = function (lv) {
+    if (!gate('skiGear', 300)) return;
+    const t = now();
+    const runs = [[], [659, 784, 988], [659, 831, 988, 1245], [784, 988, 1245, 1568, 1976]];
+    const seq = runs[Math.max(1, Math.min(3, lv | 0))];
+    seq.forEach((f, i) => tone(f, t + i * 0.055, 0.14 + i * 0.02, 'square', 0.34));
+    if (lv >= 3) tone(2637, t + seq.length * 0.055, 0.3, 'square', 0.2);
+    window.BGM && BGM.duck(0.3, 120 + lv * 90);
   };
 })();

@@ -9,3 +9,7 @@ tools/arts-src/
 
 # 試聽用的旁白樣本：只是拿來挑聲音的，不要進 repo 也不要部署
 public/voice/samples/
+
+# 配樂原型的錄音：build 產物，聽完就丟
+tools/bgm-*.mp3
+tools/bgm-*.webm

@@ -46,6 +46,7 @@
     border: 1px solid #27395c; font-size: 1rem; line-height: 1; display: flex;
     align-items: center; justify-content: center; color: #cbd5e1;
   }
+  .iconbtn.on { background: #3f1d1d; border-color: #7f1d1d; color: #fca5a5; }   /* 靜音中：紅底，遠遠就看得出來 */
   #connDot i { width: 11px; height: 11px; border-radius: 50%; background: #64748b; display: block; transition: background .2s; }
   #connDot[data-state="open"] i { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,.6); }
   #connDot[data-state="closed"] i { background: #ef4444; }
@@ -369,6 +370,8 @@
     <!-- 平常只有一顆燈；點了才展開 DO 落點（右下浮窗） -->
     <button id="connDot" class="iconbtn" title="連線狀態"><i></i></button>
     <button id="fsBtn" class="iconbtn" title="全螢幕">⛶</button>
+    <!-- 一鍵靜音：小孩睡了、長輩在講話的時候要能馬上關掉，不能還去翻手感面板 -->
+    <button id="muteBtn" class="iconbtn" title="主控靜音（音效＋配樂）">🔊</button>
     <!-- 正式／測試：一格的切換開關，取代兩個分頁 -->
     <button id="modeSw" class="modesw" title="切換正式／測試"><b>正式</b><span>測試</span></button>
     <a id="ambBtn" class="iconbtn" href="/ambient" target="_blank" rel="noopener" title="背景模式（新分頁）">🎵</a>
@@ -439,6 +442,22 @@
         <div class="lab"><span>廣角</span><b id="tvFov">1.0×</b></div>
         <input type="range" id="tFov" min="0.6" max="1.6" step="0.05" value="1">
         <div class="d">越廣角，兩側掃得越兇；太廣會像魚眼。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>配樂音量</span><b id="tvBgmVol">60</b></div>
+        <input type="range" id="tBgmVol" min="0" max="100" step="5" value="60">
+        <div class="d">現場合成的電子配樂，會跟著檔位加聲部與加速。拉到 0 就關掉，音效不受影響。
+          右上角的 🔊 是一鍵靜音，音效與配樂一起關。</div>
+      </div>
+      <div class="k">
+        <div class="lab"><span>個人音效</span><b id="tvSfxHost">只在手機</b></div>
+        <div style="display:flex; gap:6px; margin-top:2px">
+          <button class="sfxWhereBtn" data-v="0" style="flex:1; padding:8px 0; font-size:.84rem">只在手機</button>
+          <button class="sfxWhereBtn" data-v="1" style="flex:1; padding:8px 0; font-size:.84rem">主控也發</button>
+        </div>
+        <div class="d">跳躍、落地、撞到這種「自己的動作」預設只在自己手機上響——<b style="color:#7dd3fc">那才是即時的</b>，
+          主控收到已經晚了 78ms（實測上行 p50）。要主控也發的話同一件事會聽到兩次，中間差那 78ms
+          會變成回音。主控固定負責配樂與全場共同的事件（開始、結束、過關）。</div>
       </div>
       <h4>🎨 名畫變色龍</h4>
       <div class="k">
@@ -655,6 +674,7 @@
 <script src="/engine/paint.js"></script>
 <script src="/engine/cans.js"></script>
 <script src="/engine/sfx.js"></script>
+<script src="/engine/bgm.js"></script>
 <script src="/engine/mode7.js"></script>
 <script src="/shared.js"></script>
 <script>
@@ -970,21 +990,28 @@
     setActiveBtn('freeze');
     FZ.running = true; FZ.players = []; cmdBag = []; $('#freezeRank').textContent = '';
     sock.send({ type: 'freezeStart' });
+    bgmStart('freeze');
     await sleep(600);
     for (let r = 1; r <= 10 && FZ.running; r++) {
       const cmd = nextCmd();
       const greenMs = 2600 + Math.random() * 2200;
       sock.send({ type: 'freezeRound', cmd: cmd.key, params: cmd.params });
       FZ.round = r; FZ.cmd = cmd; FZ.green = true;
+      // 音樂本身就是紅綠燈：綠燈放、紅燈整首卡在原地，綠燈再從同一格接下去。
+      // 十回合分成四段強度，越後面越急。
+      BGM.setIntensity(Math.min(3, Math.floor((r - 1) / 3)));
+      BGM.hold(false);
       FZ.phaseEnd = performance.now() + greenMs; FZ.phaseLen = greenMs;
       await sleep(greenMs);
       if (!FZ.running) break;
       const redMs = 1800 + Math.random() * 1400;
       sock.send({ type: 'freezeTurn' });
       FZ.green = false;
+      BGM.hold(true);
       FZ.phaseEnd = performance.now() + redMs; FZ.phaseLen = redMs;
       await sleep(redMs);
     }
+    BGM.stop();
     sock.send({ type: 'freezeEnd' });
     FZ.running = false; FZ.cmd = null;
   });
@@ -992,6 +1019,7 @@
   sock.on('freezeState', (m) => { FZ.players = m.players; });
   sock.on('freezeEnd', (m) => {
     FZ.running = false;
+    BGM.stop();
     SFX.win();
     $('#freezeRank').innerHTML = '🏁 ' + (m.rank || []).map((p, i) =>
       `${i + 1}. <b>${esc(p.name)}</b> 前進 ${p.progress}・犯規 ${p.violations}`).join(' · ');
@@ -1227,6 +1255,7 @@
     openBrief();
   });
   $('#gStop').addEventListener('click', () => {
+    BGM.stop();
     FZ.running = false; HUNT.running = false; HUNT.roundActive = false; CANSG.running = false;
     sock.send({ type: curStage === 'ski' ? 'skiEnd'
       : curStage === 'hunt' ? 'huntEnd'
@@ -1579,13 +1608,16 @@
     const before = FZ.players;
     if (_origFreezeState) _origFreezeState(m);
     FZ.players = m.players;
-    // 有人前進＝清脆音；有人犯規＝被抓音
-    for (const p of m.players) {
-      const old = before.find((x) => x.clientId === p.clientId);
-      if (!old) continue;
-      if (p.progress > old.progress) SFX.ok();
-      else if (p.violations > old.violations) SFX.caught();
-      else if (p.progress < old.progress) SFX.bad();
+    // 對錯是「自己的動作」，預設交給自己的手機——十個人同時答題，主控一起發等於
+    // 一團亂，而且慢 78ms。喊聲與轉身聲固定留在主控，那才是全場共同的。
+    if (TUNE.sfxHost) {
+      for (const p of m.players) {
+        const old = before.find((x) => x.clientId === p.clientId);
+        if (!old) continue;
+        if (p.progress > old.progress) SFX.ok();
+        else if (p.violations > old.violations) SFX.caught();
+        else if (p.progress < old.progress) SFX.bad();
+      }
     }
   });
 
@@ -1707,12 +1739,22 @@
   // ================= 遊戲二：滑雪下坡（分割畫面） =================
   // 每格一個獨立視野，全部寫進同一張 ImageData 再一次 putImageData。
   // 實測：1 格與 8 格同樣 4.3ms —— 分割數不是成本，總像素才是。
+  // 四款遊戲共用同一個開關：配樂音量拉到 0 就整個不播，音效不受影響。
+  // 每款遊戲自己決定強度怎麼算，但「要不要播」只有這一個入口，免得有的遊戲關不掉。
+  function bgmStart(name) {
+    if (TUNE.mute || !(TUNE.bgmVol > 0)) return;
+    BGM.setIntensity(0);
+    BGM.setVolume(0.2 * TUNE.bgmVol / 100);
+    BGM.play(name);
+  }
+
   // ---- 手感旋鈕：定案速度前先讓人現場調 ----
   const TUNE_DEF = { speed: 3.2, tex: 3.5, fov: 1.0, dur: 60,
                      huntDiff: 1, huntSec: 45, huntTheme: 0, huntBlock: 1,
                      huntRounds: 8, huntMax: 10, huntCrop: 60, huntChar: 'block',
                      huntSize: 0, huntDepth: 0, huntEdge: 0, huntBlink: 0,   // 0 = 照關卡曲線
-                     cansRefill: 4.5, cansSec: 45, cansFun: 50 };
+                     cansRefill: 4.5, cansSec: 45, cansFun: 50, bgmVol: 60,
+                     mute: 0, sfxHost: 0 };
   // 改預設值的時候把 TUNE_VER 加一：舊瀏覽器存的設定會蓋掉新預設，
   // 之前就中過——像素大小預設早就改成 3 了，現場那台還是拿舊的 6 在跑，看起來像沒改到。
   const TUNE_VER = 3;
@@ -1734,6 +1776,15 @@
     $('#tTex').value = TUNE.tex;     $('#tvTex').textContent = (+TUNE.tex).toFixed(1) + '×';
     $('#tFov').value = TUNE.fov;     $('#tvFov').textContent = (+TUNE.fov).toFixed(2) + '×';
     $('#tDur').value = TUNE.dur;     $('#tvDur').textContent = (TUNE.dur | 0) + ' 秒';
+    $('#tBgmVol').value = TUNE.bgmVol; $('#tvBgmVol').textContent = (TUNE.bgmVol | 0) || '關';
+    if (TUNE.bgmVol > 0 && !TUNE.mute) BGM.setVolume(0.2 * TUNE.bgmVol / 100); else BGM.stop();
+    SFX.enabled = !TUNE.mute;
+    $('#muteBtn').textContent = TUNE.mute ? '🔇' : '🔊';
+    $('#muteBtn').classList.toggle('on', !!TUNE.mute);
+    $('#tvSfxHost').textContent = TUNE.sfxHost ? '主控也發' : '只在手機';
+    for (const b of document.querySelectorAll('.sfxWhereBtn')) {
+      b.style.background = (+b.dataset.v === (TUNE.sfxHost | 0)) ? '#334d7a' : '#1e293b';
+    }
     $('#tHuntDiff').value = TUNE.huntDiff; $('#tvHuntDiff').textContent = (+TUNE.huntDiff).toFixed(2).replace(/0$/,'') + '×';
     $('#tHuntSec').value = TUNE.huntSec;   $('#tvHuntSec').textContent = (TUNE.huntSec | 0) + ' 秒';
     $('#tCansRefill').value = TUNE.cansRefill; $('#tvCansRefill').textContent = (+TUNE.cansRefill).toFixed(1) + ' 秒';
@@ -1784,7 +1835,15 @@
       huntIdleReset(); huntPreload();          // 主題換了就重抓畫、重畫說明底圖
     });
   });
-  [['tSpeed', 'speed'], ['tTex', 'tex'], ['tFov', 'fov'], ['tDur', 'dur'],
+  $('#muteBtn').addEventListener('click', () => {
+    TUNE.mute = TUNE.mute ? 0 : 1;
+    if (TUNE.mute) BGM.stop();
+    saveTune(); renderTune();
+  });
+  for (const b of document.querySelectorAll('.sfxWhereBtn')) {
+    b.addEventListener('click', () => { TUNE.sfxHost = +b.dataset.v; saveTune(); renderTune(); });
+  }
+  [['tSpeed', 'speed'], ['tTex', 'tex'], ['tFov', 'fov'], ['tDur', 'dur'], ['tBgmVol', 'bgmVol'],
    ['tHuntDiff', 'huntDiff'], ['tHuntSec', 'huntSec'], ['tHuntBlock', 'huntBlock'],
    ['tHuntRounds', 'huntRounds'], ['tHuntMax', 'huntMax'], ['tHuntCrop', 'huntCrop'],
    ['tHuntSize', 'huntSize'], ['tHuntDepth', 'huntDepth'], ['tHuntEdge', 'huntEdge'], ['tHuntBlink', 'huntBlink'],
@@ -1859,17 +1918,33 @@
     SKI.obs = COURSE.build(m.seed, m.speedMul || 1);   // 倍率跟種子一樣由 DO 發，兩端才長出同一條賽道
     idleObs = null;
     SKI.players.clear();
+    bgmStart('ski');
   });
-  sock.on('skiRun', (m) => {
+  // 拉成具名函式是為了測得到：畫面與音效全靠「這次回報比上次多了什麼」的 delta，
+  // 而 delta 的經典地雷就是**忘了把某個欄位存回去**——存不回去就等於每次都是新事件。
+  function skiRunMsg(m) {
     let p = SKI.players.get(m.clientId);
-    if (!p) { p = { name: m.name, dispX: m.x, dispY: m.wy, hits: 0, jumps: 0 }; SKI.players.set(m.clientId, p); }
+    if (!p) { p = { name: m.name, dispX: m.x, dispY: m.wy, hits: 0, jumps: 0, rolls: 0, lv: 0, air: 0 }; SKI.players.set(m.clientId, p); }
     if (m.hits > (p.hits || 0)) p.shake = 1;        // 撞到就抖一下那一格
     if (m.jumps > (p.jumps || 0)) p.flash = 1;      // 上跳台就閃一下
+    // 「自己的動作」預設由自己的手機發聲——那才是即時的；主控這邊收到已經晚了
+    // 78ms（實測上行 p50），同時發會變成一前一後的回音。主控只管配樂與全場共同的事件。
+    // 面板可以切回「主控也發」，12 個人同場時事件會擠在一起，
+    // 節流放在 SFX 那一層（同一種音效有最短間隔），這裡只管「發生了什麼」。
+    if (TUNE.sfxHost) {
+      if (m.hits > (p.hits || 0)) SFX.skiCrash();
+      if (m.jumps > (p.jumps || 0)) SFX.skiJump();
+      if ((m.rolls | 0) > (p.rolls | 0)) SFX.skiRoll();
+      if ((m.lv | 0) > (p.lv | 0)) SFX.skiGear(m.lv | 0);
+      if ((p.air || 0) > 0 && +m.air <= 0) SFX.skiLand();      // 滯空歸零＝落地，手機不用另外回報
+    }
     Object.assign(p, { name: m.name, x: m.x, wy: m.wy, speed: m.speed, vx: m.vx,
                        air: m.air, airMax: m.airMax, rot: m.rot, jumps: m.jumps, hits: m.hits,
-                       combo: m.combo | 0, lv: m.lv | 0,
+                       combo: m.combo | 0, lv: m.lv | 0, rolls: m.rolls | 0,
                        at: performance.now(), uplinkMs: m.uplinkMs });
-  });
+  }
+  sock.on('skiRun', skiRunMsg);
+  window.__skiFeed = skiRunMsg;                     // 測試鉤子：直接餵一則回報，驗 delta
   sock.on('skiDone', (m) => {
     const p = SKI.players.get(m.clientId);
     if (p) { p.final = m.dist; p.speed = 0; }
@@ -1882,6 +1957,7 @@
     // 大螢幕只放前三，名字太多會擠爆 HUD
     SKI.rankText = rank.slice(0, 3).map((r, i) => `${'🥇🥈🥉'.slice(i * 2, i * 2 + 2)} ${r.name} ${r.dist}m`).join('　');
     SKI.race = null;
+    BGM.stop();
     updateShell();                    // 立刻換回「開始」並把成績打到畫面中央
   });
 
@@ -2009,6 +2085,13 @@
     if (layoutT < 1) layoutT = Math.min(1, layoutT + 1 / 27);
     curLayout = lerpLayout(layoutFrom, layoutTo, layoutT < 1 ? layoutT * layoutT * (3 - 2 * layoutT) : 1);
 
+    // 配樂的強度跟場上**最高**的檔位走：電視前的人在看的是領先的那一格，
+    // 用平均的話會被一堆 lv0 拉平，音樂永遠不升檔
+    if (BGM.playing()) {
+      let top = 0;
+      for (const pl of SKI.players.values()) top = Math.max(top, pl.lv | 0);
+      BGM.setIntensity(top);
+    }
     if (!SKI.img || SKI.img.width !== FW) SKI.img = fctx.createImageData(FW, FH);
     const img = SKI.img;
     // 沒玩家的格子＝純黑。ImageData 清 0 會是透明而非黑，要把 alpha 補滿
@@ -2465,7 +2548,18 @@
     HUNT.totalRounds = huntRounds();
     sock.send({ type: 'stage', stage: 'hunt' });
     setActiveBtn('hunt');
+    bgmStart('hunt');
     huntNextRound();
+  }
+  // 強度跟著「這一關剩幾隻」走，不是跟著時間。剩最後一兩隻才是全場屏息的時候——
+  // 那時候把滴答放進來才有意義；一開始就催只會吵到正在瞇眼睛找的人。
+  function huntBgm() {
+    if (!BGM.playing() || !HUNT.chams) return;
+    const total = HUNT.chams.length;
+    const left = HUNT.chams.filter((c) => c.found === null).length;
+    if (!total || !HUNT.roundActive) { BGM.setIntensity(0); return; }
+    const done = 1 - left / total;
+    BGM.setIntensity(left <= 1 ? 3 : done >= 0.6 ? 2 : done > 0 ? 1 : 0);
   }
   function huntNextRound() {
     HUNT.round++;
@@ -2486,6 +2580,7 @@
     HUNT.hNorm = m.hNorm; HUNT.tEnd = 0; HUNT.reveal = []; HUNT.stamps = [];
     HUNT.startAt = m.startAt; HUNT.duration = m.duration;
     HUNT.chams = PAINT.place(m.seed, m.count).map((c) => ({ ...c, found: null, blink: false, nextBlink: 0 }));
+    BGM.setIntensity(0);                              // 新的一關重新從安靜開始
     HUNT.roundEndSent = false;
     // 畫作：預載好就用，沒好／載失敗就程序化
     const buildBg = () => {
@@ -2551,6 +2646,7 @@
     addStampEl(m.x, m.y, m.name);
     floatPts(huntToScreen(m.x, m.y), '+2 ' + m.name, '#4ade80');
     SFX.ok();
+    huntBgm();
     if (m.left === 0 && HUNT.roundActive && !HUNT.roundEndSent) {
       HUNT.roundEndSent = true;
       sock.send({ type: 'huntRoundEnd' });
@@ -2565,6 +2661,7 @@
   sock.on('huntEnd', (m) => {
     clearStampEls();
     HUNT.running = false; HUNT.roundActive = false;
+    BGM.stop();
     SFX.win();
     HUNT.rankText = (m.rank || []).slice(0, 3).map((r, i) => `${'🥇🥈🥉'.slice(i * 2, i * 2 + 2)} ${r.name} ${r.score}分`).join('　');
     updateShell();
@@ -2690,6 +2787,7 @@
     sock.send({ type: 'stage', stage: 'cans' });
     setActiveBtn('cans');
     sock.send({ type: 'cansStart', refill: Math.round((+TUNE.cansRefill || 4.5) * 1000), levels: CANSG.levels });
+    bgmStart('cans');
   }
   sock.on('cansStart', (m) => { CANSG.level = 0; CANSG.startAt = m.startAt; cansNextLevel(); });
   function cansNextLevel() {
@@ -2699,6 +2797,8 @@
     CANSG.world = CANS.build(CANSG.level);
     CANSG.levelEndAt = (hostClock.serverNow() ?? Date.now()) + (TUNE.cansSec | 0 || 45) * 1000;
     sock.send({ type: 'cansLevel', level: CANSG.level, levels: CANSG.levels });
+    // 五關對到四段強度：關卡越後面塔越高，音樂也越重
+    BGM.setIntensity(Math.min(3, Math.floor((CANSG.level - 1) * 3 / Math.max(1, CANSG.levels - 1))));
     SFX.go();
   }
   sock.on('canLock', (m) => {
@@ -2715,6 +2815,7 @@
   });
   sock.on('canScore', (m) => { if (m.clientId) CANSG.scores.set(m.clientId, m.total); });
   sock.on('cansEnd', (m) => {
+    BGM.stop();
     CANSG.running = false; CANSG.world = null; CANSG.locks.clear();
     SFX.win();
     CANSG.rankText = (m.rank || []).slice(0, 3).map((r, i) => `${'🥇🥈🥉'.slice(i * 2, i * 2 + 2)} ${r.name} ${r.score}分`).join('　');
