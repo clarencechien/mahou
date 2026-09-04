@@ -285,6 +285,34 @@ curl -s -o /dev/null -w "ambient %{http_code}\n" "https://<你的網域>/ambient
 ⚠️ **`/close` 回 200 就是還沒鎖上**，不管字條顯示什麼。
 secret 是即時生效的，補設完不用重新部署，再打一次就會變 403。
 
+### 主控台的資料一律當成不可信（2026-09-04）
+
+那一輪安全複查漏掉了一條:主控台 roster 那一列的資料**全部來自玩家**,而其中三個欄位
+是裸插進 HTML 的。當時只把 `title="${esc(device.ua)}"` 的引號問題修掉,同一列的
+`motionEventRateHz` 與 `shake` 因為「看起來是數字」被跳過了 —— 但玩家送什麼上來是他家的事。
+
+任何掃過 QR 的人送這樣一則訊息:
+
+```json
+{"type":"deviceUpdate","device":{"motionEventRateHz":"<img src=x onerror=…>"}}
+```
+
+就能在主控頁執行 JS,而主控頁的 `location.hash` 帶著房間憑證。
+
+**現在是兩道:**
+
+1. **伺服器端收斂型別**(`worker/room.js` 的 `sanitizeDevice` / `safeCount`)——
+   `join` 與 `deviceUpdate` 兩條路都過,字串限長、數值強制 `Number()`、布林強制布林、
+   不認得的欄位丟掉;`shake` 的 `count` 強制成非負整數。
+   合法形狀的來源是 `public/shared.js` 的 `Mahou.deviceFingerprint()`。
+2. **前端跳脫**(`public/host.html`)—— 那三個插值補上 `esc()`,並在該列上方註明
+   「這一整列的資料全部來自玩家」。
+
+**為什麼不能只做第 2 道:** 髒資料會經由 `/export` 再流出去,那裡沒有 HTML 跳脫可言;
+而且下一個讀這個欄位的人不會知道它是不可信的 —— 2026-09 那輪漏掉三個 sink 正是這樣來的。
+
+檢查:`node tools/device-safecheck.mjs`(21 項)。
+
 ### 安全複查（2026-09）
 
 上線前把整條分支做過一次安全審查。**新加的後端（房間憑證、Access 驗簽、`/audio`）

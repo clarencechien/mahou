@@ -2283,15 +2283,18 @@
       tr.id = 'row-' + c.clientId;
       if (!c.connected) tr.className = 'offline';
       tr.innerHTML =
+        // ⚠️ 這一整列的資料**全部來自玩家**(join / deviceUpdate / shakeEvent 都是玩家送的)。
+        // 伺服器端已經在 worker/room.js 的 sanitizeDevice / safeCount 收斂過型別,
+        // 這裡的 esc() 是第二道。新增欄位時兩道都要記得加。
         `<td><b>${esc(c.name)}</b></td>` +
         `<td title="${esc(c.device?.ua || '')}">${esc(dev)}</td>` +
-        `<td>${c.device?.motionEventRateHz ?? '–'}</td>` +
+        `<td>${esc(c.device?.motionEventRateHz ?? '–')}</td>` +
         `<td class="${Mahou.rttClass(rtt?.p50)}">${rtt ? `${fmt(rtt.min)} / ${fmt(rtt.p50)} / ${fmt(rtt.p95)}` : '–'}</td>` +
         `<td class="${(rtt?.lost ?? 0) > 0 ? 'warn' : ''}">${rtt ? `${rtt.lost}/${rtt.samples + rtt.lost}` : '–'}</td>` +
         `<td class="${Math.abs(c.sync?.drift ?? 0) > 20 ? 'bad' : ''}">${fmt(c.sync?.drift)}</td>` +
         `<td>${ups.length ? `${Mahou.pct(ups, 50)} / ${Mahou.pct(ups, 95)}` : '–'}</td>` +
         `<td class="${s.spam && s.spam.lossPct > 1 ? 'bad' : ''}">${s.spam ? s.spam.lossPct + '%' : '–'}</td>` +
-        `<td>${s.shake || '–'}</td>`;
+        `<td>${esc(s.shake || '–')}</td>`;
       tb.appendChild(tr);
     }
   }
@@ -2310,7 +2313,7 @@
       `單點上行延遲（全體）：p50 <b>${Mahou.pct(allUps, 50) ?? '–'}</b> / p95 <b>${Mahou.pct(allUps, 95) ?? '–'}</b> ms（n=${allUps.length}）<br>` +
       `最大 clock 漂移：<b>${worstDrift.toFixed(1)}</b> ms（門檻 20ms）<br>` +
       `最差狂點掉包率：<b>${worstLoss}%</b>（門檻 1%）<br>` +
-      `搖動計數：${roster.map((c) => `${esc(c.name)} ${stat(c.clientId).shake}`).join('、') || '–'}（同一人換裝置比差異 %）`;
+      `搖動計數：${roster.map((c) => `${esc(c.name)} ${esc(stat(c.clientId).shake ?? '–')}`).join('、') || '–'}（同一人換裝置比差異 %）`;
   }
   // ================= 遊戲三：名畫變色龍（搶快） =================
   // DO 發種子與位置演算法（同 paint.js 的 P.place），host 只負責畫；
