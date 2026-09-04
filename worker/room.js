@@ -10,6 +10,46 @@ const MAX_MSG_BYTES = 16 * 1024;
 // - 30 分鐘沒有「有意義的」訊息（ping/對時不算）→ 自動關房
 // - 房間開了 6 小時 → 無條件關房
 // 關房 = 踢掉所有 WS（code 4000/4001，client 看到就不再重連）→ DO 閒置後被回收，停止計費。
+/* device 是玩家自己送上來的任意 JSON(join 與 deviceUpdate 兩條路都收),
+   而主控台會把其中幾個欄位直接插進 HTML。所以在**存進 DO 之前**就收斂成已知形狀:
+   字串限長、數值強制成數字、布林強制成布林,不認得的欄位一律丟掉。
+
+   ⚠️ 只在前端加跳脫是不夠的,有三個理由:
+     1. 髒資料會經由 /export 再流出去,那裡沒有 HTML 跳脫可言;
+     2. 下一個讀這個欄位的人不會知道它是不可信的(2026-09 那輪就是這樣漏掉三個 sink);
+     3. 這些欄位本來就只該是數字/短字串,收斂不會損失任何真實資料。
+   合法形狀見 public/shared.js 的 Mahou.deviceFingerprint()。 */
+const DEVICE_STR = { ua: 180, platform: 40, motionPermission: 16, connection: 16 };
+const DEVICE_NUM = ['deviceMemory', 'hardwareConcurrency', 'motionEventRateHz'];
+const DEVICE_BOOL = ['motionSupported', 'orientationSupported'];
+
+/** null / 非數字一律回 null(motionEventRateHz 在量到之前就是 null,不能變成 0) */
+function numOrNull(v) {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function sanitizeDevice(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out = {};
+  for (const k of Object.keys(DEVICE_STR)) {
+    if (raw[k] != null) out[k] = String(raw[k]).slice(0, DEVICE_STR[k]);
+  }
+  for (const k of DEVICE_NUM) if (k in raw) out[k] = numOrNull(raw[k]);
+  for (const k of DEVICE_BOOL) if (k in raw) out[k] = !!raw[k];
+  if (raw.screen && typeof raw.screen === 'object' && !Array.isArray(raw.screen)) {
+    out.screen = { w: numOrNull(raw.screen.w), h: numOrNull(raw.screen.h), dpr: numOrNull(raw.screen.dpr) };
+  }
+  return out;
+}
+
+/** 玩家送的計數一律收斂成非負整數(主控台會直接顯示它) */
+export function safeCount(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+}
+
 const IDLE_LIMIT_MS = 30 * 60 * 1000;
 const MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const FREEZE_GRACE_MS = 250;   // 轉身後給人類的煞車時間，超過才算犯規
@@ -239,7 +279,7 @@ export class RoomDO {
         const c = {
           ws,
           name: String(msg.name || '?').slice(0, 10),
-          device: msg.device || null,
+          device: sanitizeDevice(msg.device),
           sync: prev?.sync || null,
           spam: { expected: 0, received: 0, seqs: new Set() },
           joinedAt: prev?.joinedAt || now,
@@ -255,8 +295,8 @@ export class RoomDO {
       case 'deviceUpdate': {
         const c = this.clients.get(ws._clientId);
         if (!c) return;
-        c.device = { ...(c.device || {}), ...(msg.device || {}) };
-        this.log({ type: 'deviceUpdate', clientId: ws._clientId, device: msg.device });
+        c.device = { ...(c.device || {}), ...(sanitizeDevice(msg.device) || {}) };
+        this.log({ type: 'deviceUpdate', clientId: ws._clientId, device: c.device });
         this.broadcastRoster();
         return;
       }
@@ -319,8 +359,9 @@ export class RoomDO {
         const c = this.clients.get(ws._clientId);
         if (!c) return;
         const uplinkMs = typeof msg.tClientSend === 'number' ? now - msg.tClientSend : null;
-        this.log({ type: 'shake', clientId: ws._clientId, count: msg.count, params: msg.params, tClientSend: msg.tClientSend, tServerRecv: now, uplinkMs });
-        this.toHosts({ type: 'shakeEvent', clientId: ws._clientId, name: c.name, count: msg.count, uplinkMs, params: msg.params });
+        const count = safeCount(msg.count); // 主控台會直接顯示,不能是任意字串
+        this.log({ type: 'shake', clientId: ws._clientId, count, params: msg.params, tClientSend: msg.tClientSend, tServerRecv: now, uplinkMs });
+        this.toHosts({ type: 'shakeEvent', clientId: ws._clientId, name: c.name, count, uplinkMs, params: msg.params });
         return;
       }
 
