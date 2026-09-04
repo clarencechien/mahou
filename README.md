@@ -285,6 +285,46 @@ curl -s -o /dev/null -w "ambient %{http_code}\n" "https://<你的網域>/ambient
 ⚠️ **`/close` 回 200 就是還沒鎖上**，不管字條顯示什麼。
 secret 是即時生效的，補設完不用重新部署，再打一次就會變 403。
 
+### 主控身分是簽出來的,不是宣告的（2026-09-04）
+
+原本 WebSocket 的 host/client 只看 `?role=host` 這個查詢參數,而房間憑證是**印在 QR 上、
+每個玩家都拿得到**的。兩件事湊在一起 = 任何掃過 QR 的人都能以主控身分連進來:
+結束房間、改計分(`canScoreEvt` 可以指定任意 clientId 與分數)、提前結算、
+在木頭人那局提前看到答案。README 先前寫「掃 QR 的人不用登入」是對的,
+但沒講清楚他們拿到的憑證跟主控是同一張。
+
+現在 `/api/room` 發**兩張**憑證:
+
+| | 簽在什麼上 | 給誰 |
+|---|---|---|
+| `token` | `${room}.${exp}` | 印進 QR,每個玩家都有 |
+| `hostToken` | `${room}.${exp}.host` | 只給主控台自己 |
+
+角色由 `worker/token.js` 的 `tokenRole()` 從簽章推導,`?role=` 不再被採信。
+`/export`、`/close`、`/whereami` 三個端點也一併要求 host 憑證 —— `client.html` 完全不用它們,
+而 `/export` 會吐出整場遙測,含**其他玩家的裝置指紋**,那不該是「掃過 QR 就看得到」的東西。
+
+`token` 的簽章格式沒變,所以**既有的 QR 連結不會失效**。
+
+> ⚠️ 部署後主控台請硬重新整理一次。舊的 host.html 只有舊那張 token,拿它連 `/ws` 會被
+> 判成 client,房間會因為「沒有主控」而自己關掉(4002)。Worker 與靜態資源是同一次
+> `wrangler deploy` 上去的,所以只有瀏覽器快取到舊頁面才會遇到。
+
+檢查:`node tools/room-tokencheck.mjs`(14 項)。
+
+### 靜態頁的標頭與第三方腳本（2026-09-04）
+
+靜態頁不經過 Worker(`wrangler.toml` 沒有 `run_worker_first`),所以標頭寫在 `public/_headers`
+(Workers static assets 與 Pages 同一套慣例)。加了 `frame-ancestors 'none'`、`X-Frame-Options`、
+`nosniff`、`Referrer-Policy`、HSTS 與 `base-uri 'none'`。
+
+> CSP 的 `script-src` 帶著 `'unsafe-inline'`,因為兩頁的遊戲邏輯都是行內腳本。
+> **所以這條 CSP 不是 XSS 的防線** —— XSS 是在來源擋掉的(見上一節)。
+> 這裡真正有用的是 `frame-ancestors`(主控台不該能被嵌進別人的頁面)與 `base-uri`。
+
+唯一的第三方腳本 `qrcode.min.js` 補上 SRI:主控台是權限最高的一頁,CDN 被換掉等於有人
+在那頁上執行程式碼;`integrity` 對不上瀏覽器會直接拒載。
+
 ### 主控台的資料一律當成不可信（2026-09-04）
 
 那一輪安全複查漏掉了一條:主控台 roster 那一列的資料**全部來自玩家**,而其中三個欄位

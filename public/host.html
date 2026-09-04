@@ -668,7 +668,11 @@
 <div class="panel"><h2>事件流</h2><div id="feed"></div></div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- 唯一的第三方腳本。加 SRI:主控台是這裡權限最高的一頁(location.hash 帶著房間憑證),
+     CDN 被換掉就等於有人在那一頁上執行程式碼。integrity 對不上瀏覽器會直接拒載。 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+        integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="/engine/chara.js"></script>
 <script src="/engine/course.js"></script>
 <script src="/engine/paint.js"></script>
@@ -689,7 +693,7 @@
   // 主控這一頁是唯一能換憑證的地方（它在 Cloudflare Access 後面）。
   // 沒有憑證就連不上 /ws/，所以路人開不了 DO——真正在管費用的是這張憑證，
   // 不是把頁面藏起來。掃 QR 的人不用登入，憑證跟在網址裡跟著走。
-  let roomToken = '', roomLocked = false, lockWhy = '';
+  let roomToken = '', hostToken = '', roomLocked = false, lockWhy = '';
   try {
     const r = await fetch('/api/room' + (roomId ? `?room=${roomId}` : ''), { method: 'POST' });
     if (r.status === 403) {
@@ -699,6 +703,9 @@
     }
     const j = await r.json();
     roomId = j.room; roomToken = j.token || ''; roomLocked = !!j.locked;
+    // 主控自己的憑證。舊版 Worker 沒有這個欄位就退回 token,部署過渡期才不會開不起來
+    //(舊 Worker 也還沒開始要求 host 角色,所以兩邊是一致的)
+    hostToken = j.hostToken || roomToken;
     // ⚠️ 「拿不到憑證」有兩種完全不同的原因，不要都寫成「沒設 ROOM_SECRET」——
     // 上一版就是這樣，害人對著已經設好的 secret 找半天。分開講：
     if (!roomLocked) lockWhy = 'Worker 讀不到 ROOM_SECRET（secret 沒設到這支 Worker，或設在別的環境／.dev.vars）';
@@ -708,8 +715,10 @@
     lockWhy = '/api/room 叫不動（Worker 還沒部署新版，或被 Access 擋在登入頁）：' + (e.message || e);
   }
   location.hash = roomId;
-  const tq = roomToken ? `&t=${encodeURIComponent(roomToken)}` : '';
-  const tq1 = roomToken ? `?t=${encodeURIComponent(roomToken)}` : '';
+  // 主控自己打的端點(WS、/whereami、/export、/close)一律用 hostToken;
+  // 只有印進 QR 的那條連結用 roomToken —— 那張是每個玩家都會拿到的。
+  const tq = hostToken ? `&t=${encodeURIComponent(hostToken)}` : '';
+  const tq1 = hostToken ? `?t=${encodeURIComponent(hostToken)}` : '';
 
   $('#roomCode').textContent = roomId;
   // 沒上鎖就講出來，而且要講**為什麼**。寧可醜，也不要讓人以為鎖上了；
@@ -903,7 +912,7 @@
       localStorage.setItem(ROOMS_KEY, JSON.stringify(list.slice(-40)));
     } catch (e) {}
   }
-  rememberRoom(roomId, roomToken);
+  rememberRoom(roomId, hostToken); // 逃生鈕要關房,得是 host 憑證
   $('#killBtn').addEventListener('click', async () => {
     const rooms = roomLog();
     if (!rooms.length) return alert('這台瀏覽器沒有開過房間的紀錄。');

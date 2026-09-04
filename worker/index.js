@@ -1,4 +1,5 @@
 import { RoomDO } from './room.js';
+import { mintToken, tokenOk, tokenRole } from './token.js';
 export { RoomDO };
 
 // close 是「逃生鈕」：不用開著那個房間的分頁也能把它關掉。
@@ -21,32 +22,6 @@ const ROOM_RE = /^\/(ws|export|whereami|close)\/([A-Za-z0-9]{4,8})$/;
 // 但 /api/room 會回報 locked:false，主控台會把「沒上鎖」四個字顯示出來——
 // 寧可醜也不要讓人以為鎖上了。
 const TOKEN_TTL_MS = 12 * 60 * 60 * 1000;          // 一場家宴綽綽有餘
-
-const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)))
-  .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-async function hmac(secret, msg) {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  return b64url(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(msg)));
-}
-
-async function mintToken(secret, room, exp) {
-  return `${exp.toString(36)}.${(await hmac(secret, `${room}.${exp}`)).slice(0, 32)}`;
-}
-
-async function tokenOk(secret, room, token) {
-  if (!token) return false;
-  const [expPart, sig] = String(token).split('.');
-  const exp = parseInt(expPart, 36);
-  if (!exp || Date.now() > exp) return false;
-  const want = (await hmac(secret, `${room}.${exp}`)).slice(0, 32);
-  // 長度先比，再逐字元 XOR 累加：不要用 === 提早結束，那會漏出時間差
-  if (sig.length !== want.length) return false;
-  let diff = 0;
-  for (let i = 0; i < want.length; i++) diff |= sig.charCodeAt(i) ^ want.charCodeAt(i);
-  return diff === 0;
-}
 
 // ---- Cloudflare Access 的 JWT ----
 // 只看 Cf-Access-Jwt-Assertion 這個 header 存不存在是不夠的：Access 沒有蓋到的路徑，
@@ -95,7 +70,10 @@ async function serveMint(req, env, url) {
   const exp = Date.now() + TOKEN_TTL_MS;
   return new Response(JSON.stringify({
     room,
-    token: secret ? await mintToken(secret, room, exp) : null,
+    // token 是給 QR 的(每個玩家都會拿到);hostToken 只給主控自己,簽在不同訊息上。
+    // 主控的 WS 與 /export /close /whereami 都要用 hostToken —— 角色是簽出來的,不是宣告的。
+    token: secret ? await mintToken(secret, room, exp, 'client') : null,
+    hostToken: secret ? await mintToken(secret, room, exp, 'host') : null,
     locked: !!secret,
     access: acc.on ? (acc.who || true) : false,
     exp,
@@ -154,8 +132,14 @@ export default {
       const roomId = m[2].toUpperCase();
       // ⚠️ 這一段一定要在 env.ROOM.get() **之前**。拿到 stub 就等於生出 DO 了，
       // 之後才拒絕已經來不及——費用是從那一刻開始算的。
-      if (env.ROOM_SECRET && !(await tokenOk(env.ROOM_SECRET, roomId, url.searchParams.get('t')))) {
-        return new Response('room token required', { status: 403 });
+      // 只有 /ws 是玩家也要進來的;/export /close /whereami 都只有主控台在用
+      //(client.html 完全不碰),所以要求 host 憑證。/export 會吐出整場遙測,
+      // 含其他玩家的裝置指紋 —— 那不該是「掃過 QR 就看得到」的東西。
+      const hostOnly = m[1] !== 'ws';
+      if (env.ROOM_SECRET) {
+        const role = await tokenRole(env.ROOM_SECRET, roomId, url.searchParams.get('t'));
+        if (!role) return new Response('room token required', { status: 403 });
+        if (hostOnly && role !== 'host') return new Response('host token required', { status: 403 });
       }
       const id = env.ROOM.idFromName(roomId);
       // locationHint 只在 DO 第一次被建立時生效（同房號之後怎麼帶都不會搬家）。

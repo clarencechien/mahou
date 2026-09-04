@@ -2,6 +2,8 @@
 // 職責：WebSocket 房間管理、對時（ping/pong）、遙測收集（記憶體）、匯出 JSON。
 // POC 注意：遙測只存在記憶體，房間閒置被回收就沒了 → 測完立刻按 host 頁的「匯出 JSON」。
 
+import { tokenRole } from './token.js';
+
 const MAX_EVENTS = 50000;
 const MAX_MSG_BYTES = 16 * 1024;
 
@@ -140,7 +142,13 @@ export class RoomDO {
     if (req.headers.get('Upgrade') !== 'websocket') {
       return new Response('Expected websocket', { status: 426 });
     }
-    const role = url.searchParams.get('role') === 'host' ? 'host' : 'client';
+    // ⚠️ 角色只能從**簽章**推導。原本這裡讀 `?role=host`,而房間憑證是印在 QR 上、
+    // 每個玩家都有的 —— 等於任何掃過 QR 的人都能以主控身分連進來(結束房間、改計分、
+    // 提前結算、偷看木頭人的答案)。現在 host 拿的是簽在 `${room}.${exp}.host` 上的
+    // 另一張憑證,client 那張簽不出 host。沒設 ROOM_SECRET 時維持舊的開放行為。
+    const role = this.env?.ROOM_SECRET
+      ? ((await tokenRole(this.env.ROOM_SECRET, this.roomId, url.searchParams.get('t'))) === 'host' ? 'host' : 'client')
+      : (url.searchParams.get('role') === 'host' ? 'host' : 'client');
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
