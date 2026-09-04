@@ -1,14 +1,25 @@
-# Workers static assets 會讀這個檔(與 Pages 同一套慣例)。
-# 靜態頁不經過 Worker(wrangler.toml 沒有 run_worker_first),所以標頭只能寫在這裡。
+# 這份檔案由 Workers Assets 讀取（assets.directory = ./public），本身不會被當成頁面送出去。
+#
+# 為什麼 CSP 要放在 repo 裡、而不是 Cloudflare 的 Transform Rule：
+# 2026-09-04 有人在 dashboard 對 mahou 設了一條全站 CSP，img-src 只給 'self' data: blob:。
+# /host 沒事（它的圖都是同源的），但 /ambient 的背景照是從 family-feast.ai-apps.work
+# 讀的——整頁背景就全黑了，而且 repo 裡完全看不出原因。設定跟著程式碼走才驗得到。
+#
+# ⚠️ 改 public/ 底下任何一頁的外部資源時，這裡要跟著改，否則線上會被擋掉：
+#   cdnjs           host.html 的 QR code 產生器
+#   fonts.google*   proposal.html 的字型
+#   family-feast    ambient 的家宴相簿背景（urlBase 在 ambient/playlists.json）
+#   img.hiweb.tw    ambient 的十六湖背景
+#   wikimedia       engine/paint.js 取的畫作圖檔（commons 會 302 到 upload）
+#   cloudflareinsights  Cloudflare 自己注入的 Web Analytics beacon
+#
+# script-src 留 'unsafe-inline'：這些頁面的邏輯全寫在行內 <script> 裡，
+# 靜態資產沒有 nonce 可用。真要拿掉得先把腳本全部拆成外部檔案。
+# connect-src 的 wss: 沒有收斂到單一 host：Safari 舊版的 'self' 不涵蓋 WebSocket，
+# 收太緊會直接讓家裡的遊戲連不上。
+
 /*
-  X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
   Referrer-Policy: no-referrer
-  Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=()
-  # ⚠️ script-src 帶 'unsafe-inline':host.html / client.html 的遊戲邏輯都是行內腳本,
-  # 要拿掉得先把它們全部外移。所以**這條 CSP 不是 XSS 的防線** —— XSS 是在來源擋掉的
-  #(worker/room.js 的 sanitizeDevice / safeCount,加上 host.html 的 esc())。
-  # 這裡真正有用的是 frame-ancestors(主控台不該能被嵌進別人的頁面)、
-  # object-src 與 base-uri(擋掉用 <base> 改寫相對網址那一招)。
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://family-feast.ai-apps.work https://img.hiweb.tw https://commons.wikimedia.org https://upload.wikimedia.org; media-src 'self' blob:; connect-src 'self' wss: https://cloudflareinsights.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
